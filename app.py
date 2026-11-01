@@ -37,4 +37,11 @@ def inicio():
                 ✅ Grupo VIP WhatsApp<br>
                 ✅ Soporte Ginebra
                 </p>
-            </div
+            </div>
+            <a href="/tc" class="btn-gold">VER SEÑALES DEMO GRATIS</a>
+            <a href="{PAYPAL_LINK}" class="btn-paypal">💳 PAGAR VIP CHF 20 CON PAYPAL</a>
+            <p style="color:#0070BA;font-weight:bold;">Pago seguro: paypal.me/RaudyManzueta/20</p>
+        </div>
+    </body>
+    </html>
+    """)
