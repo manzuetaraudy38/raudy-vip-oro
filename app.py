@@ -8,7 +8,7 @@ def inicio():
     html = """
     <body style="background:black; color:gold; text-align:center; font-family:Arial; padding:50px;">
         <h1>RAUDY VIP ORO - NIVEL DIOS</h1>
-        <h2>3 Mercados VIP</h2>
+        <h2>3 Mercados VIP + WhatsApp</h2>
         <br><br>
         <a href="/tc" style="background:gold; color:black; padding:20px 40px; text-decoration:none; font-weight:bold; border-radius:10px; font-size:22px;">
             ENTRAR AL MERCADO VIP
@@ -54,12 +54,9 @@ def mercado():
     else:
         s_gbp = "ESPERA"; c_gbp = "gold"; conf_gbp = random.randint(55, 70)
 
-    # Mensaje WhatsApp
+    # Mensaje WhatsApp ARREGLADO
     msg_whatsapp = "RAUDY VIP SENAL: ORO %s (%s%%) - EURUSD %s - GBPUSD %s - Precio ORO $%s - %s" % (s_oro, conf_oro, s_eur, s_gbp, oro, "raudy-vip-oro.onrender.com/tc")
     
-    # Sonido
-    sonido = "compra" if s_oro == "COMPRA" else "venta" if s_oro == "VENTA" else "espera"
-
     html = """
     <html>
     <head><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
@@ -90,7 +87,7 @@ def mercado():
 
         <div style="text-align:center; margin-bottom:10px; display:flex; gap:10px; justify-content:center;">
             <a href="/tc" style="background:gold; color:black; padding:12px 20px; text-decoration:none; font-weight:bold; border-radius:10px;">RECARGAR</a>
-            <a href="https://wa.me/?text=%s" target="_blank" style="background:#25D366; color:white; padding:12px 20px; text-decoration:none; font-weight:bold; border-radius:10px;">WHATSAPP SENAL</a>
+            <a href="https://api.whatsapp.com/send?text=%s" target="_blank" style="background:#25D366; color:white; padding:12px 20px; text-decoration:none; font-weight:bold; border-radius:10px;">WHATSAPP SENAL</a>
         </div>
 
         <div style="height:500px; border:1px solid gold; border-radius:10px;">
