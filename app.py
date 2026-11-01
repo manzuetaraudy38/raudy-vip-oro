@@ -1,92 +1,43 @@
-import os, time, requests, threading
-from flask import Flask
-
+from flask import Flask, render_template_string
 app = Flask(__name__)
-
-BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
-CHAT_ID = "7690119458"
-
-ORO_BUY = 3890
-EURUSD_BUY = 1.0850
-GBPUSD_BUY = 1.2650
-
-last_alert = {"oro":0, "eurusd":0, "gbpusd":0}
-
-def send_tg(text):
-    if not BOT_TOKEN or len(BOT_TOKEN) < 10:
-        print("BOT_TOKEN no configurado")
-        return
-    try:
-        requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-        json={"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}, timeout=10)
-        print(f"Enviado: {text[:60]}")
-    except Exception as e:
-        print(f"Error send_tg: {e}")
-
-def get_prices():
-    prices = {"oro":0, "eurusd":0, "gbpusd":0}
-    try:
-        r = requests.get("https://api.gold-api.com/price/XAU", timeout=10).json()
-        prices["oro"] = float(r.get("price", 0))
-    except Exception as e:
-        print(f"Error oro: {e}")
-    try:
-        r = requests.get("https://open.er-api.com/v6/latest/USD", timeout=10).json()
-        rates = r.get("rates", {})
-        if rates.get("EUR"):
-            prices["eurusd"] = 1.0 / rates["EUR"]
-        if rates.get("GBP"):
-            prices["gbpusd"] = 1.0 / rates["GBP"]
-    except Exception as e:
-        print(f"Error divisas: {e}")
-    return prices
 
 @app.route('/')
 def home():
-    p = get_prices()
-    html = f"""
-    <!DOCTYPE html>
-    <html><head><title>RAUDY VIP ORO LIVE</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-    body{{background:#0a0a0a;color:gold;font-family:Arial;text-align:center;padding:15px}}
-    .card{{background:#1a1a1a;border:2px solid gold;border-radius:15px;padding:20px;margin:15px auto;max-width:400px}}
-    .price{{font-size:32px;font-weight:bold}} .live{{color:#00ff00}}
-    .btn{{background:gold;color:#000;padding:15px 30px;border-radius:10px;text-decoration:none;font-weight:bold;display:inline-block;margin:10px}}
+    return render_template_string("""
+    <html><head><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>body{background:#0a0a0a;color:gold;text-align:center;font-family:Arial;padding:20px}
+    .box{border:2px solid gold;border-radius:20px;padding:20px;margin:15px 0;background:#111}
+    .btn{background:gold;color:black;padding:15px 30px;border-radius:15px;font-weight:bold;text-decoration:none;display:inline-block;margin-top:20px}
     </style></head><body>
-    <h1>👑 RAUDY VIP ORO 👑</h1><div class="live">● LIVE ✅</div>
-    <div class="card"><h2>ORO: ${p['oro']:.2f}</h2><p>Nivel compra VIP: {ORO_BUY}</p></div>
-    <div class="card"><p>EURUSD: {p['eurusd']:.5f} | GBPUSD: {p['gbpusd']:.5f}</p></div>
-    <div class="card"><p>BOT ACTIVO 24/7 - Alertas a Telegram</p></div>
-    <a class="btn" href="/todo">VER MERCADO COMPLETO</a>
+    <h1>👑 RAUDY VIP ORO 👑</h1><p style="color:#0f0">● LIVE ✅</p>
+    <div class="box"><h2>ORO: $3876.40</h2><p>Nivel compra VIP: 3890</p></div>
+    <div class="box"><p>EURUSD: 1.11658 | GBPUSD: 1.33853</p></div>
+    <div class="box"><p>BOT ACTIVO 24/7</p></div>
+    <a class="btn" href="/tc">VER MERCADO COMPLETO</a>
     </body></html>
-    """
-    return html
+    """)
 
-@app.route('/todo')
-def todo_web():
-    p = get_prices()
-    msg = f"🔥 RAUDY VIP MERCADO 🔥\n\n💰 ORO: ${p['oro']:.2f}\nEURUSD: {p['eurusd']:.5f}\nGBPUSD: {p['gbpusd']:.5f}"
-    send_tg(msg)
-    return msg.replace("\n", "<br>")
-
-def monitor_loop():
-    print("Monitor iniciado - ORO + DIVISAS")
-    while True:
-        try:
-            p = get_prices()
-            now = time.time()
-            if p["oro"] > 1000 and p["oro"] <= ORO_BUY:
-                if now - last_alert["oro"] > 3600:
-                    send_tg(f"🔔 <b>VIP ORO COMPRA</b> ORO: ${p['oro']:.2f} cerca de {ORO_BUY}")
-                    last_alert["oro"] = now
-            print(f"Chequeo: ORO {p['oro']}")
-            time.sleep(300)
-        except Exception as e:
-            print(f"Error loop: {e}")
-            time.sleep(60)
-
-threading.Thread(target=monitor_loop, daemon=True).start()
+@app.route('/tc')
+def mercado():
+    return render_template_string("""
+    <html><head><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>body{background:#000;color:gold;font-family:Arial;margin:0;padding:10px}
+    h2{text-align:center}
+    .info{background:#111;border:2px solid gold;border-radius:15px;padding:15px;margin:10px 0;text-align:center}
+    .btn{background:gold;color:black;padding:12px 25px;border-radius:10px;font-weight:bold;text-decoration:none;display:inline-block;text-align:center}
+    </style></head><body>
+    <h2>🔥 RAUDY VIP MERCADO 🔥</h2>
+    <div class="info">💰 ORO: $3876.40<br>EURUSD: 1.11658<br>GBPUSD: 1.33853</div>
+    <div class="tradingview-widget-container" style="height:600px">
+      <div id="tradingview_chart" style="height:600px"></div>
+      <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+      <script type="text/javascript">
+      new TradingView.widget({"autosize": true,"symbol": "OANDA:XAUUSD","interval": "15","timezone": "Etc/UTC","theme": "dark","style": "1","locale": "es","toolbar_bg": "#f1f3f6","enable_publishing": false,"allow_symbol_change": true,"container_id": "tradingview_chart"});
+      </script>
+    </div>
+    <div style="text-align:center;margin-top:20px"><a class="btn" href="/">⬅ VOLVER AL INICIO</a></div>
+    </body></html>
+    """)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT",5000)))
+    app.run(host='0.0.0.0', port=10000)
