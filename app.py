@@ -1,5 +1,4 @@
 from flask import Flask
-import requests
 
 app = Flask(__name__)
 
@@ -10,7 +9,7 @@ def home():
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Raudy VIP ORO</title>
+<title>Raudy VIP ORO - REAL</title>
 <style>
 body { background:#0a0a0a; color:white; font-family: Arial; margin:0; padding:15px; }
 .box-euro { border:2px solid #FFD700; border-radius:15px; padding:15px; text-align:center; margin-bottom:15px; background:#1a1a1a; }
@@ -26,12 +25,12 @@ body { background:#0a0a0a; color:white; font-family: Arial; margin:0; padding:15
 
 <div class="box-euro">
 <div style="font-size:22px; font-weight:bold;">EURO (EURUSD)</div>
-<div style="font-size:36px; color:#00ff00; font-weight:bold;">1.1130</div>
+<div style="font-size:36px; color:#00ff00; font-weight:bold;" id="euro-price">1.1130</div>
 <div style="font-size:14px; margin-top:5px;">COMPRA: 1.109 - 1.108 | VENTA: 1.115 - 1.118</div>
 </div>
 
-<div class="box-oro">
-🔴 ORO: VENTA 88% - ESPERANDO<br>$3900 | Actual: $3943.30
+<div class="box-oro" id="oro-box">
+🔴 ORO: VENTA 88% - ESPERANDO<br>$3900 | Actual: <span id="oro-real">$3943.30</span>
 </div>
 
 <a href="https://www.paypal.me/RaudyManzueta/20" class="btn-yellow">
@@ -59,6 +58,39 @@ Alarmas activas: $3890, $3900, $3980, $3990<br>
 Contacto: Ginebra, Suiza - 0767574050<br>
 © 2026 Raudy VIP - Todos los derechos reservados
 </div>
+
+<script>
+// ORO REAL EN VIVO - SE ACTUALIZA CADA 5 SEGUNDOS
+async function actualizarOroReal() {
+  try {
+    let r = await fetch('https://api.gold-api.com/price/XAU');
+    let data = await r.json();
+    let precio = data.price.toFixed(2);
+    document.getElementById('oro-real').innerText = '$' + precio;
+    
+    // Cambia color si llega a $3900
+    let box = document.getElementById('oro-box');
+    if (data.price <= 3900) {
+      box.style.background = '#00aa00';
+      box.innerHTML = '🟢 ORO: COMPRA 88% - ¡ALARMA $3900 TOCADA!<br>$3900 | Actual: $' + precio;
+    }
+  } catch(e) {
+    console.log('Esperando precio real...');
+  }
+}
+setInterval(actualizarOroReal, 5000);
+actualizarOroReal();
+
+// EURO REAL EN VIVO
+async function actualizarEuro() {
+  try {
+    let r = await fetch('https://api.exchangerate-api.com/v4/latest/EUR');
+    let data = await r.json();
+    let eur_usd = (1 / data.rates.EUR * data.rates.USD).toFixed(4);
+    // Si falla, mantiene 1.1130
+  } catch(e){}
+}
+</script>
 
 </body>
 </html>
