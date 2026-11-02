@@ -1,92 +1,53 @@
 from flask import Flask
 app = Flask(__name__)
 
-@app.route("/")
+@app.route('/')
 def home():
-    html = """
-    <html><body style='background:black;color:white;text-align:center;padding:10px;font-family:Arial'>
-    <h1 style='color:gold'>RAUDY VIP - ORO</h1>
-    <div style='border:2px solid gold;padding:8px;border-radius:10px'>ORO: $3874.73 | EUR: 1.11 | GBP: 1.33</div>
-    <div style='background:red;color:black;padding:12px;margin:8px;border-radius:10px;font-weight:bold'>ORO: VENTA - 88%</div>
-    <div style='margin:10px'>
-    <a href='/tc' style='background:gold;color:black;padding:12px;border-radius:10px;text-decoration:none;font-weight:bold'>RECARGAR</a>
-    <a href='https://wa.me/41767574050?text=Hola%20Raudy%20quiero%20SENAL%20VIP' style='background:#25D366;color:white;padding:12px;border-radius:10px;text-decoration:none;font-weight:bold;margin-left:10px'>WHATSAPP</a>
-    </div>
-    <div style='border:2px solid gold;border-radius:10px;overflow:hidden;margin:10px;height:500px'>
-    <iframe src="https://s.tradingview.com/widgetembed/?symbol=OANDA:XAUUSD&interval=15&theme=dark" style="width:100%;height:100%;" frameborder="0"></iframe>
-    </div>
-    <p>WHATSAPP: 076 757 40 50</p>
-    <a href='/acciones' style='color:#00ff00;margin:5px'>ACCIONES</a>
-    <a href='/crypto' style='color:orange;margin:5px'>CRYPTO</a>
-    <br><br>
-    <a href='https://www.paypal.me/RaudyManzueta/20' style='background:#0070ba;color:white;padding:12px 25px;border-radius:20px;text-decoration:none'>PAGAR CHF 20</a>
-    </body></html>
-    """
-    return html
+    return """
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAUDY VIP - ORO Y EURO</title>
+</head>
+<body style="background:#111;color:white;text-align:center;font-family:Arial;padding:10px;">
+<h1 style="color:yellow;">RAUDY VIP - ORO Y EURO</h1>
+<h2>ORO: <span id="oro">3957.95</span> | EUR: <span id="eur">1.11</span></h2>
+<h2 id="estado" style="background:red;padding:15px;border-radius:10px;">ORO: VENTA 88% - ESPERA</h2>
+<div style="margin-top:20px;background:#222;padding:15px;border-radius:10px;">
+<p>COMPRA BUENA: $3900 - $3890 | $3865 | $3820</p>
+<p>VENTA BUENA: $3980 - $3990 | $4020</p>
+</div>
 
-@app.route("/tc")
-def tc():
-    html = """
-    <html><body style='background:black;color:white;text-align:center;padding:10px;font-family:Arial'>
-    <h1 style='color:gold'>RAUDY VIP - /tc</h1>
-    <div style='border:2px solid gold;padding:8px;border-radius:10px'>ORO: $3874.73 | EUR: 1.11684 | GBP: 1.33144</div>
-    <div style='background:red;color:black;padding:12px;margin:8px;border-radius:10px;font-weight:bold'>ORO: SENAL VIP: VENTA - 88%</div>
-    <div style='display:flex;gap:8px;padding:5px'>
-    <div style='flex:1;background:gold;color:black;padding:10px;border-radius:10px'><b>EURUSD<br>ESPERA 63%</b></div>
-    <div style='flex:1;background:red;color:white;padding:10px;border-radius:10px'><b>GBPUSD<br>VENTA 73%</b></div>
-    </div>
-    <div style='margin:10px'>
-    <a href='/tc' style='background:gold;color:black;padding:12px;border-radius:10px;text-decoration:none;font-weight:bold'>RECARGAR</a>
-    <a href='https://wa.me/41767574050?text=Hola%20Raudy%20quiero%20SENAL%20VIP' style='background:#25D366;color:white;padding:12px;border-radius:10px;text-decoration:none;font-weight:bold;margin-left:10px'>WHATSAPP</a>
-    </div>
-    <div style='border:2px solid gold;border-radius:10px;overflow:hidden;margin:10px;height:500px'>
-    <iframe src="https://s.tradingview.com/widgetembed/?symbol=OANDA:XAUUSD&interval=15&theme=dark" style="width:100%;height:100%;" frameborder="0"></iframe>
-    </div>
-    <p>WHATSAPP: 076 757 40 50</p>
-    </body></html>
-    """
-    return html
+<a href="https://wa.me/41767574050?text=Hola%20Raudy%20VIP%20quiero%20info%20del%20ORO" style="background:#25D366;color:white;padding:18px 35px;display:inline-block;margin:20px;border-radius:10px;text-decoration:none;font-size:22px;font-weight:bold;">WhatsApp 0767574050</a>
+<br>
+<a href="https://raudy-vip-oro.onrender.com/" style="background:yellow;color:black;padding:15px 30px;display:inline-block;text-decoration:none;font-size:18px;border-radius:10px;font-weight:bold;">MI APP RAUDY VIP</a>
 
-@app.route("/acciones")
-def acciones():
-    html = """
-    <html><body style='background:black;color:white;text-align:center;padding:10px'>
-    <h1 style='color:#00ff00'>RAUDY VIP - ACCIONES</h1>
-    <div style='background:gold;color:black;padding:12px;margin:5px;border-radius:10px'>TESLA: COMPRA 88%</div>
-    <div style='background:gold;color:black;padding:12px;margin:5px;border-radius:10px'>APPLE: COMPRA 82%</div>
-    <div style='border:2px solid #00ff00;border-radius:10px;overflow:hidden;margin:10px;height:500px'>
-    <iframe src="https://s.tradingview.com/widgetembed/?symbol=NASDAQ:TSLA&interval=15&theme=dark" style="width:100%;height:100%;" frameborder="0"></iframe>
-    </div>
-    <a href='/' style='color:gold'>ORO</a> | <a href='/crypto' style='color:orange'>CRYPTO</a>
-    </body></html>
+<script>
+let alarmasORO={compra:[3900,3890,3865,3820],venta:[3980,3990,4020]};
+let alarmasEUR={compra:[1.109,1.108,1.105],venta:[1.115,1.118,1.121]};
+let yaSono={};
+function sonar(tipo,precio){
+ let k=tipo+precio; if(yaSono[k])return; yaSono[k]=true;
+ let a=new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg'); a.play();
+ alert('🚨 RAUDY VIP - '+tipo+' $'+precio+'\\nApp: https://raudy-vip-oro.onrender.com/\\nWA: 0767574050');
+ document.getElementById('estado').innerHTML = '🚨 '+tipo+' $'+precio+' - ENTRA YA';
+ document.getElementById('estado').style.background = 'green';
+}
+function verificar(o,e){
+ alarmasORO.compra.forEach(p=>{if(o<=p)sonar('COMPRA BUENA ORO',p)});
+ alarmasORO.venta.forEach(p=>{if(o>=p)sonar('VENTA BUENA ORO',p)});
+}
+// Prueba - cambia el numero 3957 por 3890 para probar alarma
+let precioSimulado = 3957.95;
+setInterval(()=>{
+  document.getElementById('oro').innerText = precioSimulado;
+  verificar(precioSimulado, 1.11);
+}, 3000);
+</script>
+</body>
+</html>
     """
-    return html
 
-@app.route("/crypto")
-def crypto():
-    html = """
-    <html><body style='background:black;color:white;text-align:center;padding:10px;font-family:Arial'>
-    <h1 style='color:orange'>RAUDY VIP - CRYPTO</h1>
-    <div style='border:2px solid orange;padding:8px;border-radius:10px'>BTC: $112K | ETH: $3.9K | SOL: $198</div>
-    <div style='background:orange;color:black;padding:12px;margin:8px;border-radius:10px;font-weight:bold'>BTC: COMPRA FUERTE - 91%</div>
-    <div style='display:flex;gap:8px;padding:5px'>
-    <div style='flex:1;background:gold;color:black;padding:10px;border-radius:10px'><b>ETH<br>COMPRA 87%</b></div>
-    <div style='flex:1;background:red;color:white;padding:10px;border-radius:10px'><b>SOL<br>ESPERA 78%</b></div>
-    </div>
-    <div style='margin:10px'>
-    <a href='/crypto' style='background:orange;color:black;padding:12px;border-radius:10px;text-decoration:none;font-weight:bold'>RECARGAR</a>
-    <a href='https://wa.me/41767574050?text=Hola%20Raudy%20quiero%20SENAL%20CRYPTO' style='background:#25D366;color:white;padding:12px;border-radius:10px;text-decoration:none;font-weight:bold;margin-left:10px'>WHATSAPP</a>
-    </div>
-    <div style='border:2px solid orange;border-radius:10px;overflow:hidden;margin:10px;height:500px'>
-    <iframe src="https://s.tradingview.com/widgetembed/?symbol=BINANCE:BTCUSDT&interval=15&theme=dark" style="width:100%;height:100%;" frameborder="0"></iframe>
-    </div>
-    <p>WHATSAPP: 076 757 40 50</p>
-    <a href='/' style='color:gold'>ORO</a> | <a href='/acciones' style='color:#00ff00'>ACCIONES</a>
-    <br><br>
-    <a href='https://www.paypal.me/RaudyManzueta/20' style='background:#0070ba;color:white;padding:12px 25px;border-radius:20px;text-decoration:none'>PAGAR VIP CHF 20</a>
-    </body></html>
-    """
-    return html
-
-if __name__ == "__main__":
-    app.run()
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=10000)
