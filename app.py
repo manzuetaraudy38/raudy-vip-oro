@@ -23,7 +23,8 @@ h1{color:#FFD700;font-size:30px;margin-top:15px;text-shadow:0 0 8px gold;}
 .btn-wa{background:#25D366;color:white;}
 .btn-pay{background:#FFD700;color:black;border:2px solid white; font-size:24px;}
 .btn-pay2{background:#0070BA;color:white;}
-.info{color:#aaa;font-size:12px;margin-top:20px;}
+.info{color:#aaa;font-size:11px;margin-top:20px; line-height:1.4;}
+.legal{background:#111;border:1px solid #333;border-radius:10px;padding:12px;margin:20px auto;max-width:420px;color:#888;font-size:10px;line-height:1.3;text-align:justify;}
 </style>
 </head>
 <body>
@@ -47,7 +48,6 @@ h1{color:#FFD700;font-size:30px;margin-top:15px;text-shadow:0 0 8px gold;}
 
 <div id="estado" class="estado venta">🔴 CONECTANDO PRECIO REAL DEL ORO...</div>
 
-<!-- BOTON PAYPAL CON TU LINK -->
 <a class="btn btn-pay" href="https://www.paypal.me/RaudyManzueta/20" target="_blank">
 💳 PAGAR VIP $20 AHORA - PAYPAL
 </a>
@@ -60,41 +60,38 @@ h1{color:#FFD700;font-size:30px;margin-top:15px;text-shadow:0 0 8px gold;}
 📱 WHATSAPP 0767574050 - CONFIRMAR PAGO
 </a>
 
+<div class="legal">
+<b>⚠️ AVISO LEGAL - DISCLAIMER:</b><br>
+Este contenido es solo con fines EDUCATIVOS e INFORMATIVOS. No constituye asesoría financiera, de inversión o recomendación de compra/venta según FINMA Suiza.<br><br>
+El trading de ORO (XAUUSD) y FOREX (EURUSD) implica ALTO RIESGO y puede resultar en pérdida total del capital. Resultados pasados no garantizan resultados futuros.<br><br>
+Raudy VIP comparte su análisis personal. Cada usuario opera bajo su propia responsabilidad y riesgo. Consulta con un asesor financiero licenciado antes de invertir. Al pagar el acceso VIP aceptas estos términos.
+</div>
+
 <p class="info">App Oficial: raudy-vip-oro.onrender.com<br>
 Alarmas activas: $3890, $3900, $3980, $3990<br>
-Sonido + vibración cuando toque precio</p>
+Contacto: Ginebra, Suiza - 0767574050<br>
+© 2026 Raudy VIP - Todos los derechos reservados</p>
 
 <script>
 let alarmasORO={compra:[3900,3890,3865,3820],venta:[3980,3990,4020]};
 let yaSono={};
-
 function sonar(tipo,precio,actual){
  let k=tipo+precio;
  if(yaSono[k]) return;
- // Solo suena si esta cerca (evita que suene repetido)
  yaSono[k]=true;
- 
- // SONIDO
  let audio = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
  audio.loop = true;
  audio.play();
  setTimeout(()=>audio.pause(), 8000);
- 
- // VIBRACION CELULAR
  if(navigator.vibrate) navigator.vibrate([500,300,500,300,1000]);
- 
- alert('🚨🚨 RAUDY VIP PRO 🚨🚨\\n\\n' + tipo + ' TOCADO!\\n\\nPrecio configurado: $' + precio + '\\nPrecio actual: $' + actual + '\\n\\n¡ENTRA AHORA!\\n\\nWhatsApp: 0767574050\\nPayPal: paypal.me/RaudyManzueta/20');
- 
+ alert('🚨🚨 RAUDY VIP PRO 🚨🚨\\n\\n' + tipo + ' TOCADO!\\n\\nPrecio configurado: $' + precio + '\\nPrecio actual: $' + actual);
  document.getElementById('estado').innerHTML = '🟢 🚨 ' + tipo + ' $' + precio + ' TOCADO! PRECIO: $' + actual;
  document.getElementById('estado').className = 'estado compra';
 }
-
 function verificar(precioOro){
  alarmasORO.compra.forEach(p=>{if(precioOro<=p) sonar('COMPRA BUENA ORO',p,precioOro)});
  alarmasORO.venta.forEach(p=>{if(precioOro>=p) sonar('VENTA BUENA ORO',p,precioOro)});
 }
-
-// PRECIO REAL ORO - API GRATIS
 async function precioReal(){
  try{
    let r = await fetch('https://api.gold-api.com/price/XAU');
@@ -104,8 +101,6 @@ async function precioReal(){
      document.getElementById('oro').innerText = precio.toFixed(2);
      document.getElementById('horaOro').innerText = 'Actualizado: ' + new Date().toLocaleTimeString() + ' - VIVO';
      verificar(precio);
-     
-     // Cambiar estado segun precio
      let est = document.getElementById('estado');
      if(precio > 3940){
        est.innerHTML = '🔴 ORO: VENTA 88% - ESPERANDO $3900 | Actual: $' + precio.toFixed(2);
@@ -121,23 +116,16 @@ async function precioReal(){
      }
    }
  }catch(e){
-   console.log('Error precio', e);
    document.getElementById('oro').innerText = '3957.95 (offline)';
  }
 }
-
-// Actualizar cada 5 segundos
 precioReal();
 setInterval(precioReal, 5000);
-
-// EURO - precio simulado pero cambia
 let eurBase = 1.1134;
 setInterval(()=>{
   eurBase += (Math.random()-0.5)*0.0005;
   document.getElementById('eur').innerText = eurBase.toFixed(4);
 }, 3000);
-
-// Reset alarmas cada 1 hora para que vuelva a sonar
 setInterval(()=>{ yaSono={}; }, 3600000);
 </script>
 
