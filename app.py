@@ -1,4 +1,4 @@
-from flask import Flask, session, request, redirect, jsonify
+from flask import Flask, session, request, redirect, jsonifyfrom flask import Flask, session, request, redirect, jsonify
 import requests
 
 app = Flask(__name__)
@@ -243,3 +243,49 @@ actualizar();
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
+import requests
+from datetime import datetime
+
+app = Flask(__name__)
+app.secret_key = "RAUDY-ORO-PRO-2026-GINEBRA-RAUDY20"
+
+# === CONFIGURACION TIEMPO LIMITADO RAUDY ===
+CLAVE_BUENA = "RAUDY20"
+FECHA_VENCE = datetime(2026, 12, 3, 23, 59, 59)  # AQUI CAMBIAS LA FECHA - FORMATO AÑO, MES, DIA
+
+def dias_restantes():
+    delta = FECHA_VENCE - datetime.now()
+    return delta.days
+
+def codigo_vigente():
+    ahora = datetime.now()
+    if ahora > FECHA_VENCE:
+        return False
+    return True
+
+def get_price_yahoo(symbol, fallback):
+    try:
+        url = f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}'
+        r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
+        j = r.json()
+        price = j['chart']['result'][0]['meta']['regularMarketPrice']
+        return float(price)
+    except:
+        return fallback
+
+def esta_logueado():
+    if not codigo_vigente():
+        return False
+    return session.get("vip") == CLAVE_BUENA
+
+@app.route('/login', methods=['GET','POST'])
+def login():
+    # Si ya venció, bloquea todo
+    if not codigo_vigente():
+        return f'''
+        <body style="background:#0a0a0a;color:white;text-align:center;font-family:Arial;padding:20px">
+        <div style="border:3px solid red;border-radius:20px;padding:25px;background:#1a0a0a;max-width:400px;margin:40px auto">
+        <h1 style="color:red">⛔ CODIGO VENCIDO</h1>
+        <p>RAUDY20 venció el {FECHA_VENCE.strftime("%d/%m/%Y")}</p>
+        <p>Debes pagar de nuevo para nuevo código VIP</p>
+        <a href="https://www.paypal.me/RaudyManzueta/20" style="background:gold;color:black;padding:15px;display:block;border-radius:12px;text-decoration:none;font-weight:bold">
