@@ -3,14 +3,31 @@ import requests
 
 app = Flask(__name__)
 
-@app.route('/api/oro-real')
-def oro_real():
+def get_price_yahoo(symbol, fallback):
     try:
-        r = requests.get('https://api.gold-api.com/price/XAU', timeout=5)
-        data = r.json()
-        return {"price": data.get('price', 3943.30)}
+        url = f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}'
+        r = requests.get(url, headers={'User-Agent':'Mozilla/5.0'}, timeout=5)
+        j = r.json()
+        price = j['chart']['result'][0]['meta']['regularMarketPrice']
+        return float(price)
     except:
-        return {"price": 3943.30}
+        return fallback
+
+@app.route('/api/precios')
+def precios():
+    oro = 3951.50
+    try:
+        r = requests.get('https://api.gold-api.com/price/XAU', timeout=4)
+        oro = r.json().get('price', oro)
+    except:
+        oro = get_price_yahoo('GC=F', oro)
+    return {
+        "oro": oro,
+        "gbp": get_price_yahoo('GBPUSD=X', 1.2695),
+        "eur": get_price_yahoo('EURUSD=X', 1.1134),
+        "tesla": get_price_yahoo('TSLA', 245.80),
+        "apple": get_price_yahoo('AAPL', 185.30)
+    }
 
 @app.route('/')
 def home():
@@ -19,95 +36,149 @@ def home():
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Raudy VIP ORO - ORIGINAL PRO</title>
+<title>RAUDY ORO PRO</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
-body { background:#0a0a0a; color:white; font-family: Arial; margin:0; padding:12px; }
-.box { border:2px solid #FFD700; border-radius:15px; padding:15px; text-align:center; margin-bottom:12px; background:#1a1a1a; }
-#oro { font-size:40px; color:#00ff00; font-weight:bold; }
-#eur { font-size:36px; color:#00ff00; font-weight:bold; }
-.estado { border-radius:15px; padding:15px; text-align:center; margin-bottom:15px; font-weight:bold; font-size:18px; background:#ff0000; transition:0.5s; }
-.estado.venta { background:#ff0000; }
-.estado.compra { background:#00aa00; }
-.btn-yellow { background:#FFD700; color:black; border-radius:15px; padding:18px; text-align:center; font-weight:bold; font-size:19px; margin-bottom:12px; display:block; text-decoration:none; }
-.btn-blue { background:#0a84ff; color:white; border-radius:15px; padding:18px; text-align:center; font-weight:bold; font-size:18px; margin-bottom:12px; display:block; text-decoration:none; }
-.btn-green { background:#25D366; color:white; border-radius:15px; padding:18px; text-align:center; font-weight:bold; font-size:18px; margin-bottom:12px; display:block; text-decoration:none; }
-.disclaimer { background:#111; border:1px solid #333; border-radius:10px; padding:12px; font-size:11px; color:#888; line-height:1.4; margin-bottom:15px; }
-.footer { text-align:center; font-size:11px; color:#555; line-height:1.6; }
+body { background:#0a0a0a; color:white; font-family: Arial; margin:0; padding:10px; }
+.header { text-align:center; padding:15px; border:2px solid #FFD700; border-radius:15px; background:#1a1a1a; margin-bottom:12px; }
+.header h1 { margin:0; color:#FFD700; font-size:26px; letter-spacing:1px; }
+.box { border:2px solid #FFD700; border-radius:15px; padding:12px; text-align:center; margin-bottom:14px; background:#1a1a1a; }
+.precio { font-size:32px; color:#00ff00; font-weight:bold; }
+.zonas { font-size:11px; margin-top:6px; line-height:1.4; }
+.estado { border-radius:10px; padding:8px; font-weight:bold; font-size:13px; margin-top:8px; }
+canvas { background:#0f0f0f; border-radius:10px; margin-top:10px; width:100% !important; height:140px !important; }
+.btn-yellow { background:#FFD700; color:black; border-radius:15px; padding:16px; text-align:center; font-weight:bold; font-size:17px; margin-bottom:10px; display:block; text-decoration:none; }
+.btn-blue { background:#0a84ff; color:white; border-radius:15px; padding:16px; text-align:center; font-weight:bold; font-size:17px; margin-bottom:10px; display:block; text-decoration:none; }
+.btn-green { background:#25D366; color:white; border-radius:15px; padding:16px; text-align:center; font-weight:bold; font-size:17px; margin-bottom:12px; display:block; text-decoration:none; }
+.footer { text-align:center; font-size:10px; color:#666; padding:10px; }
 </style>
 </head>
 <body>
 
-<div class="box">
-<div style="font-size:24px; font-weight:bold;">ORO (XAUUSD) - EN VIVO</div>
-<div id="oro">$3943.30</div>
-<div style="font-size:12px; color:#aaa;" id="horaOro">Actualizado: --:--:-- - VIVO</div>
-<div style="font-size:14px; margin-top:8px;">COMPRA BUENA: $3900 - $3890 | $3865 | $3820<br>VENTA BUENA: $3980 - $3990 | $4020</div>
+<div class="header">
+<h1>🔥 RAUDY ORO PRO 🔥</h1>
+<div style="font-size:11px; color:#aaa;">APP OFICIAL CON GRAFICO EN VIVO</div>
+<div style="font-size:11px; color:#00ff00;" id="hora">Actualizado: --:--:-- VIVO</div>
 </div>
 
 <div class="box">
-<div style="font-size:22px; font-weight:bold;">EURO (EURUSD)</div>
-<div id="eur">1.1134</div>
-<div style="font-size:14px; margin-top:5px;">COMPRA: 1.109 - 1.108 | VENTA: 1.115 - 1.118</div>
+<div style="font-weight:bold;">🟡 ORO (XAUUSD) - EN VIVO</div>
+<div class="precio" id="oro">$3951.50</div>
+<div class="zonas"><span style="color:#00ff00;">COMPRA BUENA: $3900 - $3890 | $3865</span><br><span style="color:#ff4444;">VENTA BUENA: $3980 - $3990 | $4020</span></div>
+<div class="estado" id="estado-oro" style="background:#ff0000;">🔴 VENTA 88% - ESPERANDO $3900</div>
+<canvas id="chart-oro"></canvas>
 </div>
 
-<div class="estado" id="estado">
-🔴 ORO: VENTA 88% - ESPERANDO $3900 | Actual: $3943.30
+<div class="box">
+<div style="font-weight:bold;">💷 GBPUSD - LIBRA</div>
+<div class="precio" id="gbp">1.2695</div>
+<div class="zonas"><span style="color:#00ff00;">COMPRA: 1.2620 - 1.2580</span> | <span style="color:#ff4444;">VENTA: 1.2750 - 1.2820</span></div>
+<div class="estado" id="estado-gbp" style="background:#333;">ESPERANDO</div>
+<canvas id="chart-gbp"></canvas>
 </div>
 
-<a href="https://www.paypal.me/RaudyManzueta/20" class="btn-yellow">💳 PAGAR VIP $20 AHORA - PAYPAL</a>
-<a href="https://www.paypal.me/RaudyManzueta/100" class="btn-blue">💎 PAGAR VIP $100 TODO EL MES</a>
-<a href="https://wa.me/41767574050?text=Hola%20Raudy%20quiero%20SENAL%20VIP" class="btn-green">📱 WHATSAPP 0767574050 - CONFIRMAR PAGO</a>
+<div class="box">
+<div style="font-weight:bold;">💶 EURO (EURUSD)</div>
+<div class="precio" id="eur">1.1134</div>
+<div class="zonas">COMPRA: 1.109 - 1.108 | VENTA: 1.115 - 1.118</div>
+<canvas id="chart-eur"></canvas>
+</div>
 
-<div class="disclaimer">⚠️ AVISO LEGAL: Solo fines EDUCATIVOS. No constituye asesoria financiera segun FINMA Suiza. Alto riesgo.</div>
-<div class="footer">App Oficial: raudy-vip-oro.onrender.com<br>Alarmas: $3890, $3900, $3980, $3990<br>© 2026 Raudy VIP</div>
+<div class="box">
+<div style="font-weight:bold;">🚗 TESLA (TSLA)</div>
+<div class="precio" id="tesla">$245.80</div>
+<div class="zonas"><span style="color:#00ff00;">COMPRA: $240 - $235 - $228</span><br><span style="color:#ff4444;">VENTA: $275 - $285 - $295</span></div>
+<div class="estado" id="estado-tesla" style="background:#333;">ESPERANDO</div>
+<canvas id="chart-tesla"></canvas>
+</div>
 
-<audio id="alarma" preload="auto"><source src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" type="audio/ogg"></audio>
+<div class="box">
+<div style="font-weight:bold;">🍎 APPLE (AAPL)</div>
+<div class="precio" id="apple">$185.30</div>
+<div class="zonas"><span style="color:#00ff00;">COMPRA: $172 - $168 - $165</span><br><span style="color:#ff4444;">VENTA: $195 - $200 - $205</span></div>
+<div class="estado" id="estado-apple" style="background:#333;">ESPERANDO</div>
+<canvas id="chart-apple"></canvas>
+</div>
+
+<a href="https://www.paypal.me/RaudyManzueta/20" class="btn-yellow">💳 PAGAR VIP $20 AHORA</a>
+<a href="https://www.paypal.me/RaudyManzueta/100" class="btn-blue">💎 VIP $100 TODO EL MES</a>
+<a href="https://wa.me/41767574050?text=Hola%20Raudy%20quiero%20VIP%20RAUDY%20ORO%20PRO" class="btn-green">📱 WHATSAPP 0767574050</a>
+
+<div class="footer">RAUDY ORO PRO | raudy-vip-oro.onrender.com<br>© 2026 Ginebra Suiza - Grafico en vivo cada 5 seg</div>
 
 <script>
-let yaSono = {};
+let hist = {oro:[], gbp:[], eur:[], tesla:[], apple:[]};
+let labels = [];
+let charts = {};
 
-async function precioReal(){
+function crearChart(id, color){
+  let ctx = document.getElementById(id).getContext('2d');
+  return new Chart(ctx, {
+    type: 'line',
+    data: { labels: labels, datasets: [{ data: [], borderColor: color, backgroundColor: color+'33', borderWidth: 2, fill: true, tension: 0.4, pointRadius:0 }] },
+    options: { responsive:true, plugins:{legend:{display:false}}, scales:{ x:{display:false}, y:{grid:{color:'#222'}, ticks:{color:'#888', font:{size:10}}}} }
+  });
+}
+
+charts.oro = crearChart('chart-oro', '#FFD700');
+charts.gbp = crearChart('chart-gbp', '#00ff00');
+charts.eur = crearChart('chart-eur', '#0a84ff');
+charts.tesla = crearChart('chart-tesla', '#ff4444');
+charts.apple = crearChart('chart-apple', '#ffffff');
+
+async function actualizarTodo(){
   try{
-    let r = await fetch('/api/oro-real?v='+Date.now());
-    let data = await r.json();
-    let precio = parseFloat(data.price);
-    document.getElementById('oro').innerText = '$' + precio.toFixed(2);
-    document.getElementById('horaOro').innerText = 'Actualizado: ' + new Date().toLocaleTimeString() + ' - VIVO';
-    verificar(precio);
-    let est = document.getElementById('estado');
-    if(precio > 3940){
-      est.innerHTML = '🔴 ORO: VENTA 88% - ESPERANDO $3900 | Actual: $' + precio.toFixed(2);
-      est.className = 'estado venta';
-    } else if(precio <= 3905 && precio >= 3885){
-      est.innerHTML = '🟢 ORO: COMPRA BUENA $3900 | Actual: $' + precio.toFixed(2);
-      est.className = 'estado compra';
-      if(!yaSono['zona3900']){ yaSono['zona3900']=true; sonar(); }
-    } else {
-      est.innerHTML = '🟡 ORO: En zona ' + precio.toFixed(2) + ' - ESPERANDO SEÑAL';
-      est.className = 'estado';
-      est.style.background = '#FFA500';
+    let r = await fetch('/api/precios?v='+Date.now());
+    let d = await r.json();
+    let hora = new Date().toLocaleTimeString();
+    document.getElementById('oro').innerText = '$' + d.oro.toFixed(2);
+    document.getElementById('gbp').innerText = d.gbp.toFixed(4);
+    document.getElementById('eur').innerText = d.eur.toFixed(4);
+    document.getElementById('tesla').innerText = '$' + d.tesla.toFixed(2);
+    document.getElementById('apple').innerText = '$' + d.apple.toFixed(2);
+    document.getElementById('hora').innerText = 'Actualizado: ' + hora + ' VIVO - RAUDY ORO PRO';
+
+    labels.push(hora);
+    if(labels.length > 20){ labels.shift(); }
+    
+    function pushHist(key, val, chart){
+      hist[key].push(val);
+      if(hist[key].length > 20) hist[key].shift();
+      chart.data.labels = labels;
+      chart.data.datasets[0].data = hist[key];
+      chart.update();
     }
-  }catch(e){
-    document.getElementById('oro').innerText = 'Error';
-  }
-}
+    pushHist('oro', d.oro, charts.oro);
+    pushHist('gbp', d.gbp, charts.gbp);
+    pushHist('eur', d.eur, charts.eur);
+    pushHist('tesla', d.tesla, charts.tesla);
+    pushHist('apple', d.apple, charts.apple);
 
-function verificar(p){ /* tu funcion extra */ }
-function sonar(){
-  let a=document.getElementById('alarma'); a.play(); 
-  if(navigator.vibrate) navigator.vibrate([500,200,500]);
-}
+    let estOro = document.getElementById('estado-oro');
+    if(d.oro > 3940){ estOro.innerHTML='🔴 VENTA 88% - ESPERANDO $3900'; estOro.style.background='#ff0000'; }
+    else if(d.oro <= 3905 && d.oro >= 3885){ estOro.innerHTML='🟢 COMPRA BUENA $3900 - $'+d.oro.toFixed(2); estOro.style.background='#00aa00'; }
+    else { estOro.innerHTML='🟡 En zona '+d.oro.toFixed(2); estOro.style.background='#FFA500'; }
 
-precioReal();
-setInterval(precioReal, 5000);
-let eurBase = 1.1134;
-setInterval(()=>{
-  eurBase += (Math.random()-0.5)*0.0005;
-  document.getElementById('eur').innerText = eurBase.toFixed(4);
-}, 3000);
-setInterval(()=>{ yaSono={}; }, 3600000);
+    let estGbp = document.getElementById('estado-gbp');
+    if(d.gbp <= 1.2620){ estGbp.innerHTML='🟢 GBP COMPRA BUENA'; estGbp.style.background='#00aa00'; }
+    else if(d.gbp >= 1.2750){ estGbp.innerHTML='🔴 GBP VENTA BUENA'; estGbp.style.background='#ff0000'; }
+    else { estGbp.innerHTML='🟡 GBP En zona '+d.gbp.toFixed(4); estGbp.style.background='#333'; }
+
+    let estTesla = document.getElementById('estado-tesla');
+    if(d.tesla <= 240){ estTesla.innerHTML='🟢 TESLA COMPRA $'+d.tesla.toFixed(2); estTesla.style.background='#00aa00'; }
+    else if(d.tesla >= 275){ estTesla.innerHTML='🔴 TESLA VENTA $'+d.tesla.toFixed(2); estTesla.style.background='#ff0000'; }
+    else { estTesla.innerHTML='🟡 TESLA '+d.tesla.toFixed(2); estTesla.style.background='#FFA500'; }
+
+    let estApple = document.getElementById('estado-apple');
+    if(d.apple <= 172){ estApple.innerHTML='🟢 APPLE COMPRA $'+d.apple.toFixed(2); estApple.style.background='#00aa00'; }
+    else if(d.apple >= 195){ estApple.innerHTML='🔴 APPLE VENTA $'+d.apple.toFixed(2); estApple.style.background='#ff0000'; }
+    else { estApple.innerHTML='🟡 APPLE '+d.apple.toFixed(2); estApple.style.background='#FFA500'; }
+
+  }catch(e){ console.log(e); }
+}
+setInterval(actualizarTodo, 5000);
+actualizarTodo();
 </script>
-
 </body>
 </html>
     '''
