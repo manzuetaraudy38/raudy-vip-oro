@@ -6,7 +6,7 @@ app = Flask(__name__)
 def get_price_yahoo(symbol, fallback):
     try:
         url = f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}'
-        r = requests.get(url, headers={'User-Agent':'Mozilla/5.0'}, timeout=5)
+        r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
         j = r.json()
         price = j['chart']['result'][0]['meta']['regularMarketPrice']
         return float(price)
@@ -23,8 +23,8 @@ def precios():
         oro = get_price_yahoo('GC=F', oro)
     return {
         "oro": oro,
-        "gbp": get_price_yahoo('GBPUSD=X', 1.2695),
-        "eur": get_price_yahoo('EURUSD=X', 1.1134),
+        "gbp": get_price_yahoo('GBPUSD=X', 1.3412),
+        "eur": get_price_yahoo('EURUSD=X', 1.1197),
         "tesla": get_price_yahoo('TSLA', 245.80),
         "apple": get_price_yahoo('AAPL', 185.30)
     }
@@ -37,16 +37,16 @@ def home():
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RAUDY ORO PRO</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
 <style>
 body { background:#0a0a0a; color:white; font-family: Arial; margin:0; padding:10px; }
 .header { text-align:center; padding:15px; border:2px solid #FFD700; border-radius:15px; background:#1a1a1a; margin-bottom:12px; }
-.header h1 { margin:0; color:#FFD700; font-size:26px; letter-spacing:1px; }
+.header h1 { margin:0; color:#FFD700; font-size:26px; }
 .box { border:2px solid #FFD700; border-radius:15px; padding:12px; text-align:center; margin-bottom:14px; background:#1a1a1a; }
 .precio { font-size:32px; color:#00ff00; font-weight:bold; }
 .zonas { font-size:11px; margin-top:6px; line-height:1.4; }
 .estado { border-radius:10px; padding:8px; font-weight:bold; font-size:13px; margin-top:8px; }
-canvas { background:#0f0f0f; border-radius:10px; margin-top:10px; width:100% !important; height:140px !important; }
+.chart { width:100%; height:180px; margin-top:10px; border-radius:10px; background:#0f0f0f; }
 .btn-yellow { background:#FFD700; color:black; border-radius:15px; padding:16px; text-align:center; font-weight:bold; font-size:17px; margin-bottom:10px; display:block; text-decoration:none; }
 .btn-blue { background:#0a84ff; color:white; border-radius:15px; padding:16px; text-align:center; font-weight:bold; font-size:17px; margin-bottom:10px; display:block; text-decoration:none; }
 .btn-green { background:#25D366; color:white; border-radius:15px; padding:16px; text-align:center; font-weight:bold; font-size:17px; margin-bottom:12px; display:block; text-decoration:none; }
@@ -57,31 +57,31 @@ canvas { background:#0f0f0f; border-radius:10px; margin-top:10px; width:100% !im
 
 <div class="header">
 <h1>🔥 RAUDY ORO PRO 🔥</h1>
-<div style="font-size:11px; color:#aaa;">APP OFICIAL CON GRAFICO EN VIVO</div>
-<div style="font-size:11px; color:#00ff00;" id="hora">Actualizado: --:--:-- VIVO</div>
+<div style="font-size:11px; color:#aaa;">APP OFICIAL - VELAS JAPONESAS EN VIVO</div>
+<div style="font-size:11px; color:#00ff00;" id="hora">VIVO - RAUDY ORO PRO</div>
 </div>
 
 <div class="box">
 <div style="font-weight:bold;">🟡 ORO (XAUUSD) - EN VIVO</div>
-<div class="precio" id="oro">$3951.50</div>
+<div class="precio" id="oro">$3951.70</div>
 <div class="zonas"><span style="color:#00ff00;">COMPRA BUENA: $3900 - $3890 | $3865</span><br><span style="color:#ff4444;">VENTA BUENA: $3980 - $3990 | $4020</span></div>
 <div class="estado" id="estado-oro" style="background:#ff0000;">🔴 VENTA 88% - ESPERANDO $3900</div>
-<canvas id="chart-oro"></canvas>
+<div class="chart" id="chart-oro"></div>
 </div>
 
 <div class="box">
 <div style="font-weight:bold;">💷 GBPUSD - LIBRA</div>
-<div class="precio" id="gbp">1.2695</div>
+<div class="precio" id="gbp">1.3412</div>
 <div class="zonas"><span style="color:#00ff00;">COMPRA: 1.2620 - 1.2580</span> | <span style="color:#ff4444;">VENTA: 1.2750 - 1.2820</span></div>
 <div class="estado" id="estado-gbp" style="background:#333;">ESPERANDO</div>
-<canvas id="chart-gbp"></canvas>
+<div class="chart" id="chart-gbp"></div>
 </div>
 
 <div class="box">
 <div style="font-weight:bold;">💶 EURO (EURUSD)</div>
-<div class="precio" id="eur">1.1134</div>
+<div class="precio" id="eur">1.1197</div>
 <div class="zonas">COMPRA: 1.109 - 1.108 | VENTA: 1.115 - 1.118</div>
-<canvas id="chart-eur"></canvas>
+<div class="chart" id="chart-eur"></div>
 </div>
 
 <div class="box">
@@ -89,7 +89,7 @@ canvas { background:#0f0f0f; border-radius:10px; margin-top:10px; width:100% !im
 <div class="precio" id="tesla">$245.80</div>
 <div class="zonas"><span style="color:#00ff00;">COMPRA: $240 - $235 - $228</span><br><span style="color:#ff4444;">VENTA: $275 - $285 - $295</span></div>
 <div class="estado" id="estado-tesla" style="background:#333;">ESPERANDO</div>
-<canvas id="chart-tesla"></canvas>
+<div class="chart" id="chart-tesla"></div>
 </div>
 
 <div class="box">
@@ -97,38 +97,54 @@ canvas { background:#0f0f0f; border-radius:10px; margin-top:10px; width:100% !im
 <div class="precio" id="apple">$185.30</div>
 <div class="zonas"><span style="color:#00ff00;">COMPRA: $172 - $168 - $165</span><br><span style="color:#ff4444;">VENTA: $195 - $200 - $205</span></div>
 <div class="estado" id="estado-apple" style="background:#333;">ESPERANDO</div>
-<canvas id="chart-apple"></canvas>
+<div class="chart" id="chart-apple"></div>
 </div>
 
-<a href="https://www.paypal.me/RaudyManzueta/20" class="btn-yellow">💳 PAGAR VIP $20 AHORA</a>
-<a href="https://www.paypal.me/RaudyManzueta/100" class="btn-blue">💎 VIP $100 TODO EL MES</a>
-<a href="https://wa.me/41767574050?text=Hola%20Raudy%20quiero%20VIP%20RAUDY%20ORO%20PRO" class="btn-green">📱 WHATSAPP 0767574050</a>
+<a href="https://www.paypal.me/RaudyManzueta/20" class="btn-yellow">💳 PAGAR VIP $20 AHORA - PAYPAL</a>
+<a href="https://www.paypal.me/RaudyManzueta/100" class="btn-blue">💎 PAGAR VIP $100 TODO EL MES</a>
+<a href="https://wa.me/41767574050?text=Hola%20Raudy%20quiero%20VIP%20RAUDY%20ORO%20PRO" class="btn-green">📱 WHATSAPP 0767574050 - CONFIRMAR PAGO</a>
 
-<div class="footer">RAUDY ORO PRO | raudy-vip-oro.onrender.com<br>© 2026 Ginebra Suiza - Grafico en vivo cada 5 seg</div>
+<div class="footer">App: RAUDY ORO PRO | raudy-vip-oro.onrender.com<br>Alarmas: Oro $3900, GBP 1.2580, Tesla $235, Apple $168<br>© 2026 Ginebra Suiza - Velas en vivo</div>
 
 <script>
-let hist = {oro:[], gbp:[], eur:[], tesla:[], apple:[]};
-let labels = [];
-let charts = {};
-
-function crearChart(id, color){
-  let ctx = document.getElementById(id).getContext('2d');
-  return new Chart(ctx, {
-    type: 'line',
-    data: { labels: labels, datasets: [{ data: [], borderColor: color, backgroundColor: color+'33', borderWidth: 2, fill: true, tension: 0.4, pointRadius:0 }] },
-    options: { responsive:true, plugins:{legend:{display:false}}, scales:{ x:{display:false}, y:{grid:{color:'#222'}, ticks:{color:'#888', font:{size:10}}}} }
+function makeCandleChart(elemId){
+  const chart = LightweightCharts.createChart(document.getElementById(elemId), {
+    layout: { background: { color: '#0f0f0f' }, textColor: '#888' },
+    grid: { vertLines: { color: '#222' }, horzLines: { color: '#222' } },
+    width: document.getElementById(elemId).clientWidth,
+    height: 180,
+    timeScale: { timeVisible: true, secondsVisible: true }
   });
+  const series = chart.addCandlestickSeries({ upColor: '#00ff00', downColor: '#ff4444', borderVisible: false, wickUpColor: '#00ff00', wickDownColor: '#ff4444' });
+  return { chart, series, data: [] };
 }
 
-charts.oro = crearChart('chart-oro', '#FFD700');
-charts.gbp = crearChart('chart-gbp', '#00ff00');
-charts.eur = crearChart('chart-eur', '#0a84ff');
-charts.tesla = crearChart('chart-tesla', '#ff4444');
-charts.apple = crearChart('chart-apple', '#ffffff');
+let charts = {
+  oro: makeCandleChart('chart-oro'),
+  gbp: makeCandleChart('chart-gbp'),
+  eur: makeCandleChart('chart-eur'),
+  tesla: makeCandleChart('chart-tesla'),
+  apple: makeCandleChart('chart-apple')
+};
 
-async function actualizarTodo(){
+function addCandle(cObj, price){
+  let now = Math.floor(Date.now() / 1000);
+  let last = cObj.data[cObj.data.length - 1];
+  if(!last || (now - last.time) >= 15){
+    let candle = { time: now, open: last ? last.close : price, high: price, low: price, close: price };
+    cObj.data.push(candle);
+    if(cObj.data.length > 60) cObj.data.shift();
+  } else {
+    last.high = Math.max(last.high, price);
+    last.low = Math.min(last.low, price);
+    last.close = price;
+  }
+  cObj.series.setData(cObj.data);
+}
+
+async function actualizar(){
   try{
-    let r = await fetch('/api/precios?v='+Date.now());
+    let r = await fetch('/api/precios?v=' + Date.now());
     let d = await r.json();
     let hora = new Date().toLocaleTimeString();
     document.getElementById('oro').innerText = '$' + d.oro.toFixed(2);
@@ -136,48 +152,20 @@ async function actualizarTodo(){
     document.getElementById('eur').innerText = d.eur.toFixed(4);
     document.getElementById('tesla').innerText = '$' + d.tesla.toFixed(2);
     document.getElementById('apple').innerText = '$' + d.apple.toFixed(2);
-    document.getElementById('hora').innerText = 'Actualizado: ' + hora + ' VIVO - RAUDY ORO PRO';
-
-    labels.push(hora);
-    if(labels.length > 20){ labels.shift(); }
-    
-    function pushHist(key, val, chart){
-      hist[key].push(val);
-      if(hist[key].length > 20) hist[key].shift();
-      chart.data.labels = labels;
-      chart.data.datasets[0].data = hist[key];
-      chart.update();
-    }
-    pushHist('oro', d.oro, charts.oro);
-    pushHist('gbp', d.gbp, charts.gbp);
-    pushHist('eur', d.eur, charts.eur);
-    pushHist('tesla', d.tesla, charts.tesla);
-    pushHist('apple', d.apple, charts.apple);
-
-    let estOro = document.getElementById('estado-oro');
-    if(d.oro > 3940){ estOro.innerHTML='🔴 VENTA 88% - ESPERANDO $3900'; estOro.style.background='#ff0000'; }
-    else if(d.oro <= 3905 && d.oro >= 3885){ estOro.innerHTML='🟢 COMPRA BUENA $3900 - $'+d.oro.toFixed(2); estOro.style.background='#00aa00'; }
-    else { estOro.innerHTML='🟡 En zona '+d.oro.toFixed(2); estOro.style.background='#FFA500'; }
-
-    let estGbp = document.getElementById('estado-gbp');
-    if(d.gbp <= 1.2620){ estGbp.innerHTML='🟢 GBP COMPRA BUENA'; estGbp.style.background='#00aa00'; }
-    else if(d.gbp >= 1.2750){ estGbp.innerHTML='🔴 GBP VENTA BUENA'; estGbp.style.background='#ff0000'; }
-    else { estGbp.innerHTML='🟡 GBP En zona '+d.gbp.toFixed(4); estGbp.style.background='#333'; }
-
-    let estTesla = document.getElementById('estado-tesla');
-    if(d.tesla <= 240){ estTesla.innerHTML='🟢 TESLA COMPRA $'+d.tesla.toFixed(2); estTesla.style.background='#00aa00'; }
-    else if(d.tesla >= 275){ estTesla.innerHTML='🔴 TESLA VENTA $'+d.tesla.toFixed(2); estTesla.style.background='#ff0000'; }
-    else { estTesla.innerHTML='🟡 TESLA '+d.tesla.toFixed(2); estTesla.style.background='#FFA500'; }
-
-    let estApple = document.getElementById('estado-apple');
-    if(d.apple <= 172){ estApple.innerHTML='🟢 APPLE COMPRA $'+d.apple.toFixed(2); estApple.style.background='#00aa00'; }
-    else if(d.apple >= 195){ estApple.innerHTML='🔴 APPLE VENTA $'+d.apple.toFixed(2); estApple.style.background='#ff0000'; }
-    else { estApple.innerHTML='🟡 APPLE '+d.apple.toFixed(2); estApple.style.background='#FFA500'; }
-
-  }catch(e){ console.log(e); }
+    document.getElementById('hora').innerText = 'Actualizado: ' + hora + ' VIVO - RAUDY ORO PRO VELAS';
+    addCandle(charts.oro, d.oro);
+    addCandle(charts.gbp, d.gbp);
+    addCandle(charts.eur, d.eur);
+    addCandle(charts.tesla, d.tesla);
+    addCandle(charts.apple, d.apple);
+    let eo = document.getElementById('estado-oro');
+    if(d.oro > 3940){ eo.innerHTML = '🔴 VENTA 88% - ESPERANDO $3900'; eo.style.background = '#ff0000'; }
+    else if(d.oro <= 3905 && d.oro >= 3885){ eo.innerHTML = '🟢 COMPRA BUENA $3900'; eo.style.background = '#00aa00'; }
+    else { eo.innerHTML = '🟡 En zona ' + d.oro.toFixed(2); eo.style.background = '#FFA500'; }
+  }catch(e){}
 }
-setInterval(actualizarTodo, 5000);
-actualizarTodo();
+setInterval(actualizar, 5000);
+actualizar();
 </script>
 </body>
 </html>
