@@ -1,7 +1,11 @@
-from flask import Flask
+from flask import Flask, session, request, redirect, jsonify
 import requests
 
 app = Flask(__name__)
+app.secret_key = "RAUDY-ORO-PRO-2026-GINEBRA-RAUDY20"
+
+# LA BUENA - SOLO UNA CLAVE
+CLAVE_BUENA = "RAUDY20"
 
 def get_price_yahoo(symbol, fallback):
     try:
@@ -13,8 +17,66 @@ def get_price_yahoo(symbol, fallback):
     except:
         return fallback
 
+def esta_logueado():
+    return session.get("vip") == CLAVE_BUENA
+
+@app.route('/login', methods=['GET','POST'])
+def login():
+    error = ""
+    if request.method == 'POST':
+        clave = request.form.get("clave","").strip().upper()
+        if clave == CLAVE_BUENA:
+            session["vip"] = CLAVE_BUENA
+            return redirect("/")
+        error = "❌ CLAVE MALA - LA BUENA ES RAUDY20"
+    return f'''
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAUDY ORO PRO - VIP</title>
+<style>
+body{{background:#0a0a0a;color:white;font-family:Arial;margin:0;padding:15px;text-align:center}}
+.box{{border:2px solid #FFD700;border-radius:20px;padding:25px;background:#1a1a1a;max-width:400px;margin:40px auto}}
+input{{width:90%;padding:18px;border-radius:12px;border:2px solid #FFD700;background:#0a0a0a;color:#FFD700;font-size:22px;text-align:center;font-weight:bold;margin:15px 0}}
+.btn{{background:#FFD700;color:black;border-radius:15px;padding:18px;font-weight:bold;font-size:18px;width:100%;border:none;cursor:pointer}}
+.btn-yellow{{background:#FFD700;color:black;border-radius:15px;padding:16px;text-align:center;font-weight:bold;font-size:17px;margin-bottom:10px;display:block;text-decoration:none}}
+.btn-blue{{background:#0a84ff;color:white;border-radius:15px;padding:16px;text-align:center;font-weight:bold;font-size:17px;margin-bottom:10px;display:block;text-decoration:none}}
+.btn-green{{background:#25D366;color:white;border-radius:15px;padding:16px;text-align:center;font-weight:bold;font-size:17px;margin-bottom:12px;display:block;text-decoration:none}}
+.warn{{border:1px solid #ff4444;background:#1a0a0a;border-radius:12px;padding:12px;font-size:10px;color:#ffaaaa;text-align:left;margin-top:15px;line-height:1.4}}
+</style>
+</head>
+<body>
+<div class="box">
+<h1 style="color:#FFD700;">🔒 RAUDY ORO PRO VIP</h1>
+<p>App cerrada con candado</p>
+<p style="color:#00ff00;font-weight:bold;">CLAVE BUENA: RAUDY20</p>
+<form method="POST">
+<input name="clave" placeholder="ESCRIBE RAUDY20" required>
+<div style="color:#ff4444;font-weight:bold;margin:10px;">{error}</div>
+<button class="btn">🔓 ENTRAR CON RAUDY20</button>
+</form>
+<a href="https://www.paypal.me/RaudyManzueta/20" class="btn-yellow">💳 PAGAR VIP $20 AHORA</a>
+<a href="https://www.paypal.me/RaudyManzueta/100" class="btn-blue">💎 PAGAR VIP $100 TODO EL MES</a>
+<a href="https://wa.me/41767574050?text=Hola%20Raudy%20quiero%20VIP%20RAUDY%20ORO%20PRO" class="btn-green">📱 WHATSAPP 0767574050</a>
+<div class="warn">
+<b>⚠️ ADVERTENCIA DE RIESGO - AVISO LEGAL EDUCATIVO:</b><br>
+Esta App RAUDY ORO PRO es SOLO CON FINES EDUCATIVOS. No es consejo financiero, no es asesoría de inversión. Trading de Oro, Forex, Tesla, Apple contiene ALTO RIESGO y puedes perder todo tu dinero. Resultados pasados no garantizan futuros. Opera bajo tu propio riesgo. Raudy Manzueta no es asesor financiero regulado.
+</div>
+</div>
+</body>
+</html>
+    '''
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect("/login")
+
 @app.route('/api/precios')
 def precios():
+    if not esta_logueado():
+        return jsonify({"error": "no autorizado"}), 401
     oro = 3951.50
     try:
         r = requests.get('https://api.gold-api.com/price/XAU', timeout=4)
@@ -31,6 +93,8 @@ def precios():
 
 @app.route('/')
 def home():
+    if not esta_logueado():
+        return redirect("/login")
     return '''
 <!DOCTYPE html>
 <html>
@@ -51,6 +115,8 @@ body { background:#0a0a0a; color:white; font-family: Arial; margin:0; padding:10
 .btn-blue { background:#0a84ff; color:white; border-radius:15px; padding:16px; text-align:center; font-weight:bold; font-size:17px; margin-bottom:10px; display:block; text-decoration:none; }
 .btn-green { background:#25D366; color:white; border-radius:15px; padding:16px; text-align:center; font-weight:bold; font-size:17px; margin-bottom:12px; display:block; text-decoration:none; }
 .footer { text-align:center; font-size:10px; color:#666; padding:10px; }
+.warn-main { border:2px solid #ff4444; background:#1a0a0a; border-radius:15px; padding:12px; font-size:10px; color:#ffaaaa; line-height:1.4; text-align:left; margin-bottom:14px; }
+.warn-title { color:#ff4444; font-weight:bold; font-size:11px; text-align:center; margin-bottom:6px; }
 </style>
 </head>
 <body>
@@ -58,7 +124,13 @@ body { background:#0a0a0a; color:white; font-family: Arial; margin:0; padding:10
 <div class="header">
 <h1>🔥 RAUDY ORO PRO 🔥</h1>
 <div style="font-size:11px; color:#aaa;">APP OFICIAL - VELAS JAPONESAS EN VIVO</div>
-<div style="font-size:11px; color:#00ff00;" id="hora">VIVO - RAUDY ORO PRO</div>
+<div style="font-size:11px; color:#00ff00;" id="hora">VIVO - RAUDY ORO PRO - VIP ✅ RAUDY20</div>
+<div style="margin-top:5px;"><a href="/logout" style="color:#ff4444; font-size:11px; text-decoration:none;">SALIR</a></div>
+</div>
+
+<div class="warn-main">
+<div class="warn-title">⚠️ ADVERTENCIA DE RIESGO - SOLO EDUCATIVO - NO ES CONSEJO FINANCIERO</div>
+<b>RAUDY ORO PRO NO ES CONSEJO FINANCIERO.</b> Contenido solo educativo e informativo. Trading Oro (XAUUSD), Divisas (GBPUSD, EURUSD), Acciones (TSLA, AAPL) implica ALTO RIESGO de pérdida total. Puedes perder todo tu capital. No garantizamos ganancias. No somos asesores regulados. Opera bajo tu propia responsabilidad. Consulta con profesional autorizado.
 </div>
 
 <div class="box">
@@ -104,72 +176,10 @@ body { background:#0a0a0a; color:white; font-family: Arial; margin:0; padding:10
 <a href="https://www.paypal.me/RaudyManzueta/100" class="btn-blue">💎 PAGAR VIP $100 TODO EL MES</a>
 <a href="https://wa.me/41767574050?text=Hola%20Raudy%20quiero%20VIP%20RAUDY%20ORO%20PRO" class="btn-green">📱 WHATSAPP 0767574050 - CONFIRMAR PAGO</a>
 
-<div class="footer">App: RAUDY ORO PRO | raudy-vip-oro.onrender.com<br>Alarmas: Oro $3900, GBP 1.2580, Tesla $235, Apple $168<br>© 2026 Ginebra Suiza - Velas en vivo</div>
+<div class="footer">App: RAUDY ORO PRO | raudy-vip-oro.onrender.com<br>© 2026 Ginebra Suiza - Velas en vivo - CLAVE RAUDY20 - Solo Educativo</div>
 
 <script>
 function makeCandleChart(elemId){
   const chart = LightweightCharts.createChart(document.getElementById(elemId), {
     layout: { background: { color: '#0f0f0f' }, textColor: '#888' },
-    grid: { vertLines: { color: '#222' }, horzLines: { color: '#222' } },
-    width: document.getElementById(elemId).clientWidth,
-    height: 180,
-    timeScale: { timeVisible: true, secondsVisible: true }
-  });
-  const series = chart.addCandlestickSeries({ upColor: '#00ff00', downColor: '#ff4444', borderVisible: false, wickUpColor: '#00ff00', wickDownColor: '#ff4444' });
-  return { chart, series, data: [] };
-}
-
-let charts = {
-  oro: makeCandleChart('chart-oro'),
-  gbp: makeCandleChart('chart-gbp'),
-  eur: makeCandleChart('chart-eur'),
-  tesla: makeCandleChart('chart-tesla'),
-  apple: makeCandleChart('chart-apple')
-};
-
-function addCandle(cObj, price){
-  let now = Math.floor(Date.now() / 1000);
-  let last = cObj.data[cObj.data.length - 1];
-  if(!last || (now - last.time) >= 15){
-    let candle = { time: now, open: last ? last.close : price, high: price, low: price, close: price };
-    cObj.data.push(candle);
-    if(cObj.data.length > 60) cObj.data.shift();
-  } else {
-    last.high = Math.max(last.high, price);
-    last.low = Math.min(last.low, price);
-    last.close = price;
-  }
-  cObj.series.setData(cObj.data);
-}
-
-async function actualizar(){
-  try{
-    let r = await fetch('/api/precios?v=' + Date.now());
-    let d = await r.json();
-    let hora = new Date().toLocaleTimeString();
-    document.getElementById('oro').innerText = '$' + d.oro.toFixed(2);
-    document.getElementById('gbp').innerText = d.gbp.toFixed(4);
-    document.getElementById('eur').innerText = d.eur.toFixed(4);
-    document.getElementById('tesla').innerText = '$' + d.tesla.toFixed(2);
-    document.getElementById('apple').innerText = '$' + d.apple.toFixed(2);
-    document.getElementById('hora').innerText = 'Actualizado: ' + hora + ' VIVO - RAUDY ORO PRO VELAS';
-    addCandle(charts.oro, d.oro);
-    addCandle(charts.gbp, d.gbp);
-    addCandle(charts.eur, d.eur);
-    addCandle(charts.tesla, d.tesla);
-    addCandle(charts.apple, d.apple);
-    let eo = document.getElementById('estado-oro');
-    if(d.oro > 3940){ eo.innerHTML = '🔴 VENTA 88% - ESPERANDO $3900'; eo.style.background = '#ff0000'; }
-    else if(d.oro <= 3905 && d.oro >= 3885){ eo.innerHTML = '🟢 COMPRA BUENA $3900'; eo.style.background = '#00aa00'; }
-    else { eo.innerHTML = '🟡 En zona ' + d.oro.toFixed(2); eo.style.background = '#FFA500'; }
-  }catch(e){}
-}
-setInterval(actualizar, 5000);
-actualizar();
-</script>
-</body>
-</html>
-    '''
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+    grid
