@@ -182,4 +182,64 @@ body { background:#0a0a0a; color:white; font-family: Arial; margin:0; padding:10
 function makeCandleChart(elemId){
   const chart = LightweightCharts.createChart(document.getElementById(elemId), {
     layout: { background: { color: '#0f0f0f' }, textColor: '#888' },
-    grid
+    grid: { vertLines: { color: '#222' }, horzLines: { color: '#222' } },
+    width: document.getElementById(elemId).clientWidth,
+    height: 180,
+    timeScale: { timeVisible: true, secondsVisible: true }
+  });
+  const series = chart.addCandlestickSeries({ upColor: '#00ff00', downColor: '#ff4444', borderVisible: false, wickUpColor: '#00ff00', wickDownColor: '#ff4444' });
+  return { chart, series, data: [] };
+}
+let charts = {
+  oro: makeCandleChart('chart-oro'),
+  gbp: makeCandleChart('chart-gbp'),
+  eur: makeCandleChart('chart-eur'),
+  tesla: makeCandleChart('chart-tesla'),
+  apple: makeCandleChart('chart-apple')
+};
+function addCandle(cObj, price){
+  let now = Math.floor(Date.now() / 1000);
+  let last = cObj.data[cObj.data.length - 1];
+  if(!last || (now - last.time) >= 15){
+    let candle = { time: now, open: last ? last.close : price, high: price, low: price, close: price };
+    cObj.data.push(candle);
+    if(cObj.data.length > 60) cObj.data.shift();
+  } else {
+    last.high = Math.max(last.high, price);
+    last.low = Math.min(last.low, price);
+    last.close = price;
+  }
+  cObj.series.setData(cObj.data);
+}
+async function actualizar(){
+  try{
+    let r = await fetch('/api/precios?v=' + Date.now());
+    if(r.status==401){ window.location='/login'; return; }
+    let d = await r.json();
+    let hora = new Date().toLocaleTimeString();
+    document.getElementById('oro').innerText = '$' + d.oro.toFixed(2);
+    document.getElementById('gbp').innerText = d.gbp.toFixed(4);
+    document.getElementById('eur').innerText = d.eur.toFixed(4);
+    document.getElementById('tesla').innerText = '$' + d.tesla.toFixed(2);
+    document.getElementById('apple').innerText = '$' + d.apple.toFixed(2);
+    document.getElementById('hora').innerText = 'Actualizado: ' + hora + ' VIVO - RAUDY20';
+    addCandle(charts.oro, d.oro);
+    addCandle(charts.gbp, d.gbp);
+    addCandle(charts.eur, d.eur);
+    addCandle(charts.tesla, d.tesla);
+    addCandle(charts.apple, d.apple);
+    let eo = document.getElementById('estado-oro');
+    if(d.oro > 3940){ eo.innerHTML = '🔴 VENTA 88% - ESPERANDO $3900'; eo.style.background = '#ff0000'; }
+    else if(d.oro <= 3905 && d.oro >= 3885){ eo.innerHTML = '🟢 COMPRA BUENA $3900'; eo.style.background = '#00aa00'; }
+    else { eo.innerHTML = '🟡 En zona ' + d.oro.toFixed(2); eo.style.background = '#FFA500'; }
+  }catch(e){}
+}
+setInterval(actualizar, 5000);
+actualizar();
+</script>
+</body>
+</html>
+    '''
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=10000)
