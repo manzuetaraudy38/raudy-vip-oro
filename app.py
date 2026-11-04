@@ -155,6 +155,7 @@ input{{width:90%;padding:18px;border-radius:12px;border:2px solid #FFD700;backgr
 </style></head><body>
 <div class="box">
 <h1 style="color:#FFD700;">🔒 RAUDY ORO PRO VIP</h1>
+<div style="background:#FFD700;color:black;padding:6px;border-radius:8px;font-weight:bold;font-size:12px;margin-bottom:10px;">🇨🇭 CREADO POR RAUDY EN GINEBRA SUIZA - APP ÚNICA</div>
 <div class="vence">⏰ VENCE EN {dias} DIAS - {FECHA_VENCE.strftime("%d/%m/%Y")}</div>
 <form method="POST">
 <input name="clave" placeholder="ESCRIBE TU CLAVE VIP" required>
@@ -215,7 +216,7 @@ body {{ background:#0a0a0a; color:white; font-family: Arial; margin:0; padding:1
 .ia-box {{ border:2px solid #00ff00; border-radius:15px; padding:12px; background:#0a1a0a; margin-bottom:14px; text-align:left; }}
 .tpsl {{ display:flex; gap:8px; margin-top:8px; }}
 .tpsl div {{ flex:1; border-radius:10px; padding:10px; font-weight:bold; text-align:center; }}
-.mi-op {{ border:2px solid #FFD700; border-radius:15px; padding:14px; background:#1a1a0a; margin-bottom:14px; text-align:left; }}
+.mi-op {{ border:2px solid #FFD700; border-radius:15px; padding:14px; background:#1a1a1a; margin-bottom:14px; text-align:left; }}
 .mi-op input {{ width:100%; padding:14px; border-radius:10px; border:2px solid #FFD700; background:#0a0a0a; color:#FFD700; font-size:20px; text-align:center; font-weight:bold; margin:6px 0; box-sizing:border-box; }}
 .mi-op label {{ font-size:12px; color:#aaa; }}
 .btn-compra {{ background:#00aa00; color:white; border:none; border-radius:12px; padding:16px; font-weight:bold; font-size:16px; width:48%; cursor:pointer; }}
@@ -223,6 +224,8 @@ body {{ background:#0a0a0a; color:white; font-family: Arial; margin:0; padding:1
 </style></head><body>
 <div class="header">
 <h1>🔥 RAUDY ORO PRO + IA SWING 🔥</h1>
+<div style="background:#FFD700;color:black;padding:6px;border-radius:8px;font-weight:bold;font-size:12px;margin-top:6px;">🇨🇭 CREADO POR RAUDY EN GINEBRA SUIZA - APP ÚNICA EN EL MUNDO</div>
+<div style="font-size:11px;color:#FFD700;margin-top:4px;">⭐ SOLO PARA VIP DE RAUDY - NO COPIAR ⭐</div>
 <div style="font-size:11px; color:#aaa;">APP OFICIAL - VELAS EN VIVO + BOT TELEGRAM 6 ALERTAS + IA SWING</div>
 <div style="font-size:11px; color:#00ff00;" id="hora">VIVO - RAUDY ORO PRO - VIP ✅ - BOT ACTIVO + IA</div>
 <div class="vence-top">⏰ TU VIP VENCE EN {dias} DIAS - {FECHA_VENCE.strftime("%d/%m/%Y")}</div>
@@ -276,7 +279,7 @@ body {{ background:#0a0a0a; color:white; font-family: Arial; margin:0; padding:1
 <a href="https://www.paypal.me/RaudyManzueta/20" class="btn-yellow">💳 PAGAR VIP $20 AHORA - PAYPAL</a>
 <a href="https://www.paypal.me/RaudyManzueta/100" class="btn-blue">💎 PAGAR VIP $100 TODO EL MES</a>
 <a href="https://wa.me/41767574050?text=Hola%20Raudy%20quiero%20VIP%20RAUDY%20ORO%20PRO" class="btn-green">📱 WHATSAPP 0767574050 - CONFIRMAR PAGO</a>
-<div class="footer">App: RAUDY ORO PRO + BOT 6 ALERTAS + IA SWING | raudy-vip-oro.onrender.com<br>© 2026 Ginebra Suiza - Velas en vivo + Telegram + IA - Vence {FECHA_VENCE.strftime("%d/%m/%Y")} - Solo Educativo</div>
+<div class="footer">App: RAUDY ORO PRO + BOT 6 ALERTAS + IA SWING | raudy-vip-oro.onrender.com<br>© 2026 App Única Creada por Raudy Manzueta - Ginebra Suiza 🇨🇭<br>Velas en vivo + Telegram + IA - Vence {FECHA_VENCE.strftime("%d/%m/%Y")} - Solo Educativo</div>
 <script>
 function calcularMiOp(tipo){{
   let entrada = parseFloat(document.getElementById('mi-entrada').value);
