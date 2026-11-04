@@ -25,7 +25,7 @@ alertado_compra = {p: False for p in COMPRAS}
 alertado_venta = {p: False for p in VENTAS}
 ultimo_update_id = 0
 
-# === NUEVO: MEMORIA IA SWING ===
+# === MEMORIA IA SWING ===
 historial_oro = []
 
 def dias_restantes():
@@ -52,7 +52,7 @@ def get_oro_precio():
     except:
         return get_price_yahoo('GC=F', 3922)
 
-# === NUEVO: IA RAUDY SWING + TP SL + ANALISIS ===
+# === IA RAUDY SWING + TP SL + ANALISIS - CORREGIDA ===
 def analizar_ia_oro(precio):
     historial_oro.append(precio)
     if len(historial_oro) > 50:
@@ -67,11 +67,14 @@ def analizar_ia_oro(precio):
     # SWING BAJO = COMPRA
     if precio <= 3905 and precio >= 3860:
         return {"señal": "🟢 COMPRA SWING", "color": "#00aa00", "luz": "#00ff00", "texto_luz": "🟢 LUZ VERDE - COMPRA SWING", "analisis": f"IA SWING: Oro hizo SWING BAJO en {min_reciente:.2f} en zona 3900-3865. Bajó y ahora rebota para subir. Es zona de COMPRA.", "entrada": precio, "tp": round(precio + 35, 2), "sl": round(precio - 18, 2), "confianza": "88%"}
-    # SWING ALTO = VENTA
+    # SWING ALTO = VENTA EN ZONA
     elif precio >= 3980 and precio <= 4030:
         return {"señal": "🔴 VENTA SWING", "color": "#ff0000", "luz": "#ff0000", "texto_luz": "🔴 LUZ ROJA - VENTA SWING", "analisis": f"IA SWING: Oro hizo SWING ALTO en {max_reciente:.2f} en zona 3980-4020. Subió mucho y ahora va a bajar. Es zona de VENTA.", "entrada": precio, "tp": round(precio - 35, 2), "sl": round(precio + 18, 2), "confianza": "88%"}
+    # CORREGIDO: YA PASO LA ZONA DE VENTA
+    elif precio > 4030:
+        return {"señal": "🔴 YA PASO ZONA VENTA - ESPERA", "color": "#ff0000", "luz": "#ff0000", "texto_luz": "🔴 LUZ ROJA - YA PASO VENTA", "analisis": f"IA SWING: Oro alto en ${precio:.2f}. YA PASO la zona de venta 3980-4020. NO persigas la venta aquí. Espera que baje a 3980 para venta o a 3900 para compra. Swing Alto {max_reciente:.2f} / Bajo {min_reciente:.2f}", "entrada": precio, "tp": 3980, "sl": round(precio + 20, 2), "confianza": "65%"}
     elif precio > 3940:
-        return {"señal": "🔴 ESPERANDO VENTA SWING", "color": "#ff0000", "luz": "#ff0000", "texto_luz": "🔴 LUZ ROJA - ESPERANDO VENTA", "analisis": f"IA SWING: Oro alto en ${precio:.2f}. No compres aquí. Swing Alto {max_reciente:.2f} / Bajo {min_reciente:.2f}. Espera que baje a 3900 para compra o suba a 3980 para venta.", "entrada": precio, "tp": 3900, "sl": 4040, "confianza": "65%"}
+        return {"señal": "🔴 ESPERANDO VENTA SWING", "color": "#ff0000", "luz": "#ff0000", "texto_luz": "🔴 LUZ ROJA - ESPERANDO VENTA", "analisis": f"IA SWING: Oro en ${precio:.2f}. No compres aquí. Swing Alto {max_reciente:.2f} / Bajo {min_reciente:.2f}. Espera que suba a 3980 para venta o baje a 3900 para compra.", "entrada": precio, "tp": 3900, "sl": 4040, "confianza": "65%"}
     elif precio < 3940 and precio > 3905:
         return {"señal": "🟡 CERCA DE COMPRA SWING", "color": "#FFA500", "luz": "#FFA500", "texto_luz": "🟡 LUZ NARANJA - CERCA DE COMPRA", "analisis": f"IA SWING: Oro en ${precio:.2f} se acerca a compra. Si toca 3900 es SWING BAJO = COMPRA. Bajo reciente {min_reciente:.2f}", "entrada": 3900, "tp": 3935, "sl": 3882, "confianza": "70%"}
     else:
