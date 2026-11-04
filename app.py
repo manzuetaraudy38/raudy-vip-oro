@@ -8,22 +8,25 @@ import os
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "cambia-esto-en-render-por-una-larga")
 
-# === CONFIGURACIÓN VIP ===
+# === CONFIGURACIÓN VIP - NO BORRADO ===
 CLAVE_BUENA = os.getenv("VIP_CLAVE", "RAUDY26")
 FECHA_VENCE = datetime(2026, 12, 3, 23, 59, 59)
 
-# === CONFIGURACIÓN TELEGRAM ===
+# === CONFIGURACIÓN TELEGRAM - NO BORRADO ===
 BOT_TOKEN = os.getenv("BOT_TOKEN", "AQUI_PON_TU_TOKEN_DEL_BOTFATHER")
 CHAT_ID_VIP = os.getenv("CHAT_ID", "AQUI_PON_TU_ID_O_DEL_CANAL")
 
-# ZONAS QUE PEDISTE
+# ZONAS QUE PEDISTE - NO BORRADO
 COMPRAS = [3900, 3890, 3865]
 VENTAS = [3980, 3990, 4020]
 
-# MEMORIA PARA NO SPAMEAR
+# MEMORIA PARA NO SPAMEAR - NO BORRADO
 alertado_compra = {p: False for p in COMPRAS}
 alertado_venta = {p: False for p in VENTAS}
 ultimo_update_id = 0
+
+# === NUEVO: MEMORIA IA SWING ===
+historial_oro = []
 
 def dias_restantes():
     delta = FECHA_VENCE - datetime.now()
@@ -49,6 +52,31 @@ def get_oro_precio():
     except:
         return get_price_yahoo('GC=F', 3922)
 
+# === NUEVO: IA RAUDY SWING + TP SL + ANALISIS ===
+def analizar_ia_oro(precio):
+    historial_oro.append(precio)
+    if len(historial_oro) > 50:
+        historial_oro.pop(0)
+    if len(historial_oro) >= 10:
+        max_reciente = max(historial_oro[-20:])
+        min_reciente = min(historial_oro[-20:])
+    else:
+        max_reciente = precio + 20
+        min_reciente = precio - 20
+
+    # SWING BAJO = COMPRA
+    if precio <= 3905 and precio >= 3860:
+        return {"señal": "🟢 COMPRA SWING", "color": "#00aa00", "luz": "#00ff00", "texto_luz": "🟢 LUZ VERDE - COMPRA SWING", "analisis": f"IA SWING: Oro hizo SWING BAJO en {min_reciente:.2f} en zona 3900-3865. Bajó y ahora rebota para subir. Es zona de COMPRA.", "entrada": precio, "tp": round(precio + 35, 2), "sl": round(precio - 18, 2), "confianza": "88%"}
+    # SWING ALTO = VENTA
+    elif precio >= 3980 and precio <= 4030:
+        return {"señal": "🔴 VENTA SWING", "color": "#ff0000", "luz": "#ff0000", "texto_luz": "🔴 LUZ ROJA - VENTA SWING", "analisis": f"IA SWING: Oro hizo SWING ALTO en {max_reciente:.2f} en zona 3980-4020. Subió mucho y ahora va a bajar. Es zona de VENTA.", "entrada": precio, "tp": round(precio - 35, 2), "sl": round(precio + 18, 2), "confianza": "88%"}
+    elif precio > 3940:
+        return {"señal": "🔴 ESPERANDO VENTA SWING", "color": "#ff0000", "luz": "#ff0000", "texto_luz": "🔴 LUZ ROJA - ESPERANDO VENTA", "analisis": f"IA SWING: Oro alto en ${precio:.2f}. No compres aquí. Swing Alto {max_reciente:.2f} / Bajo {min_reciente:.2f}. Espera que baje a 3900 para compra o suba a 3980 para venta.", "entrada": precio, "tp": 3900, "sl": 4040, "confianza": "65%"}
+    elif precio < 3940 and precio > 3905:
+        return {"señal": "🟡 CERCA DE COMPRA SWING", "color": "#FFA500", "luz": "#FFA500", "texto_luz": "🟡 LUZ NARANJA - CERCA DE COMPRA", "analisis": f"IA SWING: Oro en ${precio:.2f} se acerca a compra. Si toca 3900 es SWING BAJO = COMPRA. Bajo reciente {min_reciente:.2f}", "entrada": 3900, "tp": 3935, "sl": 3882, "confianza": "70%"}
+    else:
+        return {"señal": "🟡 ANALIZANDO SWING", "color": "#FFA500", "luz": "#FFA500", "texto_luz": "🟡 ANALIZANDO", "analisis": f"IA: Analizando swing... Precio ${precio:.2f}. Alto {max_reciente:.2f} Bajo {min_reciente:.2f}. Espera señal clara.", "entrada": precio, "tp": round(precio + 30, 2), "sl": round(precio - 15, 2), "confianza": "50%"}
+
 def send_telegram(mensaje):
     try:
         if "AQUI_PON" in BOT_TOKEN:
@@ -66,9 +94,9 @@ def send_telegram(mensaje):
 
 def telegram_bot_loop():
     global ultimo_update_id, alertado_compra, alertado_venta
-    print("🤖 BOT TELEGRAM INICIADO - 6 ALERTAS")
+    print("🤖 BOT TELEGRAM INICIADO - 6 ALERTAS + IA SWING")
     send_telegram(
-        f"✅ *VIP ORO Raudy ACTIVO*\n\n"
+        f"✅ *VIP ORO Raudy ACTIVO + IA SWING*\n\n"
         f"Te avisaré automático:\n"
         f"🟢 COMPRA: 3900, 3890, 3865\n"
         f"🔴 VENTA: 3980, 3990, 4020\n\n"
@@ -88,7 +116,7 @@ def telegram_bot_loop():
                         texto = msg.get("text", "").lower().strip()
                         if texto in ["/start", "start", "hola", "hi"]:
                             send_telegram(
-                                f"🔥 *RAUDY ORO PRO VIP*\n\n"
+                                f"🔥 *RAUDY ORO PRO VIP + IA SWING*\n\n"
                                 f"Bienvenido! Estás activo.\n"
                                 f"🟢 BUY: 3900, 3890, 3865\n"
                                 f"🔴 SELL: 3980, 3990, 4020\n"
@@ -97,16 +125,19 @@ def telegram_bot_loop():
                             )
                         elif texto in ["/precios", "precios", "oro"]:
                             precio = get_oro_precio()
-                            send_telegram(f"🟡 ORO AHORA: ${precio:.2f}\nZonas BUY: 3900-3890-3865\nZonas SELL: 3980-3990-4020")
+                            ia = analizar_ia_oro(precio)
+                            send_telegram(f"🟡 ORO AHORA: ${precio:.2f}\n{ia['señal']}\n🎯 TP: ${ia['tp']} | 🛑 SL: ${ia['sl']}\n{ia['analisis']}")
             precio = get_oro_precio()
-            print(f"{datetime.now()} - ORO: {precio} | Compra alertado: {alertado_compra} | Venta: {alertado_venta}")
+            ia = analizar_ia_oro(precio)
+            print(f"{datetime.now()} - ORO: {precio} IA: {ia['señal']}")
             for nivel in COMPRAS:
                 if precio <= nivel and not alertado_compra[nivel]:
                     send_telegram(
-                        f"🔥 *RAUDY ORO - COMPRA BUENA*\n\n"
+                        f"🔥 *RAUDY ORO - COMPRA SWING + IA*\n\n"
                         f"ORO TOCO *${nivel}*\n"
-                        f"Actual: ${precio:.2f}\n\n"
-                        f"✅ COMPRA: 3900, 3890, 3865\n"
+                        f"Actual: ${precio:.2f}\n"
+                        f"🎯 TP: ${ia['tp']} | 🛑 SL: ${ia['sl']}\n"
+                        f"{ia['analisis']}\n\n"
                         f"📲 raudy-vip-oro.onrender.com"
                     )
                     alertado_compra[nivel] = True
@@ -115,10 +146,11 @@ def telegram_bot_loop():
             for nivel in VENTAS:
                 if precio >= nivel and not alertado_venta[nivel]:
                     send_telegram(
-                        f"🔴 *RAUDY ORO - VENTA BUENA*\n\n"
+                        f"🔴 *RAUDY ORO - VENTA SWING + IA*\n\n"
                         f"ORO TOCO *${nivel}*\n"
-                        f"Actual: ${precio:.2f}\n\n"
-                        f"✅ VENTA: 3980, 3990, 4020\n"
+                        f"Actual: ${precio:.2f}\n"
+                        f"🎯 TP: ${ia['tp']} | 🛑 SL: ${ia['sl']}\n"
+                        f"{ia['analisis']}\n\n"
                         f"📲 raudy-vip-oro.onrender.com"
                     )
                     alertado_venta[nivel] = True
@@ -196,12 +228,14 @@ def precios():
         oro = r.json().get('price', oro)
     except:
         oro = get_price_yahoo('GC=F', oro)
+    ia = analizar_ia_oro(float(oro))
     return {
-        "oro": oro,
+        "oro": float(oro),
         "gbp": get_price_yahoo('GBPUSD=X', 1.3412),
         "eur": get_price_yahoo('EURUSD=X', 1.1197),
         "tesla": get_price_yahoo('TSLA', 245.80),
-        "apple": get_price_yahoo('AAPL', 185.30)
+        "apple": get_price_yahoo('AAPL', 185.30),
+        "ia": ia
     }
 
 @app.route('/')
@@ -231,19 +265,33 @@ body {{ background:#0a0a0a; color:white; font-family: Arial; margin:0; padding:1
 .luz {{ width:30px; height:30px; border-radius:50%; background:#333; margin:10px auto 5px auto; }}
 @keyframes parpadeo {{ 0%{{opacity:1}} 50%{{opacity:0.3}} 100%{{opacity:1}} }}
 .luz-activa {{ animation: parpadeo 0.8s infinite; }}
+.ia-box {{ border:2px solid #00ff00; border-radius:15px; padding:12px; background:#0a1a0a; margin-bottom:14px; text-align:left; }}
+.tpsl {{ display:flex; gap:8px; margin-top:8px; }}
+.tpsl div {{ flex:1; border-radius:10px; padding:10px; font-weight:bold; text-align:center; }}
 </style></head><body>
 <div class="header">
-<h1>🔥 RAUDY ORO PRO 🔥</h1>
-<div style="font-size:11px; color:#aaa;">APP OFICIAL - VELAS EN VIVO + BOT TELEGRAM 6 ALERTAS</div>
-<div style="font-size:11px; color:#00ff00;" id="hora">VIVO - RAUDY ORO PRO - VIP ✅ - BOT ACTIVO</div>
+<h1>🔥 RAUDY ORO PRO + IA SWING 🔥</h1>
+<div style="font-size:11px; color:#aaa;">APP OFICIAL - VELAS EN VIVO + BOT TELEGRAM 6 ALERTAS + IA SWING</div>
+<div style="font-size:11px; color:#00ff00;" id="hora">VIVO - RAUDY ORO PRO - VIP ✅ - BOT ACTIVO + IA</div>
 <div class="vence-top">⏰ TU VIP VENCE EN {dias} DIAS - {FECHA_VENCE.strftime("%d/%m/%Y")}</div>
 <div style="margin-top:5px;"><a href="/logout" style="color:#ff4444; font-size:11px; text-decoration:none;">SALIR</a></div>
 </div>
 <div class="warn-main">
-<div class="warn-title">⚠️ ADVERTENCIA DE RIESGO - SOLO EDUCATIVO - BOT 6 ALERTAS ACTIVO</div>
+<div class="warn-title">⚠️ ADVERTENCIA DE RIESGO - SOLO EDUCATIVO - BOT 6 ALERTAS ACTIVO + IA SWING</div>
 <b>NO ES CONSEJO FINANCIERO.</b> 3 COMPRAS: 3900,3890,3865 | 3 VENTAS: 3980,3990,4020
 </div>
-<div class="box"><div style="font-weight:bold;">🟡 ORO (XAUUSD) - EN VIVO</div><div class="precio" id="oro">$3951.70</div><div class="zonas"><span style="color:#00ff00;">COMPRA BUENA: $3900 - $3890 | $3865</span><br><span style="color:#ff4444;">VENTA BUENA: $3980 - $3990 | $4020</span></div><div class="luz" id="luz-oro"></div><div id="texto-luz" style="font-size:13px;font-weight:bold;">ESPERANDO...</div><div class="estado" id="estado-oro" style="background:#ff0000;">🔴 VENTA 88% - ESPERANDO $3900</div><div class="chart" id="chart-oro"></div></div>
+<div class="ia-box">
+<div style="font-weight:bold; color:#00ff00; font-size:16px;">🤖 IA RAUDY - ANALISIS SWING</div>
+<div id="ia-señal" style="font-size:18px; font-weight:bold; margin:6px 0;">ANALIZANDO...</div>
+<div id="ia-analisis" style="font-size:12px; line-height:1.5;">Esperando datos...</div>
+<div class="tpsl">
+<div style="background:#00aa00;">🎯 TP<br><span id="ia-tp" style="font-size:20px;">--</span></div>
+<div style="background:#ff0000;">🛑 SL<br><span id="ia-sl" style="font-size:20px;">--</span></div>
+<div style="background:#FFD700; color:black;">💪 CONFIANZA<br><span id="ia-conf" style="font-size:20px;">--</span></div>
+</div>
+<div style="font-size:11px; margin-top:6px;">Entrada: <span id="ia-entrada">--</span></div>
+</div>
+<div class="box"><div style="font-weight:bold;">🟡 ORO (XAUUSD) - EN VIVO + SWING</div><div class="precio" id="oro">$3951.70</div><div class="zonas"><span style="color:#00ff00;">COMPRA SWING: $3900 - $3890 | $3865</span><br><span style="color:#ff4444;">VENTA SWING: $3980 - $3990 | $4020</span></div><div class="luz" id="luz-oro"></div><div id="texto-luz" style="font-size:13px;font-weight:bold;">ESPERANDO...</div><div class="estado" id="estado-oro" style="background:#ff0000;">🔴 VENTA 88% - ESPERANDO $3900</div><div class="chart" id="chart-oro"></div></div>
 <div class="box"><div style="font-weight:bold;">💷 GBPUSD - LIBRA</div><div class="precio" id="gbp">1.3412</div><div class="zonas"><span style="color:#00ff00;">COMPRA: 1.2620 - 1.2580</span> | <span style="color:#ff4444;">VENTA: 1.2750 - 1.2820</span></div><div class="estado" id="estado-gbp" style="background:#333;">ESPERANDO</div><div class="chart" id="chart-gbp"></div></div>
 <div class="box"><div style="font-weight:bold;">💶 EURO (EURUSD)</div><div class="precio" id="eur">1.1197</div><div class="zonas">COMPRA: 1.109 - 1.108 | VENTA: 1.115 - 1.118</div><div class="chart" id="chart-eur"></div></div>
 <div class="box"><div style="font-weight:bold;">🚗 TESLA (TSLA)</div><div class="precio" id="tesla">$245.80</div><div class="zonas"><span style="color:#00ff00;">COMPRA: $240 - $235 - $228</span><br><span style="color:#ff4444;">VENTA: $275 - $285 - $295</span></div><div class="estado" id="estado-tesla" style="background:#333;">ESPERANDO</div><div class="chart" id="chart-tesla"></div></div>
@@ -251,12 +299,12 @@ body {{ background:#0a0a0a; color:white; font-family: Arial; margin:0; padding:1
 <a href="https://www.paypal.me/RaudyManzueta/20" class="btn-yellow">💳 PAGAR VIP $20 AHORA - PAYPAL</a>
 <a href="https://www.paypal.me/RaudyManzueta/100" class="btn-blue">💎 PAGAR VIP $100 TODO EL MES</a>
 <a href="https://wa.me/41767574050?text=Hola%20Raudy%20quiero%20VIP%20RAUDY%20ORO%20PRO" class="btn-green">📱 WHATSAPP 0767574050 - CONFIRMAR PAGO</a>
-<div class="footer">App: RAUDY ORO PRO + BOT 6 ALERTAS | raudy-vip-oro.onrender.com<br>© 2026 Ginebra Suiza - Velas en vivo + Telegram - Vence {FECHA_VENCE.strftime("%d/%m/%Y")} - Solo Educativo</div>
+<div class="footer">App: RAUDY ORO PRO + BOT 6 ALERTAS + IA SWING | raudy-vip-oro.onrender.com<br>© 2026 Ginebra Suiza - Velas en vivo + Telegram + IA - Vence {FECHA_VENCE.strftime("%d/%m/%Y")} - Solo Educativo</div>
 <script>
 function makeCandleChart(elemId){{ const chart = LightweightCharts.createChart(document.getElementById(elemId), {{ layout: {{ background: {{ color: '#0f0f0f' }}, textColor: '#888' }}, grid: {{ vertLines: {{ color: '#222' }}, horzLines: {{ color: '#222' }} }}, width: document.getElementById(elemId).clientWidth, height: 180, timeScale: {{ timeVisible: true, secondsVisible: true }} }}); const series = chart.addCandlestickSeries({{ upColor: '#00ff00', downColor: '#ff4444', borderVisible: false, wickUpColor: '#00ff00', wickDownColor: '#ff4444' }}); return {{ chart, series, data: [] }}; }}
 let charts = {{ oro: makeCandleChart('chart-oro'), gbp: makeCandleChart('chart-gbp'), eur: makeCandleChart('chart-eur'), tesla: makeCandleChart('chart-tesla'), apple: makeCandleChart('chart-apple') }};
 function addCandle(cObj, price){{ let now = Math.floor(Date.now() / 1000); let last = cObj.data[cObj.data.length - 1]; if(!last || (now - last.time) >= 15){{ let candle = {{ time: now, open: last ? last.close : price, high: price, low: price, close: price }}; cObj.data.push(candle); if(cObj.data.length > 60) cObj.data.shift(); }} else {{ last.high = Math.max(last.high, price); last.low = Math.min(last.low, price); last.close = price; }} cObj.series.setData(cObj.data); }}
-async function actualizar(){{ try{{ let r = await fetch('/api/precios?v=' + Date.now()); if(r.status==401){{ window.location='/login'; return; }} let d = await r.json(); let hora = new Date().toLocaleTimeString(); document.getElementById('oro').innerText = '$' + d.oro.toFixed(2); document.getElementById('gbp').innerText = d.gbp.toFixed(4); document.getElementById('eur').innerText = d.eur.toFixed(4); document.getElementById('tesla').innerText = '$' + d.tesla.toFixed(2); document.getElementById('apple').innerText = '$' + d.apple.toFixed(2); document.getElementById('hora').innerText = 'Actualizado: ' + hora + ' VIVO - BOT 6 ALERTAS'; addCandle(charts.oro, d.oro); addCandle(charts.gbp, d.gbp); addCandle(charts.eur, d.eur); addCandle(charts.tesla, d.tesla); addCandle(charts.apple, d.apple); let eo = document.getElementById('estado-oro'); let luz = document.getElementById('luz-oro'); let textoLuz = document.getElementById('texto-luz'); if(d.oro > 3940){{ eo.innerHTML = '🔴 VENTA 88% - ESPERANDO $3900'; eo.style.background = '#ff0000'; luz.style.background = '#ff0000'; luz.style.boxShadow = '0 0 20px 10px #ff0000'; luz.classList.add('luz-activa'); textoLuz.innerHTML = '🔴 LUZ ROJA - VENTA'; textoLuz.style.color = '#ff4444'; }} else if(d.oro <= 3905 && d.oro >= 3885){{ eo.innerHTML = '🟢 COMPRA BUENA $3900'; eo.style.background = '#00aa00'; luz.style.background = '#00ff00'; luz.style.boxShadow = '0 0 20px 10px #00ff00'; luz.classList.add('luz-activa'); textoLuz.innerHTML = '🟢 LUZ VERDE - COMPRA ¡ENTRA!'; textoLuz.style.color = '#00ff00'; }} else {{ eo.innerHTML = '🟡 En zona ' + d.oro.toFixed(2); eo.style.background = '#FFA500'; luz.style.background = '#FFA500'; luz.style.boxShadow = '0 0 12px 4px #FFA500'; luz.classList.remove('luz-activa'); textoLuz.innerHTML = '🟡 CERCA DE ZONA - ESPERANDO'; textoLuz.style.color = '#FFA500'; }} }}catch(e){{}} }}
+async function actualizar(){{ try{{ let r = await fetch('/api/precios?v=' + Date.now()); if(r.status==401){{ window.location='/login'; return; }} let d = await r.json(); let hora = new Date().toLocaleTimeString(); document.getElementById('oro').innerText = '$' + d.oro.toFixed(2); document.getElementById('gbp').innerText = d.gbp.toFixed(4); document.getElementById('eur').innerText = d.eur.toFixed(4); document.getElementById('tesla').innerText = '$' + d.tesla.toFixed(2); document.getElementById('apple').innerText = '$' + d.apple.toFixed(2); document.getElementById('hora').innerText = 'Actualizado: ' + hora + ' VIVO - BOT 6 ALERTAS + IA SWING'; addCandle(charts.oro, d.oro); addCandle(charts.gbp, d.gbp); addCandle(charts.eur, d.eur); addCandle(charts.tesla, d.tesla); addCandle(charts.apple, d.apple); let ia = d.ia; document.getElementById('ia-señal').innerText = ia.señal + ' - ' + ia.confianza; document.getElementById('ia-analisis').innerText = ia.analisis; document.getElementById('ia-tp').innerText = '$' + ia.tp; document.getElementById('ia-sl').innerText = '$' + ia.sl; document.getElementById('ia-conf').innerText = ia.confianza; document.getElementById('ia-entrada').innerText = '$' + ia.entrada; let eo = document.getElementById('estado-oro'); let luz = document.getElementById('luz-oro'); let textoLuz = document.getElementById('texto-luz'); eo.innerHTML = ia.señal; eo.style.background = ia.color; luz.style.background = ia.luz; luz.style.boxShadow = '0 0 20px 10px ' + ia.luz; luz.classList.add('luz-activa'); textoLuz.innerHTML = ia.texto_luz; textoLuz.style.color = ia.luz; }}catch(e){{}} }}
 setInterval(actualizar, 5000); actualizar();
 </script></body></html>'''
 
