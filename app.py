@@ -2,7 +2,7 @@ from flask import Flask, session, request, redirect, jsonify
 import requests
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 
 app = Flask(__name__)
@@ -27,24 +27,53 @@ def dias_restantes():
 def codigo_vigente():
     return datetime.now() <= FECHA_VENCE
 
-# === FILTRO DE NOTICIAS RAUDY - NUEVO, NO BORRA NADA ===
+# === FILTRO DE NOTICIAS RAUDY ===
 def filtro_noticias(precio):
     ahora = datetime.now()
     hora = ahora.hour
     minuto = ahora.minute
-    # Horas peligrosas en Ginebra: Noticias USA 14:30, 08:30, 10:00
     if hora == 14 and 25 <= minuto <= 59:
         return {"texto": "🔴 NO OPERES - NOTICIAS USA 14:30 - ESPERA 30 MIN", "color": "#ff0000", "puede": False}
     if hora == 8 and 25 <= minuto <= 45:
         return {"texto": "🔴 NO OPERES - NOTICIAS 08:30 - ESPERA", "color": "#ff0000", "puede": False}
     if hora == 10 and 0 <= minuto <= 15:
         return {"texto": "🟡 CUIDADO - NOTICIAS EUROPA 10:00", "color": "#FFA500", "puede": True}
-    # Si el oro se movio muy rapido = mercado loco
     if len(historial_oro) >= 5:
         cambio = abs(precio - historial_oro[-5])
         if cambio > 25:
             return {"texto": f"🟡 CUIDADO - MERCADO LOCO SE MOVIO ${cambio:.2f} RAPIDO - ESPERA QUE SE CALME", "color": "#FFA500", "puede": True}
     return {"texto": "🟢 FILTRO OK - PUEDES OPERAR - SIN NOTICIAS FUERTES", "color": "#00aa00", "puede": True}
+
+# === NUEVO - RELOJ MUNDIAL RAUDY - DIA Y HORA PARA COMPRAR ORO ===
+def reloj_mundial():
+    ahora_ginebra = datetime.now()
+    # Ginebra = GMT+1, Londres = GMT+0, New York = GMT-5, Tokio = GMT+9
+    hora_londres = ahora_ginebra - timedelta(hours=1)
+    hora_ny = ahora_ginebra - timedelta(hours=6)
+    hora_tokio = ahora_ginebra + timedelta(hours=8)
+    dia_semana = ahora_ginebra.weekday()  # 0=Lunes 6=Domingo
+    nombres_dia = ["LUNES","MARTES","MIERCOLES","JUEVES","VIERNES","SABADO","DOMINGO"]
+    dia_nombre = nombres_dia[dia_semana]
+    hora_g = ahora_ginebra.hour
+    minuto = ahora_ginebra.minute
+
+    # Fin de semana = mercado cerrado
+    if dia_semana >= 5:
+        return {"dia": dia_nombre, "hora_ginebra": ahora_ginebra.strftime("%H:%M"), "hora_londres": hora_londres.strftime("%H:%M"), "hora_ny": hora_ny.strftime("%H:%M"), "hora_tokio": hora_tokio.strftime("%H:%M"), "texto": f"🔴 HOY ES {dia_nombre} - MERCADO CERRADO - NO SE COMPRA ORO - DESCANSA", "color": "#ff0000", "sesion": "MERCADO CERRADO", "puede": False}
+    # Sesion Londres 09-11 Ginebra
+    if 9 <= hora_g < 11:
+        return {"dia": dia_nombre, "hora_ginebra": ahora_ginebra.strftime("%H:%M"), "hora_londres": hora_londres.strftime("%H:%M"), "hora_ny": hora_ny.strftime("%H:%M"), "hora_tokio": hora_tokio.strftime("%H:%M"), "texto": f"🟢 HOY {dia_nombre} {ahora_ginebra.strftime('%H:%M')} - SESION LONDRES - BUENA HORA PARA COMPRAR ORO", "color": "#00aa00", "sesion": "LONDRES 🟢", "puede": True}
+    # Sesion New York 14:30 - 17:00 Ginebra - LA MEJOR
+    if (hora_g == 14 and minuto >= 30) or (15 <= hora_g < 17):
+        return {"dia": dia_nombre, "hora_ginebra": ahora_ginebra.strftime("%H:%M"), "hora_londres": hora_londres.strftime("%H:%M"), "hora_ny": hora_ny.strftime("%H:%M"), "hora_tokio": hora_tokio.strftime("%H:%M"), "texto": f"🟢🟢 HOY {dia_nombre} {ahora_ginebra.strftime('%H:%M')} - SESION NEW YORK - LA MEJOR HORA PARA COMPRAR / VENDER ORO", "color": "#00aa00", "sesion": "NEW YORK 🟢🟢 MEJOR HORA", "puede": True}
+    # Sesion Asia 02-06 Ginebra - NO operar
+    if 2 <= hora_g < 6:
+        return {"dia": dia_nombre, "hora_ginebra": ahora_ginebra.strftime("%H:%M"), "hora_londres": hora_londres.strftime("%H:%M"), "hora_ny": hora_ny.strftime("%H:%M"), "hora_tokio": hora_tokio.strftime("%H:%M"), "texto": f"🔴 HOY {dia_nombre} {ahora_ginebra.strftime('%H:%M')} - SESION ASIA - MERCADO DORMIDO - NO COMPRES ORO AHORA", "color": "#ff0000", "sesion": "ASIA 🔴 DORMIDO", "puede": False}
+    # Noche 22-02 - NO operar
+    if hora_g >= 22 or hora_g < 2:
+        return {"dia": dia_nombre, "hora_ginebra": ahora_ginebra.strftime("%H:%M"), "hora_londres": hora_londres.strftime("%H:%M"), "hora_ny": hora_ny.strftime("%H:%M"), "hora_tokio": hora_tokio.strftime("%H:%M"), "texto": f"🔴 HOY {dia_nombre} {ahora_ginebra.strftime('%H:%M')} - MERCADO DE NOCHE - NO HAY GENTE - NO COMPRES", "color": "#ff0000", "sesion": "NOCHE 🔴", "puede": False}
+    # Resto del dia - CUIDADO
+    return {"dia": dia_nombre, "hora_ginebra": ahora_ginebra.strftime("%H:%M"), "hora_londres": hora_londres.strftime("%H:%M"), "hora_ny": hora_ny.strftime("%H:%M"), "hora_tokio": hora_tokio.strftime("%H:%M"), "texto": f"🟡 HOY {dia_nombre} {ahora_ginebra.strftime('%H:%M')} - ENTRE SESIONES - ESPERA A LAS 09:00 O 14:30 PARA COMPRAR", "color": "#FFA500", "sesion": "ENTRE SESIONES 🟡", "puede": True}
 
 def get_price_yahoo(symbol, fallback):
     try:
@@ -126,7 +155,8 @@ def telegram_bot_loop():
                             precio = get_oro_precio()
                             ia = analizar_ia_oro(precio)
                             filtro = filtro_noticias(precio)
-                            send_telegram(f"🟡 ORO AHORA: ${precio:.2f}\n{ia['señal']}\n🟡 ENTRADA: ${ia['entrada_grafico']}\n🟢 BOTIN (OBJETIVO): ${ia['botin']}\n🔴 SALIDA DE EMERGENCIA (STOP): ${ia['salida_emergencia']}\n{filtro['texto']}\n{ia['analisis']}")
+                            reloj = reloj_mundial()
+                            send_telegram(f"🟡 ORO AHORA: ${precio:.2f}\n{ia['señal']}\n🟡 ENTRADA: ${ia['entrada_grafico']}\n🟢 BOTIN: ${ia['botin']} | 🔴 SALIDA: ${ia['salida_emergencia']}\n{reloj['texto']}\n{filtro['texto']}\n{ia['analisis']}")
             precio = get_oro_precio()
             ia = analizar_ia_oro(precio)
             print(f"{datetime.now()} - ORO: {precio} IA: {ia['señal']}")
@@ -212,7 +242,8 @@ def precios():
         oro = get_price_yahoo('GC=F', oro)
     ia = analizar_ia_oro(float(oro))
     filtro = filtro_noticias(float(oro))
-    return {"oro": float(oro),"gbp": get_price_yahoo('GBPUSD=X', 1.3412),"eur": get_price_yahoo('EURUSD=X', 1.1197),"tesla": get_price_yahoo('TSLA', 245.80),"apple": get_price_yahoo('AAPL', 185.30),"ia": ia, "filtro": filtro}
+    reloj = reloj_mundial()
+    return {"oro": float(oro),"gbp": get_price_yahoo('GBPUSD=X', 1.3412),"eur": get_price_yahoo('EURUSD=X', 1.1197),"tesla": get_price_yahoo('TSLA', 245.80),"apple": get_price_yahoo('AAPL', 185.30),"ia": ia, "filtro": filtro, "reloj": reloj}
 
 @app.route('/')
 def home():
@@ -257,15 +288,28 @@ body {{ background:#0a0a0a; color:white; font-family: Arial; margin:0; padding:1
 .ghost-salida {{ background:#cc0000; color:white; }}
 .ghost-dash {{ border-top:3px dashed; flex:1; margin:0 8px; }}
 .filtro-box {{ border:2px solid #FFD700; border-radius:15px; padding:12px; background:#1a1a00; margin-bottom:14px; text-align:center; }}
+.reloj-box {{ border:2px solid #00ff00; border-radius:15px; padding:12px; background:#0a1a0a; margin-bottom:14px; text-align:center; }}
 </style></head><body>
 <div class="header">
 <h1>🔥 RAUDY ORO PRO + IA SWING 🔥</h1>
 <div style="background:#FFD700;color:black;padding:6px;border-radius:8px;font-weight:bold;font-size:12px;margin-top:6px;">🇨🇭 CREADO POR RAUDY EN GINEBRA SUIZA - APP ÚNICA EN EL MUNDO</div>
 <div style="font-size:11px;color:#FFD700;margin-top:4px;">⭐ SOLO PARA VIP DE RAUDY - NO COPIAR ⭐</div>
-<div style="font-size:11px; color:#aaa;">APP OFICIAL - VELAS EN VIVO + BOT TELEGRAM 6 ALERTAS + IA SWING</div>
+<div style="font-size:11px; color:#aaa;">APP OFICIAL - VELAS EN VIVO + BOT TELEGRAM 6 ALERTAS + IA SWING + RELOJ MUNDIAL</div>
 <div style="font-size:11px; color:#00ff00;" id="hora">VIVO - RAUDY ORO PRO - VIP ✅ - BOT ACTIVO + IA</div>
 <div class="vence-top">⏰ TU VIP VENCE EN {dias} DIAS - {FECHA_VENCE.strftime("%d/%m/%Y")}</div>
 <div style="margin-top:5px;"><a href="/logout" style="color:#ff4444; font-size:11px; text-decoration:none;">SALIR</a></div>
+</div>
+<div class="reloj-box">
+<div style="font-weight:bold; color:#00ff00; font-size:16px;">🌍 RELOJ MUNDIAL RAUDY - ¿CUANDO COMPRAR ORO?</div>
+<div id="reloj-texto" style="font-size:14px; font-weight:bold; margin-top:6px;">REVISANDO HORA MUNDIAL...</div>
+<div style="display:flex; gap:6px; margin-top:8px; font-size:11px;">
+<div style="flex:1; background:#1a1a1a; border-radius:8px; padding:6px;">🇨🇭 GINEBRA<br><b id="h-ginebra">--:--</b></div>
+<div style="flex:1; background:#1a1a1a; border-radius:8px; padding:6px;">🇬🇧 LONDRES<br><b id="h-londres">--:--</b></div>
+<div style="flex:1; background:#1a1a1a; border-radius:8px; padding:6px;">🇺🇸 NEW YORK<br><b id="h-ny">--:--</b></div>
+<div style="flex:1; background:#1a1a1a; border-radius:8px; padding:6px;">🇯🇵 TOKIO<br><b id="h-tokio">--:--</b></div>
+</div>
+<div id="reloj-sesion" style="font-size:12px; font-weight:bold; margin-top:6px; color:#FFD700;">--</div>
+<div style="font-size:11px; color:#aaa; margin-top:4px;">🟢 Mejor hora: 09:00-11:00 Londres y 14:30-17:00 New York | 🔴 No operes de noche ni fin de semana</div>
 </div>
 <div class="filtro-box">
 <div style="font-weight:bold; color:#FFD700; font-size:16px;">🛡️ FILTRO DE NOTICIAS RAUDY</div>
@@ -363,7 +407,7 @@ function usarPrecioActual(){{
 function makeCandleChart(elemId){{ const chart = LightweightCharts.createChart(document.getElementById(elemId), {{ layout: {{ background: {{ color: '#0f0f0f' }}, textColor: '#888' }}, grid: {{ vertLines: {{ color: '#222' }}, horzLines: {{ color: '#222' }} }}, width: document.getElementById(elemId).clientWidth, height: 180, timeScale: {{ timeVisible: true, secondsVisible: true }} }}); const series = chart.addCandlestickSeries({{ upColor: '#00ff00', downColor: '#ff4444', borderVisible: false, wickUpColor: '#00ff00', wickDownColor: '#ff4444' }}); return {{ chart, series, data: [] }}; }}
 let charts = {{ oro: makeCandleChart('chart-oro'), gbp: makeCandleChart('chart-gbp'), eur: makeCandleChart('chart-eur'), tesla: makeCandleChart('chart-tesla'), apple: makeCandleChart('chart-apple') }};
 function addCandle(cObj, price){{ let now = Math.floor(Date.now() / 1000); let last = cObj.data[cObj.data.length - 1]; if(!last || (now - last.time) >= 15){{ let candle = {{ time: now, open: last ? last.close : price, high: price, low: price, close: price }}; cObj.data.push(candle); if(cObj.data.length > 60) cObj.data.shift(); }} else {{ last.high = Math.max(last.high, price); last.low = Math.min(last.low, price); last.close = price; }} cObj.series.setData(cObj.data); }}
-async function actualizar(){{ try{{ let r = await fetch('/api/precios?v=' + Date.now()); if(r.status==401){{ window.location='/login'; return; }} let d = await r.json(); let hora = new Date().toLocaleTimeString(); document.getElementById('oro').innerText = '$' + d.oro.toFixed(2); document.getElementById('gbp').innerText = d.gbp.toFixed(4); document.getElementById('eur').innerText = d.eur.toFixed(4); document.getElementById('tesla').innerText = '$' + d.tesla.toFixed(2); document.getElementById('apple').innerText = '$' + d.apple.toFixed(2); document.getElementById('hora').innerText = 'Actualizado: ' + hora + ' VIVO - BOT 6 ALERTAS + IA SWING'; addCandle(charts.oro, d.oro); addCandle(charts.gbp, d.gbp); addCandle(charts.eur, d.eur); addCandle(charts.tesla, d.tesla); addCandle(charts.apple, d.apple); let ia = d.ia; document.getElementById('ia-señal').innerText = ia.señal + ' - ' + ia.confianza; document.getElementById('ia-analisis').innerText = ia.analisis; document.getElementById('ia-tp').innerText = '$' + ia.tp; document.getElementById('ia-sl').innerText = '$' + ia.sl; document.getElementById('ia-conf').innerText = ia.confianza; document.getElementById('ia-entrada').innerText = '$' + ia.entrada; document.getElementById('ghost-entrada').innerText = '$' + ia.entrada; document.getElementById('ghost-botin').innerText = '$' + ia.tp; document.getElementById('ghost-salida').innerText = '$' + ia.sl; if(d.filtro){{ let f = document.getElementById('filtro-texto'); f.innerText = d.filtro.texto; f.style.color = d.filtro.color; }} let eo = document.getElementById('estado-oro'); let luz = document.getElementById('luz-oro'); let textoLuz = document.getElementById('texto-luz'); eo.innerHTML = ia.señal; eo.style.background = ia.color; luz.style.background = ia.luz; luz.style.boxShadow = '0 0 20px 10px ' + ia.luz; luz.classList.add('luz-activa'); textoLuz.innerHTML = ia.texto_luz; textoLuz.style.color = ia.luz; }}catch(e){{}} }}
+async function actualizar(){{ try{{ let r = await fetch('/api/precios?v=' + Date.now()); if(r.status==401){{ window.location='/login'; return; }} let d = await r.json(); let hora = new Date().toLocaleTimeString(); document.getElementById('oro').innerText = '$' + d.oro.toFixed(2); document.getElementById('gbp').innerText = d.gbp.toFixed(4); document.getElementById('eur').innerText = d.eur.toFixed(4); document.getElementById('tesla').innerText = '$' + d.tesla.toFixed(2); document.getElementById('apple').innerText = '$' + d.apple.toFixed(2); document.getElementById('hora').innerText = 'Actualizado: ' + hora + ' VIVO - BOT 6 ALERTAS + IA SWING'; addCandle(charts.oro, d.oro); addCandle(charts.gbp, d.gbp); addCandle(charts.eur, d.eur); addCandle(charts.tesla, d.tesla); addCandle(charts.apple, d.apple); let ia = d.ia; document.getElementById('ia-señal').innerText = ia.señal + ' - ' + ia.confianza; document.getElementById('ia-analisis').innerText = ia.analisis; document.getElementById('ia-tp').innerText = '$' + ia.tp; document.getElementById('ia-sl').innerText = '$' + ia.sl; document.getElementById('ia-conf').innerText = ia.confianza; document.getElementById('ia-entrada').innerText = '$' + ia.entrada; document.getElementById('ghost-entrada').innerText = '$' + ia.entrada; document.getElementById('ghost-botin').innerText = '$' + ia.tp; document.getElementById('ghost-salida').innerText = '$' + ia.sl; if(d.filtro){{ let f = document.getElementById('filtro-texto'); f.innerText = d.filtro.texto; f.style.color = d.filtro.color; }} if(d.reloj){{ let rt = document.getElementById('reloj-texto'); rt.innerText = d.reloj.texto; rt.style.color = d.reloj.color; document.getElementById('h-ginebra').innerText = d.reloj.hora_ginebra; document.getElementById('h-londres').innerText = d.reloj.hora_londres; document.getElementById('h-ny').innerText = d.reloj.hora_ny; document.getElementById('h-tokio').innerText = d.reloj.hora_tokio; document.getElementById('reloj-sesion').innerText = 'SESION: ' + d.reloj.sesion + ' | DIA: ' + d.reloj.dia; }} let eo = document.getElementById('estado-oro'); let luz = document.getElementById('luz-oro'); let textoLuz = document.getElementById('texto-luz'); eo.innerHTML = ia.señal; eo.style.background = ia.color; luz.style.background = ia.luz; luz.style.boxShadow = '0 0 20px 10px ' + ia.luz; luz.classList.add('luz-activa'); textoLuz.innerHTML = ia.texto_luz; textoLuz.style.color = ia.luz; }}catch(e){{}} }}
 setInterval(actualizar, 5000); actualizar();
 </script></body></html>'''
 
