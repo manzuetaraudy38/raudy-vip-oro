@@ -20,16 +20,20 @@ alertado_venta = {p: False for p in VENTAS}
 ultimo_update_id = 0
 historial_oro = []
 
+# === ARREGLO HORA GINEBRA RAUDY - Render esta en UTC, Ginebra es UTC+1 ===
+def hora_ginebra():
+    return datetime.utcnow() + timedelta(hours=1)
+
 def dias_restantes():
-    delta = FECHA_VENCE - datetime.now()
+    delta = FECHA_VENCE - hora_ginebra()
     return max(0, delta.days)
 
 def codigo_vigente():
-    return datetime.now() <= FECHA_VENCE
+    return hora_ginebra() <= FECHA_VENCE
 
 # === FILTRO DE NOTICIAS RAUDY ===
 def filtro_noticias(precio):
-    ahora = datetime.now()
+    ahora = hora_ginebra()
     hora = ahora.hour
     minuto = ahora.minute
     if hora == 14 and 25 <= minuto <= 59:
@@ -44,35 +48,27 @@ def filtro_noticias(precio):
             return {"texto": f"🟡 CUIDADO - MERCADO LOCO SE MOVIO ${cambio:.2f} RAPIDO - ESPERA QUE SE CALME", "color": "#FFA500", "puede": True}
     return {"texto": "🟢 FILTRO OK - PUEDES OPERAR - SIN NOTICIAS FUERTES", "color": "#00aa00", "puede": True}
 
-# === NUEVO - RELOJ MUNDIAL RAUDY - DIA Y HORA PARA COMPRAR ORO ===
+# === RELOJ MUNDIAL RAUDY - DIA Y HORA PARA COMPRAR ORO - ARREGLADO ===
 def reloj_mundial():
-    ahora_ginebra = datetime.now()
-    # Ginebra = GMT+1, Londres = GMT+0, New York = GMT-5, Tokio = GMT+9
+    ahora_ginebra = hora_ginebra()
     hora_londres = ahora_ginebra - timedelta(hours=1)
     hora_ny = ahora_ginebra - timedelta(hours=6)
     hora_tokio = ahora_ginebra + timedelta(hours=8)
-    dia_semana = ahora_ginebra.weekday()  # 0=Lunes 6=Domingo
+    dia_semana = ahora_ginebra.weekday()
     nombres_dia = ["LUNES","MARTES","MIERCOLES","JUEVES","VIERNES","SABADO","DOMINGO"]
     dia_nombre = nombres_dia[dia_semana]
     hora_g = ahora_ginebra.hour
     minuto = ahora_ginebra.minute
-
-    # Fin de semana = mercado cerrado
     if dia_semana >= 5:
         return {"dia": dia_nombre, "hora_ginebra": ahora_ginebra.strftime("%H:%M"), "hora_londres": hora_londres.strftime("%H:%M"), "hora_ny": hora_ny.strftime("%H:%M"), "hora_tokio": hora_tokio.strftime("%H:%M"), "texto": f"🔴 HOY ES {dia_nombre} - MERCADO CERRADO - NO SE COMPRA ORO - DESCANSA", "color": "#ff0000", "sesion": "MERCADO CERRADO", "puede": False}
-    # Sesion Londres 09-11 Ginebra
     if 9 <= hora_g < 11:
         return {"dia": dia_nombre, "hora_ginebra": ahora_ginebra.strftime("%H:%M"), "hora_londres": hora_londres.strftime("%H:%M"), "hora_ny": hora_ny.strftime("%H:%M"), "hora_tokio": hora_tokio.strftime("%H:%M"), "texto": f"🟢 HOY {dia_nombre} {ahora_ginebra.strftime('%H:%M')} - SESION LONDRES - BUENA HORA PARA COMPRAR ORO", "color": "#00aa00", "sesion": "LONDRES 🟢", "puede": True}
-    # Sesion New York 14:30 - 17:00 Ginebra - LA MEJOR
     if (hora_g == 14 and minuto >= 30) or (15 <= hora_g < 17):
         return {"dia": dia_nombre, "hora_ginebra": ahora_ginebra.strftime("%H:%M"), "hora_londres": hora_londres.strftime("%H:%M"), "hora_ny": hora_ny.strftime("%H:%M"), "hora_tokio": hora_tokio.strftime("%H:%M"), "texto": f"🟢🟢 HOY {dia_nombre} {ahora_ginebra.strftime('%H:%M')} - SESION NEW YORK - LA MEJOR HORA PARA COMPRAR / VENDER ORO", "color": "#00aa00", "sesion": "NEW YORK 🟢🟢 MEJOR HORA", "puede": True}
-    # Sesion Asia 02-06 Ginebra - NO operar
     if 2 <= hora_g < 6:
         return {"dia": dia_nombre, "hora_ginebra": ahora_ginebra.strftime("%H:%M"), "hora_londres": hora_londres.strftime("%H:%M"), "hora_ny": hora_ny.strftime("%H:%M"), "hora_tokio": hora_tokio.strftime("%H:%M"), "texto": f"🔴 HOY {dia_nombre} {ahora_ginebra.strftime('%H:%M')} - SESION ASIA - MERCADO DORMIDO - NO COMPRES ORO AHORA", "color": "#ff0000", "sesion": "ASIA 🔴 DORMIDO", "puede": False}
-    # Noche 22-02 - NO operar
     if hora_g >= 22 or hora_g < 2:
         return {"dia": dia_nombre, "hora_ginebra": ahora_ginebra.strftime("%H:%M"), "hora_londres": hora_londres.strftime("%H:%M"), "hora_ny": hora_ny.strftime("%H:%M"), "hora_tokio": hora_tokio.strftime("%H:%M"), "texto": f"🔴 HOY {dia_nombre} {ahora_ginebra.strftime('%H:%M')} - MERCADO DE NOCHE - NO HAY GENTE - NO COMPRES", "color": "#ff0000", "sesion": "NOCHE 🔴", "puede": False}
-    # Resto del dia - CUIDADO
     return {"dia": dia_nombre, "hora_ginebra": ahora_ginebra.strftime("%H:%M"), "hora_londres": hora_londres.strftime("%H:%M"), "hora_ny": hora_ny.strftime("%H:%M"), "hora_tokio": hora_tokio.strftime("%H:%M"), "texto": f"🟡 HOY {dia_nombre} {ahora_ginebra.strftime('%H:%M')} - ENTRE SESIONES - ESPERA A LAS 09:00 O 14:30 PARA COMPRAR", "color": "#FFA500", "sesion": "ENTRE SESIONES 🟡", "puede": True}
 
 def get_price_yahoo(symbol, fallback):
@@ -159,7 +155,7 @@ def telegram_bot_loop():
                             send_telegram(f"🟡 ORO AHORA: ${precio:.2f}\n{ia['señal']}\n🟡 ENTRADA: ${ia['entrada_grafico']}\n🟢 BOTIN: ${ia['botin']} | 🔴 SALIDA: ${ia['salida_emergencia']}\n{reloj['texto']}\n{filtro['texto']}\n{ia['analisis']}")
             precio = get_oro_precio()
             ia = analizar_ia_oro(precio)
-            print(f"{datetime.now()} - ORO: {precio} IA: {ia['señal']}")
+            print(f"{hora_ginebra()} - ORO: {precio} IA: {ia['señal']}")
             for nivel in COMPRAS:
                 if precio <= nivel and not alertado_compra[nivel]:
                     send_telegram(f"🔥 *RAUDY ORO - COMPRA SWING + IA*\n\nORO TOCO *${nivel}*\nActual: ${precio:.2f}\n🟡 ENTRADA: ${ia['entrada_grafico']}\n🟢 BOTIN: ${ia['botin']} | 🔴 SALIDA: ${ia['salida_emergencia']}\n{ia['analisis']}\n\n📲 raudy-vip-oro.onrender.com")
