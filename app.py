@@ -27,6 +27,25 @@ def dias_restantes():
 def codigo_vigente():
     return datetime.now() <= FECHA_VENCE
 
+# === FILTRO DE NOTICIAS RAUDY - NUEVO, NO BORRA NADA ===
+def filtro_noticias(precio):
+    ahora = datetime.now()
+    hora = ahora.hour
+    minuto = ahora.minute
+    # Horas peligrosas en Ginebra: Noticias USA 14:30, 08:30, 10:00
+    if hora == 14 and 25 <= minuto <= 59:
+        return {"texto": "🔴 NO OPERES - NOTICIAS USA 14:30 - ESPERA 30 MIN", "color": "#ff0000", "puede": False}
+    if hora == 8 and 25 <= minuto <= 45:
+        return {"texto": "🔴 NO OPERES - NOTICIAS 08:30 - ESPERA", "color": "#ff0000", "puede": False}
+    if hora == 10 and 0 <= minuto <= 15:
+        return {"texto": "🟡 CUIDADO - NOTICIAS EUROPA 10:00", "color": "#FFA500", "puede": True}
+    # Si el oro se movio muy rapido = mercado loco
+    if len(historial_oro) >= 5:
+        cambio = abs(precio - historial_oro[-5])
+        if cambio > 25:
+            return {"texto": f"🟡 CUIDADO - MERCADO LOCO SE MOVIO ${cambio:.2f} RAPIDO - ESPERA QUE SE CALME", "color": "#FFA500", "puede": True}
+    return {"texto": "🟢 FILTRO OK - PUEDES OPERAR - SIN NOTICIAS FUERTES", "color": "#00aa00", "puede": True}
+
 def get_price_yahoo(symbol, fallback):
     try:
         url = f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}'
@@ -106,7 +125,8 @@ def telegram_bot_loop():
                         elif texto in ["/precios", "precios", "oro"]:
                             precio = get_oro_precio()
                             ia = analizar_ia_oro(precio)
-                            send_telegram(f"🟡 ORO AHORA: ${precio:.2f}\n{ia['señal']}\n🟡 ENTRADA: ${ia['entrada_grafico']}\n🟢 BOTIN (OBJETIVO): ${ia['botin']}\n🔴 SALIDA DE EMERGENCIA (STOP): ${ia['salida_emergencia']}\n{ia['analisis']}")
+                            filtro = filtro_noticias(precio)
+                            send_telegram(f"🟡 ORO AHORA: ${precio:.2f}\n{ia['señal']}\n🟡 ENTRADA: ${ia['entrada_grafico']}\n🟢 BOTIN (OBJETIVO): ${ia['botin']}\n🔴 SALIDA DE EMERGENCIA (STOP): ${ia['salida_emergencia']}\n{filtro['texto']}\n{ia['analisis']}")
             precio = get_oro_precio()
             ia = analizar_ia_oro(precio)
             print(f"{datetime.now()} - ORO: {precio} IA: {ia['señal']}")
@@ -191,7 +211,8 @@ def precios():
     except:
         oro = get_price_yahoo('GC=F', oro)
     ia = analizar_ia_oro(float(oro))
-    return {"oro": float(oro),"gbp": get_price_yahoo('GBPUSD=X', 1.3412),"eur": get_price_yahoo('EURUSD=X', 1.1197),"tesla": get_price_yahoo('TSLA', 245.80),"apple": get_price_yahoo('AAPL', 185.30),"ia": ia}
+    filtro = filtro_noticias(float(oro))
+    return {"oro": float(oro),"gbp": get_price_yahoo('GBPUSD=X', 1.3412),"eur": get_price_yahoo('EURUSD=X', 1.1197),"tesla": get_price_yahoo('TSLA', 245.80),"apple": get_price_yahoo('AAPL', 185.30),"ia": ia, "filtro": filtro}
 
 @app.route('/')
 def home():
@@ -235,6 +256,7 @@ body {{ background:#0a0a0a; color:white; font-family: Arial; margin:0; padding:1
 .ghost-entrada {{ background:#FFD700; color:black; }}
 .ghost-salida {{ background:#cc0000; color:white; }}
 .ghost-dash {{ border-top:3px dashed; flex:1; margin:0 8px; }}
+.filtro-box {{ border:2px solid #FFD700; border-radius:15px; padding:12px; background:#1a1a00; margin-bottom:14px; text-align:center; }}
 </style></head><body>
 <div class="header">
 <h1>🔥 RAUDY ORO PRO + IA SWING 🔥</h1>
@@ -244,6 +266,11 @@ body {{ background:#0a0a0a; color:white; font-family: Arial; margin:0; padding:1
 <div style="font-size:11px; color:#00ff00;" id="hora">VIVO - RAUDY ORO PRO - VIP ✅ - BOT ACTIVO + IA</div>
 <div class="vence-top">⏰ TU VIP VENCE EN {dias} DIAS - {FECHA_VENCE.strftime("%d/%m/%Y")}</div>
 <div style="margin-top:5px;"><a href="/logout" style="color:#ff4444; font-size:11px; text-decoration:none;">SALIR</a></div>
+</div>
+<div class="filtro-box">
+<div style="font-weight:bold; color:#FFD700; font-size:16px;">🛡️ FILTRO DE NOTICIAS RAUDY</div>
+<div id="filtro-texto" style="font-size:14px; font-weight:bold; margin-top:6px;">REVISANDO FILTRO...</div>
+<div style="font-size:11px; color:#aaa; margin-top:4px;">Si dice ROJO = NO OPERES aunque haya señal</div>
 </div>
 <div class="warn-main">
 <div class="warn-title">⚠️ ADVERTENCIA DE RIESGO - SOLO EDUCATIVO - BOT 6 ALERTAS ACTIVO + IA SWING</div>
@@ -336,7 +363,7 @@ function usarPrecioActual(){{
 function makeCandleChart(elemId){{ const chart = LightweightCharts.createChart(document.getElementById(elemId), {{ layout: {{ background: {{ color: '#0f0f0f' }}, textColor: '#888' }}, grid: {{ vertLines: {{ color: '#222' }}, horzLines: {{ color: '#222' }} }}, width: document.getElementById(elemId).clientWidth, height: 180, timeScale: {{ timeVisible: true, secondsVisible: true }} }}); const series = chart.addCandlestickSeries({{ upColor: '#00ff00', downColor: '#ff4444', borderVisible: false, wickUpColor: '#00ff00', wickDownColor: '#ff4444' }}); return {{ chart, series, data: [] }}; }}
 let charts = {{ oro: makeCandleChart('chart-oro'), gbp: makeCandleChart('chart-gbp'), eur: makeCandleChart('chart-eur'), tesla: makeCandleChart('chart-tesla'), apple: makeCandleChart('chart-apple') }};
 function addCandle(cObj, price){{ let now = Math.floor(Date.now() / 1000); let last = cObj.data[cObj.data.length - 1]; if(!last || (now - last.time) >= 15){{ let candle = {{ time: now, open: last ? last.close : price, high: price, low: price, close: price }}; cObj.data.push(candle); if(cObj.data.length > 60) cObj.data.shift(); }} else {{ last.high = Math.max(last.high, price); last.low = Math.min(last.low, price); last.close = price; }} cObj.series.setData(cObj.data); }}
-async function actualizar(){{ try{{ let r = await fetch('/api/precios?v=' + Date.now()); if(r.status==401){{ window.location='/login'; return; }} let d = await r.json(); let hora = new Date().toLocaleTimeString(); document.getElementById('oro').innerText = '$' + d.oro.toFixed(2); document.getElementById('gbp').innerText = d.gbp.toFixed(4); document.getElementById('eur').innerText = d.eur.toFixed(4); document.getElementById('tesla').innerText = '$' + d.tesla.toFixed(2); document.getElementById('apple').innerText = '$' + d.apple.toFixed(2); document.getElementById('hora').innerText = 'Actualizado: ' + hora + ' VIVO - BOT 6 ALERTAS + IA SWING'; addCandle(charts.oro, d.oro); addCandle(charts.gbp, d.gbp); addCandle(charts.eur, d.eur); addCandle(charts.tesla, d.tesla); addCandle(charts.apple, d.apple); let ia = d.ia; document.getElementById('ia-señal').innerText = ia.señal + ' - ' + ia.confianza; document.getElementById('ia-analisis').innerText = ia.analisis; document.getElementById('ia-tp').innerText = '$' + ia.tp; document.getElementById('ia-sl').innerText = '$' + ia.sl; document.getElementById('ia-conf').innerText = ia.confianza; document.getElementById('ia-entrada').innerText = '$' + ia.entrada; document.getElementById('ghost-entrada').innerText = '$' + ia.entrada; document.getElementById('ghost-botin').innerText = '$' + ia.tp; document.getElementById('ghost-salida').innerText = '$' + ia.sl; let eo = document.getElementById('estado-oro'); let luz = document.getElementById('luz-oro'); let textoLuz = document.getElementById('texto-luz'); eo.innerHTML = ia.señal; eo.style.background = ia.color; luz.style.background = ia.luz; luz.style.boxShadow = '0 0 20px 10px ' + ia.luz; luz.classList.add('luz-activa'); textoLuz.innerHTML = ia.texto_luz; textoLuz.style.color = ia.luz; }}catch(e){{}} }}
+async function actualizar(){{ try{{ let r = await fetch('/api/precios?v=' + Date.now()); if(r.status==401){{ window.location='/login'; return; }} let d = await r.json(); let hora = new Date().toLocaleTimeString(); document.getElementById('oro').innerText = '$' + d.oro.toFixed(2); document.getElementById('gbp').innerText = d.gbp.toFixed(4); document.getElementById('eur').innerText = d.eur.toFixed(4); document.getElementById('tesla').innerText = '$' + d.tesla.toFixed(2); document.getElementById('apple').innerText = '$' + d.apple.toFixed(2); document.getElementById('hora').innerText = 'Actualizado: ' + hora + ' VIVO - BOT 6 ALERTAS + IA SWING'; addCandle(charts.oro, d.oro); addCandle(charts.gbp, d.gbp); addCandle(charts.eur, d.eur); addCandle(charts.tesla, d.tesla); addCandle(charts.apple, d.apple); let ia = d.ia; document.getElementById('ia-señal').innerText = ia.señal + ' - ' + ia.confianza; document.getElementById('ia-analisis').innerText = ia.analisis; document.getElementById('ia-tp').innerText = '$' + ia.tp; document.getElementById('ia-sl').innerText = '$' + ia.sl; document.getElementById('ia-conf').innerText = ia.confianza; document.getElementById('ia-entrada').innerText = '$' + ia.entrada; document.getElementById('ghost-entrada').innerText = '$' + ia.entrada; document.getElementById('ghost-botin').innerText = '$' + ia.tp; document.getElementById('ghost-salida').innerText = '$' + ia.sl; if(d.filtro){{ let f = document.getElementById('filtro-texto'); f.innerText = d.filtro.texto; f.style.color = d.filtro.color; }} let eo = document.getElementById('estado-oro'); let luz = document.getElementById('luz-oro'); let textoLuz = document.getElementById('texto-luz'); eo.innerHTML = ia.señal; eo.style.background = ia.color; luz.style.background = ia.luz; luz.style.boxShadow = '0 0 20px 10px ' + ia.luz; luz.classList.add('luz-activa'); textoLuz.innerHTML = ia.texto_luz; textoLuz.style.color = ia.luz; }}catch(e){{}} }}
 setInterval(actualizar, 5000); actualizar();
 </script></body></html>'''
 
