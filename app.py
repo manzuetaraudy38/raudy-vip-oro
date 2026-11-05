@@ -1,8 +1,13 @@
 from flask import Flask, session, request, redirect, jsonify
-import requests, threading, time, os
+import requests
+import threading
+import time
 from datetime import datetime, timedelta
+import os
+
 app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY", "cambia-esto")
+app.secret_key = os.getenv("SECRET_KEY", "cambia-esto-en-render-por-una-larga")
+
 CLAVE_BUENA = os.getenv("VIP_CLAVE", "RAUDY26")
 FECHA_VENCE = datetime(2026, 12, 3, 23, 59, 59)
 BOT_TOKEN = os.getenv("BOT_TOKEN", "AQUI_PON_TU_TOKEN_DEL_BOTFATHER")
@@ -12,165 +17,112 @@ COMPRAS = [3900, 3890, 3865]
 VENTAS = [3980, 3990, 4020]
 alertado_compra = {p: False for p in COMPRAS}
 alertado_venta = {p: False for p in VENTAS}
+ultimo_update_id = 0
 historial_oro = []
 historial_senales = []
-# 50 ROBOTS
-NOMBRES = ["Cazador Rapido","Relampago Oro","Flecha Veloz","Ojo Aguila","Tiburon Oro","Ninja Precio","Rayo Londres","Trueno NY","Guardian Scalping","Maestro Scalping","Rey Londres","Reina Londres","Guardian Londres","Cazador Londres","Jefe Londres","Rey NY","Reina NY","Guardian NY","Cazador NY","Jefe NY","Ojo Noticias","Alarma Noticias","Guardian Noticias","Cazador Noticias","Jefe Noticias","Soporte 3900","Soporte 3890","Soporte 3865","Resistencia 3980","Resistencia 4020","Robot DIOS 1","Robot DIOS 2","Robot DIOS 3","Robot DIOS 4","Robot DIOS 5","Robot DIOS 6","Robot DIOS 7","Robot DIOS 8","Robot DIOS 9","Robot DIOS 10","Guardian Capital","Guardian Fin Semana","Guardian Cuenta","Guardian Familia","Guardian Anti-Perdida","Guardian Modo Nino","Guardian Psicologia","Guardian Copia Segura","Guardian Idioma","MAESTRO SUPREMO"]
-ROBOTS_RAUDY = [{"id": i+1, "nombre": n, "trabajo": "Trabaja con el equipo", "estrellas": 0, "puntos": 0, "mensaje": "Listo"} for i, n in enumerate(NOMBRES)]
+
+# ===== RAUDY - 40 ROBOTS - CADA UNO HACE SU TRABAJO - NUEVO =====
+ROBOTS_RAUDY = []
+NOMBRES_40 = ["Cazador Rapido","Relampago Oro","Flecha Veloz","Ojo Aguila","Tiburon Oro","Ninja Precio","Rayo Londres","Trueno NY","Guardian Scalping","Maestro Scalping","Rey Londres","Reina Londres","Guardian Londres","Cazador Londres","Jefe Londres","Rey NY","Reina NY","Guardian NY","Cazador NY","Jefe NY","Ojo Noticias","Alarma Noticias","Guardian Noticias","Cazador Noticias","Jefe Noticias","Soporte 3900","Soporte 3890","Soporte 3865","Resistencia 3980","Resistencia 4020","Robot DIOS 1","Robot DIOS 2","Robot DIOS 3","Robot DIOS 4","Robot DIOS 5","Guardian Capital","Guardian Cuenta","Guardian Familia","Guardian Anti-Perdida","MAESTRO SUPREMO"]
+for i, nom in enumerate(NOMBRES_40, 1):
+    ROBOTS_RAUDY.append({"id": i, "nombre": nom, "trabajo": "Trabaja con el equipo", "estrellas": 0, "puntos": 0, "mensaje": "Listo para trabajar"})
+
+def chat_robots(precio, maestro):
+    if precio <= 3910:
+        return [{"robot": "Robot 5 Tiburon Oro", "texto": "Oro bajo, yo digo COMPRA"}, {"robot": "Robot 18 Guardian NY", "texto": "Confirmo, yo tambien COMPRA"}, {"robot": "Robot 40 MAESTRO", "texto": "Decido: " + maestro["señal"]}]
+    if precio >= 3970:
+        return [{"robot": "Robot 5 Tiburon Oro", "texto": "Oro subio, yo digo VENTA"}, {"robot": "Robot 16 Rey NY", "texto": "Confirmo, yo tambien VENTA"}, {"robot": "Robot 40 MAESTRO", "texto": "Decido: " + maestro["señal"]}]
+    return [{"robot": "Robot 5 Tiburon Oro", "texto": "Oro en medio, yo digo ESPERA"}, {"robot": "Robot 40 MAESTRO", "texto": "Decido: " + maestro["señal"]}]
+
+# === ARREGLO HORA GINEBRA RAUDY - Render esta en UTC, Ginebra es UTC+1 ===
 def hora_ginebra():
     return datetime.utcnow() + timedelta(hours=1)
+
 def dias_restantes():
-    return max(0, (FECHA_VENCE - hora_ginebra()).days)
+    delta = FECHA_VENCE - hora_ginebra()
+    return max(0, delta.days)
+
 def codigo_vigente():
     return hora_ginebra() <= FECHA_VENCE
+
+# === FILTRO DE NOTICIAS RAUDY ===
 def filtro_noticias(precio):
-    h = hora_ginebra().hour
-    m = hora_ginebra().minute
-    if h == 14 and 25 <= m <= 59:
-        return {"texto": "🔴 NO OPERES - NOTICIAS USA 14:30", "color": "#ff0000", "puede": False}
-    if h == 8 and 25 <= m <= 45:
-        return {"texto": "🔴 NO OPERES - NOTICIAS 08:30", "color": "#ff0000", "puede": False}
-    if len(historial_oro) >= 5 and abs(precio - historial_oro[-5]) > 25:
-        return {"texto": "🟡 CUIDADO - MERCADO LOCO", "color": "#FFA500", "puede": True}
-    return {"texto": "🟢 FILTRO OK - PUEDES OPERAR", "color": "#00aa00", "puede": True}
+    ahora = hora_ginebra()
+    hora = ahora.hour
+    minuto = ahora.minute
+    if hora == 14 and 25 <= minuto <= 59:
+        return {"texto": "🔴 NO OPERES - NOTICIAS USA 14:30 - ESPERA 30 MIN", "color": "#ff0000", "puede": False}
+    if hora == 8 and 25 <= minuto <= 45:
+        return {"texto": "🔴 NO OPERES - NOTICIAS 08:30 - ESPERA", "color": "#ff0000", "puede": False}
+    if hora == 10 and 0 <= minuto <= 15:
+        return {"texto": "🟡 CUIDADO - NOTICIAS EUROPA 10:00", "color": "#FFA500", "puede": True}
+    if len(historial_oro) >= 5:
+        cambio = abs(precio - historial_oro[-5])
+        if cambio > 25:
+            return {"texto": f"🟡 CUIDADO - MERCADO LOCO SE MOVIO ${cambio:.2f} RAPIDO - ESPERA QUE SE CALME", "color": "#FFA500", "puede": True}
+    return {"texto": "🟢 FILTRO OK - PUEDES OPERAR - SIN NOTICIAS FUERTES", "color": "#00aa00", "puede": True}
+
+# === RELOJ MUNDIAL RAUDY ===
 def reloj_mundial():
-    g = hora_ginebra()
-    l = g - timedelta(hours=1)
-    n = g - timedelta(hours=6)
-    t = g + timedelta(hours=8)
-    dias = ["LUNES","MARTES","MIERCOLES","JUEVES","VIERNES","SABADO","DOMINGO"]
-    dia = dias[g.weekday()]
-    base = {"dia": dia, "hora_ginebra": g.strftime("%H:%M"), "hora_londres": l.strftime("%H:%M"), "hora_ny": n.strftime("%H:%M"), "hora_tokio": t.strftime("%H:%M")}
-    if g.weekday() >= 5:
-        base.update({"texto": "🔴 HOY " + dia + " - MERCADO CERRADO", "color": "#ff0000", "sesion": "CERRADO", "puede": False})
-    elif 9 <= g.hour < 11:
-        base.update({"texto": "🟢 HOY " + dia + " - SESION LONDRES", "color": "#00aa00", "sesion": "LONDRES", "puede": True})
-    elif (g.hour == 14 and g.minute >= 30) or (15 <= g.hour < 17):
-        base.update({"texto": "🟢🟢 HOY " + dia + " - SESION NEW YORK - MEJOR HORA", "color": "#00aa00", "sesion": "NEW YORK", "puede": True})
-    elif 2 <= g.hour < 6:
-        base.update({"texto": "🔴 SESION ASIA - DORMIDO", "color": "#ff0000", "sesion": "ASIA", "puede": False})
-    elif g.hour >= 22 or g.hour < 2:
-        base.update({"texto": "🔴 MERCADO DE NOCHE", "color": "#ff0000", "sesion": "NOCHE", "puede": False})
-    else:
-        base.update({"texto": "🟡 ENTRE SESIONES - ESPERA 09:00 O 14:30", "color": "#FFA500", "sesion": "ENTRE SESIONES", "puede": True})
-    return base
-def get_price_yahoo(s, fb):
+    ahora_ginebra = hora_ginebra()
+    hora_londres = ahora_ginebra - timedelta(hours=1)
+    hora_ny = ahora_ginebra - timedelta(hours=6)
+    hora_tokio = ahora_ginebra + timedelta(hours=8)
+    dia_semana = ahora_ginebra.weekday()
+    nombres_dia = ["LUNES","MARTES","MIERCOLES","JUEVES","VIERNES","SABADO","DOMINGO"]
+    dia_nombre = nombres_dia[dia_semana]
+    hora_g = ahora_ginebra.hour
+    minuto = ahora_ginebra.minute
+    if dia_semana >= 5:
+        return {"dia": dia_nombre, "hora_ginebra": ahora_ginebra.strftime("%H:%M"), "hora_londres": hora_londres.strftime("%H:%M"), "hora_ny": hora_ny.strftime("%H:%M"), "hora_tokio": hora_tokio.strftime("%H:%M"), "texto": f"🔴 HOY ES {dia_nombre} - MERCADO CERRADO - NO SE COMPRA ORO - DESCANSA", "color": "#ff0000", "sesion": "MERCADO CERRADO", "puede": False}
+    if 9 <= hora_g < 11:
+        return {"dia": dia_nombre, "hora_ginebra": ahora_ginebra.strftime("%H:%M"), "hora_londres": hora_londres.strftime("%H:%M"), "hora_ny": hora_ny.strftime("%H:%M"), "hora_tokio": hora_tokio.strftime("%H:%M"), "texto": f"🟢 HOY {dia_nombre} {ahora_ginebra.strftime('%H:%M')} - SESION LONDRES - BUENA HORA PARA COMPRAR ORO", "color": "#00aa00", "sesion": "LONDRES 🟢", "puede": True}
+    if (hora_g == 14 and minuto >= 30) or (15 <= hora_g < 17):
+        return {"dia": dia_nombre, "hora_ginebra": ahora_ginebra.strftime("%H:%M"), "hora_londres": hora_londres.strftime("%H:%M"), "hora_ny": hora_ny.strftime("%H:%M"), "hora_tokio": hora_tokio.strftime("%H:%M"), "texto": f"🟢🟢 HOY {dia_nombre} {ahora_ginebra.strftime('%H:%M')} - SESION NEW YORK - LA MEJOR HORA PARA COMPRAR / VENDER ORO", "color": "#00aa00", "sesion": "NEW YORK 🟢🟢 MEJOR HORA", "puede": True}
+    if 2 <= hora_g < 6:
+        return {"dia": dia_nombre, "hora_ginebra": ahora_ginebra.strftime("%H:%M"), "hora_londres": hora_londres.strftime("%H:%M"), "hora_ny": hora_ny.strftime("%H:%M"), "hora_tokio": hora_tokio.strftime("%H:%M"), "texto": f"🔴 HOY {dia_nombre} {ahora_ginebra.strftime('%H:%M')} - SESION ASIA - MERCADO DORMIDO - NO COMPRES ORO AHORA", "color": "#ff0000", "sesion": "ASIA 🔴 DORMIDO", "puede": False}
+    if hora_g >= 22 or hora_g < 2:
+        return {"dia": dia_nombre, "hora_ginebra": ahora_ginebra.strftime("%H:%M"), "hora_londres": hora_londres.strftime("%H:%M"), "hora_ny": hora_ny.strftime("%H:%M"), "hora_tokio": hora_tokio.strftime("%H:%M"), "texto": f"🔴 HOY {dia_nombre} {ahora_ginebra.strftime('%H:%M')} - MERCADO DE NOCHE - NO HAY GENTE - NO COMPRES", "color": "#ff0000", "sesion": "NOCHE 🔴", "puede": False}
+    return {"dia": dia_nombre, "hora_ginebra": ahora_ginebra.strftime("%H:%M"), "hora_londres": hora_londres.strftime("%H:%M"), "hora_ny": hora_ny.strftime("%H:%M"), "hora_tokio": hora_tokio.strftime("%H:%M"), "texto": f"🟡 HOY {dia_nombre} {ahora_ginebra.strftime('%H:%M')} - ENTRE SESIONES - ESPERA A LAS 09:00 O 14:30 PARA COMPRAR", "color": "#FFA500", "sesion": "ENTRE SESIONES 🟡", "puede": True}
+
+def get_price_yahoo(symbol, fallback):
     try:
-        r = requests.get('https://query1.finance.yahoo.com/v8/finance/chart/' + s, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
-        return float(r.json()['chart']['result'][0]['meta']['regularMarketPrice'])
+        url = f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}'
+        r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
+        j = r.json()
+        price = j['chart']['result'][0]['meta']['regularMarketPrice']
+        return float(price)
     except:
-        return fb
+        return fallback
+
 def get_oro_precio():
     try:
         r = requests.get('https://api.gold-api.com/price/XAU', timeout=4)
         return float(r.json().get('price', 3922))
     except:
         return get_price_yahoo('GC=F', 3922)
+
 def analizar_ia_oro(precio):
     historial_oro.append(precio)
     if len(historial_oro) > 50:
         historial_oro.pop(0)
+    if len(historial_oro) >= 10:
+        max_reciente = max(historial_oro[-20:])
+        min_reciente = min(historial_oro[-20:])
+    else:
+        max_reciente = precio + 20
+        min_reciente = precio - 20
     if precio <= 3905 and precio >= 3860:
-        res = {"señal": "🟢 COMPRA SWING", "color": "#00aa00", "luz": "#00ff00", "texto_luz": "🟢 LUZ VERDE - COMPRA", "analisis": "IA: Oro en zona 3900-3865. Es COMPRA.", "entrada": precio, "tp": round(precio + 35, 2), "sl": round(precio - 18, 2), "confianza": "88%"}
+        res = {"señal": "🟢 COMPRA SWING", "color": "#00aa00", "luz": "#00ff00", "texto_luz": "🟢 LUZ VERDE - COMPRA SWING", "analisis": f"IA SWING: Oro hizo SWING BAJO en {min_reciente:.2f} en zona 3900-3865. Bajó y ahora rebota para subir. Es zona de COMPRA.", "entrada": precio, "tp": round(precio + 35, 2), "sl": round(precio - 18, 2), "confianza": "88%"}
     elif precio >= 3980 and precio <= 4030:
-        res = {"señal": "🔴 VENTA SWING", "color": "#ff0000", "luz": "#ff0000", "texto_luz": "🔴 LUZ ROJA - VENTA", "analisis": "IA: Oro en zona 3980-4020. Es VENTA.", "entrada": precio, "tp": round(precio - 35, 2), "sl": round(precio + 18, 2), "confianza": "88%"}
+        res = {"señal": "🔴 VENTA SWING", "color": "#ff0000", "luz": "#ff0000", "texto_luz": "🔴 LUZ ROJA - VENTA SWING", "analisis": f"IA SWING: Oro hizo SWING ALTO en {max_reciente:.2f} en zona 3980-4020. Subió mucho y ahora va a bajar. Es zona de VENTA.", "entrada": precio, "tp": round(precio - 35, 2), "sl": round(precio + 18, 2), "confianza": "88%"}
     elif precio > 4030:
-        res = {"señal": "🔴 YA PASO VENTA - ESPERA", "color": "#ff0000", "luz": "#ff0000", "texto_luz": "🔴 YA PASO VENTA", "analisis": "IA: Ya paso venta. Espera 3980 o 3900.", "entrada": precio, "tp": 3980, "sl": round(precio + 20, 2), "confianza": "65%"}
+        res = {"señal": "🔴 YA PASO ZONA VENTA - ESPERA", "color": "#ff0000", "luz": "#ff0000", "texto_luz": "🔴 LUZ ROJA - YA PASO VENTA", "analisis": f"IA SWING: Oro alto en ${precio:.2f}. YA PASO la zona de venta 3980-4020. NO persigas la venta aquí. Espera que baje a 3980 para venta o a 3900 para compra. Swing Alto {max_reciente:.2f} / Bajo {min_reciente:.2f}", "entrada": precio, "tp": 3980, "sl": round(precio + 20, 2), "confianza": "65%"}
     elif precio > 3940:
-        res = {"señal": "🔴 ESPERANDO VENTA", "color": "#ff0000", "luz": "#ff0000", "texto_luz": "🔴 ESPERANDO VENTA", "analisis": "IA: Espera 3980 venta o 3900 compra.", "entrada": precio, "tp": 3900, "sl": 4040, "confianza": "65%"}
+        res = {"señal": "🔴 ESPERANDO VENTA SWING", "color": "#ff0000", "luz": "#ff0000", "texto_luz": "🔴 LUZ ROJA - ESPERANDO VENTA", "analisis": f"IA SWING: Oro en ${precio:.2f}. No compres aquí. Swing Alto {max_reciente:.2f} / Bajo {min_reciente:.2f}. Espera que suba a 3980 para venta o baje a 3900 para compra.", "entrada": precio, "tp": 3900, "sl": 4040, "confianza": "65%"}
     elif precio < 3940 and precio > 3905:
-        res = {"señal": "🟡 CERCA DE COMPRA", "color": "#FFA500", "luz": "#FFA500", "texto_luz": "🟡 CERCA DE COMPRA", "analisis": "IA: Se acerca a compra. Si toca 3900 es COMPRA.", "entrada": 3900, "tp": 3935, "sl": 3882, "confianza": "70%"}
+        res = {"señal": "🟡 CERCA DE COMPRA SWING", "color": "#FFA500", "luz": "#FFA500", "texto_luz": "🟡 LUZ NARANJA - CERCA DE COMPRA", "analisis": f"IA SWING: Oro en ${precio:.2f} se acerca a compra. Si toca 3900 es SWING BAJO = COMPRA. Bajo reciente {min_reciente:.2f}", "entrada": 3900, "tp": 3935, "sl": 3882, "confianza": "70%"}
     else:
-        res = {"señal": "🟡 ANALIZANDO", "color": "#FFA500", "luz": "#FFA500", "texto_luz": "🟡 ANALIZANDO", "analisis": "IA: Analizando...", "entrada": precio, "tp": round(precio + 30, 2), "sl": round(precio - 15, 2), "confianza": "50%"}
+        res = {"señal": "🟡 ANALIZANDO SWING", "color": "#FFA500", "luz": "#FFA500", "texto_luz": "🟡 ANALIZANDO", "analisis": f"IA: Analizando swing... Precio ${precio:.2f}. Alto {max_reciente:.2f} Bajo {min_reciente:.2f}. Espera señal clara.", "entrada": precio, "tp": round(precio + 30, 2), "sl": round(precio - 15, 2), "confianza": "50%"}
     res["botin"] = res["tp"]
-    res["salida_emergencia"] = res["sl"]
-    res["entrada_grafico"] = res["entrada"]
-    return res
-def analizar_50_raudy(precio, eur_val, gbp_val):
-    votos = []
-    votos.append(("1 SWING", "COMPRA" if precio <= 3905 else "VENTA" if precio >= 3980 else "ESPERA"))
-    if len(historial_oro) >= 2 and precio > historial_oro[-2] + 5:
-        votos.append(("2 RAPIDO", "COMPRA"))
-    elif len(historial_oro) >= 2 and precio < historial_oro[-2] - 5:
-        votos.append(("2 RAPIDO", "VENTA"))
-    else:
-        votos.append(("2 RAPIDO", "ESPERA"))
-    f = filtro_noticias(precio)
-    for i in range(3, 50):
-        if i in [4, 26]:
-            votos.append((str(i) + " NOTICIAS", "ESPERA" if not f["puede"] else "COMPRA" if precio < 3940 else "VENTA"))
-        elif i in [15, 32, 38, 40, 43, 48, 49]:
-            votos.append((str(i) + " ANALIZADOR", "ESPERA"))
-        elif i in [3, 12, 21]:
-            votos.append((str(i) + " TENDENCIA", "COMPRA" if precio > 3940 else "VENTA"))
-        else:
-            votos.append((str(i) + " ANALIZADOR", "COMPRA" if precio <= 3910 else "VENTA" if precio >= 3970 else "ESPERA"))
-    c_compra = sum(1 for _, v in votos if v == "COMPRA")
-    c_venta = sum(1 for _, v in votos if v == "VENTA")
-    c_espera = sum(1 for _, v in votos if v == "ESPERA")
-    if c_compra >= 35:
-        m = {"señal": "👑🔥 COMPRA DIOS - LA MEJOR DEL DIA", "color": "#00ff00", "luz": "#00ff00", "texto_luz": "🟢 COMPRA DIOS"}
-    elif c_venta >= 35:
-        m = {"señal": "👑🔥 VENTA DIOS - LA MEJOR DEL DIA", "color": "#ff0000", "luz": "#ff0000", "texto_luz": "🔴 VENTA DIOS"}
-    elif c_compra > c_venta + 5:
-        m = {"señal": "🟢 COMPRA FUERTE", "color": "#00aa00", "luz": "#00ff00", "texto_luz": "🟢 COMPRA"}
-    elif c_venta > c_compra + 5:
-        m = {"señal": "🔴 VENTA FUERTE", "color": "#ff0000", "luz": "#ff0000", "texto_luz": "🔴 VENTA"}
-    else:
-        m = {"señal": "🟡 ESPERA - LOS 50 NO ESTAN DE ACUERDO", "color": "#FFA500", "luz": "#FFA500", "texto_luz": "🟡 ESPERA"}
-    m["votos_compra"] = c_compra
-    m["votos_venta"] = c_venta
-    m["votos_espera"] = c_espera
-    m["lista"] = votos
-    m["total"] = 50
-    return m
-def chat_robots(precio, maestro):
-    if precio <= 3910:
-        return [{"robot": "Robot 5 Tiburon Oro", "texto": "Oro bajo, yo digo COMPRA"}, {"robot": "Robot 18 Guardian NY", "texto": "Confirmo COMPRA"}, {"robot": "Robot 50 MAESTRO", "texto": "Decido: " + maestro["señal"]}]
-    if precio >= 3970:
-        return [{"robot": "Robot 5 Tiburon Oro", "texto": "Oro subio, yo digo VENTA"}, {"robot": "Robot 16 Rey NY", "texto": "Confirmo VENTA"}, {"robot": "Robot 50 MAESTRO", "texto": "Decido: " + maestro["señal"]}]
-    return [{"robot": "Robot 5 Tiburon Oro", "texto": "Oro en medio, ESPERA"}, {"robot": "Robot 50 MAESTRO", "texto": "Decido: " + maestro["señal"]}]
-def send_telegram(msg):
-    try:
-        if "AQUI_PON" in BOT_TOKEN:
-            return
-        url = "https://api.telegram.org/bot" + BOT_TOKEN + "/sendMessage"
-        for cid in CHAT_ID_VIP.split(","):
-            cid = cid.strip()
-            if cid and "AQUI_PON" not in cid:
-                requests.post(url, json={"chat_id": cid, "text": msg, "parse_mode": "Markdown"}, timeout=5)
-    except:
-        pass
-def bot_loop():
-    while True:
-        try:
-            p = get_oro_precio()
-            ia = analizar_ia_oro(p)
-            for niv in COMPRAS:
-                if p <= niv and not alertado_compra[niv]:
-                    send_telegram("🔥 RAUDY ORO - COMPRA - Oro toco " + str(niv))
-                    alertado_compra[niv] = True
-                if p > niv + 40:
-                    alertado_compra[niv] = False
-            for niv in VENTAS:
-                if p >= niv and not alertado_venta[niv]:
-                    send_telegram("🔴 RAUDY ORO - VENTA - Oro toco " + str(niv))
-                    alertado_venta[niv] = True
-                if p < niv - 40:
-                    alertado_venta[niv] = False
-        except:
-            pass
-        time.sleep(60)
-threading.Thread(target=bot_loop, daemon=True).start()
-def esta_logueado():
-    return codigo_vigente() and session.get("vip") == CLAVE_BUENA
-@app.route('/login', methods=['GET','POST'])
-def login():
-    if not codigo_vigente():
-        return '<h1>CODIGO VENCIDO</h1><a href="https://www.paypal.me/RaudyManzueta/20">PAGAR $20</a>'
-    error = ""
-    if request.method == 'POST':
-        if request.form.get("clave","").strip().upper() == CLAVE_BUENA:
-            session["vip"] = CLAVE_BUENA
-            return redirect("/")
-        error =
+    res
