@@ -21,7 +21,6 @@ ultimo_update_id = 0
 historial_oro = []
 historial_senales = []
 
-# === ARREGLO HORA GINEBRA RAUDY - Render esta en UTC, Ginebra es UTC+1 ===
 def hora_ginebra():
     return datetime.utcnow() + timedelta(hours=1)
 
@@ -32,7 +31,6 @@ def dias_restantes():
 def codigo_vigente():
     return hora_ginebra() <= FECHA_VENCE
 
-# === FILTRO DE NOTICIAS RAUDY ===
 def filtro_noticias(precio):
     ahora = hora_ginebra()
     hora = ahora.hour
@@ -49,7 +47,6 @@ def filtro_noticias(precio):
             return {"texto": f"🟡 CUIDADO - MERCADO LOCO SE MOVIO ${cambio:.2f} RAPIDO - ESPERA QUE SE CALME", "color": "#FFA500", "puede": True}
     return {"texto": "🟢 FILTRO OK - PUEDES OPERAR - SIN NOTICIAS FUERTES", "color": "#00aa00", "puede": True}
 
-# === RELOJ MUNDIAL RAUDY ===
 def reloj_mundial():
     ahora_ginebra = hora_ginebra()
     hora_londres = ahora_ginebra - timedelta(hours=1)
@@ -116,7 +113,7 @@ def analizar_ia_oro(precio):
     res["entrada_grafico"] = res["entrada"]
     return res
 
-# ===== RAUDY - 50 ANALIZADORES - NUEVO, NO BORRA NADA =====
+# ===== RAUDY - 50 ANALIZADORES - CON 28 = DIOS =====
 def analizar_50_raudy(precio, eur_val, gbp_val):
     votos = []
     if precio <= 3905:
@@ -182,9 +179,10 @@ def analizar_50_raudy(precio, eur_val, gbp_val):
     c_compra = sum(1 for _, v in votos if v == "COMPRA")
     c_venta = sum(1 for _, v in votos if v == "VENTA")
     c_espera = sum(1 for _, v in votos if v == "ESPERA")
-    if c_compra >= 35:
+    # === RAUDY QUIERE 28 = DIOS - YA CAMBIADO ===
+    if c_compra >= 28:
         maestro = {"señal": "👑🔥 COMPRA DIOS - LA MEJOR DEL DIA", "color": "#00ff00", "luz": "#00ff00", "texto_luz": "🟢 LUZ VERDE FUERTE - COMPRA DIOS"}
-    elif c_venta >= 35:
+    elif c_venta >= 28:
         maestro = {"señal": "👑🔥 VENTA DIOS - LA MEJOR DEL DIA", "color": "#ff0000", "luz": "#ff0000", "texto_luz": "🔴 LUZ ROJA FUERTE - VENTA DIOS"}
     elif c_compra > c_venta + 5:
         maestro = {"señal": "🟢 COMPRA FUERTE", "color": "#00aa00", "luz": "#00ff00", "texto_luz": "🟢 LUZ VERDE - COMPRA"}
@@ -392,7 +390,7 @@ body {{ background:#0a0a0a; color:white; font-family: Arial; margin:0; padding:1
 </div>
 
 <div class="maestro-box">
-<div style="font-weight:bold; color:#FFD700; font-size:18px;">👑 MAESTRO SUPREMO - 50 ANALIZADORES - LUZ</div>
+<div style="font-weight:bold; color:#FFD700; font-size:18px;">👑 MAESTRO SUPREMO - 50 ANALIZADORES - LUZ - CON 28 = DIOS</div>
 <div id="luz-maestro" class="luz-grande luz-activa"></div>
 <div id="maestro-texto" style="font-size:18px;font-weight:bold;">ESPERANDO MAESTRO...</div>
 <div id="maestro-votos" style="font-size:12px;color:#aaa;">--</div>
@@ -404,7 +402,7 @@ body {{ background:#0a0a0a; color:white; font-family: Arial; margin:0; padding:1
 <div id="modal-como" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);z-index:9999;padding:20px;box-sizing:border-box;overflow:auto;">
 <div style="background:white;color:black;border-radius:15px;padding:20px;max-width:400px;margin:20px auto;">
 <h2>¿COMO USAR LA APP RAUDY?</h2>
-<p>1. Mira la LUZ grande. Verde = compra, Roja = venta, Amarilla = espera.<br><br>2. Si el Maestro dice COMPRA DIOS, es porque 35 de los 50 estan de acuerdo.<br><br>3. Pon tu TP y SL en tu broker tal cual.<br><br>4. Si el Filtro dice ROJO, NO operes aunque haya señal.<br><br>5. Solo educativo, no es consejo financiero. Puedes perder dinero.</p>
+<p>1. Mira la LUZ grande. Verde = compra, Roja = venta, Amarilla = espera.<br><br>2. Si el Maestro dice COMPRA DIOS o VENTA DIOS, es porque 28 de los 50 estan de acuerdo.<br><br>3. Pon tu TP y SL en tu broker tal cual.<br><br>4. Si el Filtro dice ROJO, NO operes aunque haya señal.<br><br>5. Solo educativo, no es consejo financiero. Puedes perder dinero.</p>
 <button onclick="document.getElementById('modal-como').style.display='none'" style="background:red;color:white;padding:12px;border:none;border-radius:10px;width:100%;font-weight:bold;">CERRAR</button>
 </div>
 </div>
