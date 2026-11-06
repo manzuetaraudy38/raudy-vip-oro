@@ -1,4 +1,7 @@
-<!DOCTYPE html>
+from flask import Flask
+app = Flask(__name__)
+
+HTML = """<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -46,21 +49,14 @@ header p{margin:5px 0;font-weight:bold}
 <p>ACCIONES + ORO • ELLOS BUSCAN Y ANALIZAN SOLOS</p>
 <p>JEFE: RAUDY MANZUETA</p>
 </header>
-
 <div class="top-btns">
 <a class="wa" href="https://wa.me/41767574050" target="_blank">💬 WHATSAPP 0767574050</a>
 <a class="tg" href="https://t.me/raudy_vip_oro_bot" target="_blank">✈️ TELEGRAM @raudy_vip_oro_bot</a>
 <a class="ig" href="https://instagram.com/raudy_vip_oro_bot" target="_blank">📸 INSTAGRAM @raudy_vip_oro_bot</a>
 <a class="pay" href="https://paypal.me/RaudyManzueta/20" target="_blank">💰 PAGAR VIP $20</a>
 </div>
-
-<div class="clock">
-SESION NEW YORK 🕐 <b id="reloj">--:--:--</b><br>
-<span id="sesion">Buscando información...</span>
-</div>
-
+<div class="clock">SESION NEW YORK 🕐 <b id="reloj">--:--:--</b><br><span id="sesion">Buscando información...</span></div>
 <div class="acciones" id="acciones"></div>
-
 <div class="maestro">
 <div style="font-size:40px">👑⚡☄️🔥🧊</div>
 <h2>ROBOT 40 - MAESTRO DIOS RAUDY</h2>
@@ -70,30 +66,18 @@ SESION NEW YORK 🕐 <b id="reloj">--:--:--</b><br>
 <button onclick="felicitarMaestro()">👏 FELICITAR MAESTRO</button>
 <button onclick="estrellaMaestro()">⭐ MANDAR ESTRELLA AL MAESTRO</button>
 </div>
-
 <div class="broker">
 <img src="https://i.pravatar.cc/150?img=12" alt="Broker">
 <h3>🧑‍💼 BROKER RAUDY - Persona Real</h3>
 <p id="brokerMsg">Hola jefe, soy tu Broker. Estoy mirando lo que dicen los robots...</p>
 <button onclick="hablarBroker()" style="padding:10px 18px;border-radius:20px;background:#00FFFF;border:none;font-weight:bold">🎤 PREGUNTAR AL BROKER</button>
 </div>
-
 <h2>🤖 LOS 40 ROBOTS CON PODERES</h2>
 <p>Ellos buscan información, la analizan y te dicen COMPRA o VENTA solos.</p>
 <div class="grid" id="grid"></div>
 <div class="footer">RAUDY VIP © 2026 - Solo Robots Hacen Todo - WhatsApp 0767574050 - No es consejo financiero, es educación</div>
-
 <script>
-const simbolos=[
-{id:"ORO",nombre:"ORO",precio:4088,emoji:"🥇"},
-{id:"NVDA",nombre:"NVIDIA",precio:185.20,emoji:"💚"},
-{id:"AAPL",nombre:"APPLE",precio:262.10,emoji:"🍎"},
-{id:"TSLA",nombre:"TESLA",precio:340.50,emoji:"🚗"},
-{id:"MSFT",nombre:"MICROSOFT",precio:495.30,emoji:"🪟"},
-{id:"AMZN",nombre:"AMAZON",precio:235.40,emoji:"📦"},
-{id:"META",nombre:"META",precio:645.20,emoji:"👍"},
-{id:"GOOGL",nombre:"GOOGLE",precio:282.10,emoji:"🔍"},
-];
+const simbolos=[{id:"ORO",nombre:"ORO",precio:4088,emoji:"🥇"},{id:"NVDA",nombre:"NVIDIA",precio:185.20,emoji:"💚"},{id:"AAPL",nombre:"APPLE",precio:262.10,emoji:"🍎"},{id:"TSLA",nombre:"TESLA",precio:340.50,emoji:"🚗"},{id:"MSFT",nombre:"MICROSOFT",precio:495.30,emoji:"🪟"},{id:"AMZN",nombre:"AMAZON",precio:235.40,emoji:"📦"},{id:"META",nombre:"META",precio:645.20,emoji:"👍"},{id:"GOOGL",nombre:"GOOGLE",precio:282.10,emoji:"🔍"}];
 let activo="ORO";
 const accDiv=document.getElementById("acciones");
 function renderAcc(){
@@ -103,7 +87,7 @@ function renderAcc(){
   let color=cambio>=0?"#00FF88":"#FF4444";
   let d=document.createElement("div");
   d.className="act "+(activo===s.id?"active":"");
-  d.innerHTML=`<b>${s.emoji} ${s.id}</b><br>${s.nombre}<br><b>$${s.precio.toFixed(2)}</b><br><span style="color:${color}">${cambio}%</span>`;
+  d.innerHTML="<b>"+s.emoji+" "+s.id+"</b><br>"+s.nombre+"<br><b>$"+s.precio.toFixed(2)+"</b><br><span style='color:"+color+"'>"+cambio+"%</span>";
   d.onclick=()=>{activo=s.id;renderAcc();analizarTodo();sonido()};
   accDiv.appendChild(d);
  });
@@ -149,26 +133,16 @@ const robots=[
 [37,"HIELO CONFIRMA","🧊","Yo confirmo con calma"],
 [38,"COMETA JEFE","☄️","Yo soy el jefe de los cometas"],
 [39,"RAYO MAESTRO 2","⚡","Yo soy la mano derecha del Maestro 40"],
-[40,"MAESTRO DIOS RAUDY","👑⚡☄️🔥🧊","Yo mando a todos, tengo TODOS los poderes, yo decido COMPRA DIOS o VENTA DIOS"],
+[40,"MAESTRO DIOS RAUDY","👑⚡☄️🔥🧊","Yo mando a todos, tengo TODOS los poderes"]
 ];
 const grid=document.getElementById("grid");
 let estrellas={};
 robots.slice(0,39).forEach(r=>{
- let [num,nombre,poder,funcion]=r;
+ let num=r[0]; let nombre=r[1]; let poder=r[2]; let funcion=r[3];
  estrellas[num]=0;
  let div=document.createElement("div");
  div.className="robot";
- div.innerHTML=`
-  <div class="luz" id="luz${num}"></div>
-  <div class="poder">${poder}</div>
-  <h3>Robot ${num} - ${nombre}</h3>
-  <p><b>Función:</b> ${funcion}</p>
-  <div class="msg" id="msg${num}">Buscando información...</div>
-  <div class="estrellas" id="est${num}"></div>
-  <div class="btns">
-   <button class="felicitar" onclick="felicitar(${num},'${nombre}')">👏 FELICITAR</button>
-   <button class="estrella" onclick="darEstrella(${num},'${nombre}')">⭐ ESTRELLA</button>
-  </div>`;
+ div.innerHTML="<div class='luz' id='luz"+num+"'></div><div class='poder'>"+poder+"</div><h3>Robot "+num+" - "+nombre+"</h3><p><b>Función:</b> "+funcion+"</p><div class='msg' id='msg"+num+"'>Buscando información...</div><div class='estrellas' id='est"+num+"'></div><div class='btns'><button class='felicitar' onclick='felicitar("+num+")'>👏 FELICITAR</button><button class='estrella' onclick='darEstrella("+num+")'>⭐ ESTRELLA</button></div>";
  grid.appendChild(div);
 });
 function sonido(){
@@ -176,31 +150,24 @@ function sonido(){
   let ctx=new (window.AudioContext||window.webkitAudioContext)();
   let o=ctx.createOscillator(); let g=ctx.createGain();
   o.connect(g); g.connect(ctx.destination);
-  o.frequency.value=880; o.type="sine";
-  g.gain.value=0.1; o.start(); o.stop(ctx.currentTime+0.15);
+  o.frequency.value=880; o.type="sine"; g.gain.value=0.1; o.start(); o.stop(ctx.currentTime+0.15);
  }catch(e){}
 }
 function hablar(texto){
- if('speechSynthesis' in window){
-  let u=new SpeechSynthesisUtterance(texto);
-  u.lang='es-ES'; u.rate=1; speechSynthesis.speak(u);
- }
+ if('speechSynthesis' in window){ let u=new SpeechSynthesisUtterance(texto); u.lang='es-ES'; speechSynthesis.speak(u); }
 }
-function felicitar(num,nombre){
+function felicitar(num){
  sonido();
- let m=document.getElementById("msg"+num);
- m.innerHTML=`¡Gracias jefe Raudy! Lo estoy haciendo bien, te felicito a ti también 👏`;
- hablar(`Gracias jefe Raudy, lo estoy haciendo bien`);
+ document.getElementById("msg"+num).innerHTML="¡Gracias jefe Raudy! Lo estoy haciendo bien, te felicito a ti también 👏";
+ hablar("Gracias jefe Raudy, lo estoy haciendo bien");
  document.getElementById("luz"+num).style.background="#00FF88";
- document.getElementById("luz"+num).style.boxShadow="0 0 20px #00FF88";
 }
-function darEstrella(num,nombre){
+function darEstrella(num){
  sonido(); sonido();
  estrellas[num]++;
  document.getElementById("est"+num).innerHTML="⭐".repeat(estrellas[num]);
- let m=document.getElementById("msg"+num);
- m.innerHTML=`¡WOW! ¡Me mandaste una estrella! ¡Gracias jefe! ⭐ ¡Voy a trabajar más fuerte!`;
- hablar(`Gracias jefe, me mandaste una estrella`);
+ document.getElementById("msg"+num).innerHTML="¡WOW! ¡Me mandaste una estrella! ¡Gracias jefe! ⭐ ¡Voy a trabajar más fuerte!";
+ hablar("Gracias jefe, me mandaste una estrella");
 }
 let maestroEstrellasCount=5;
 function felicitarMaestro(){
@@ -217,12 +184,7 @@ function estrellaMaestro(){
 }
 function hablarBroker(){
  sonido();
- let msgs=[
-  "Jefe, el Maestro 40 dice que esperes, el ORO está en zona caliente.",
-  "Jefe, los robots dicen COMPRA en NVDA, pero con cuidado.",
-  "Jefe, yo como tu Broker te digo: no entres sin confirmación del Maestro.",
-  "Jefe, hoy hay mucha fuerza en TESLA, los robots están buscando información."
- ];
+ let msgs=["Jefe, el Maestro 40 dice que esperes, el ORO está en zona caliente.","Jefe, los robots dicen COMPRA en NVDA, pero con cuidado.","Jefe, yo como tu Broker te digo: no entres sin confirmación del Maestro.","Jefe, hoy hay mucha fuerza en TESLA, los robots están buscando información."];
  let msg=msgs[Math.floor(Math.random()*msgs.length)];
  document.getElementById("brokerMsg").innerHTML=msg;
  hablar(msg);
@@ -234,8 +196,8 @@ function analizarTodo(){
  let botin=(parseFloat(entrada)*1.02).toFixed(2);
  let salida=(parseFloat(entrada)*0.99).toFixed(2);
  let senal=esCompra?"COMPRA DIOS 🟢":"VENTA DIOS 🔴";
- document.getElementById("maestroMsg").innerHTML=`He analizado ${activo}. Mis 39 robots buscaron información. Decisión: <b>${senal}</b><br>ENTRADA: $${entrada} | BOTÍN: $${botin} | SALIDA: $${salida}`;
- hablar(`He analizado ${activo}, decisión ${senal}`);
+ document.getElementById("maestroMsg").innerHTML="He analizado "+activo+". Mis 39 robots buscaron información. Decisión: <b>"+senal+"</b><br>ENTRADA: $"+entrada+" | BOTÍN: $"+botin+" | SALIDA: $"+salida;
+ hablar("He analizado "+activo+", decisión "+senal);
  robots.slice(0,39).forEach(r=>{
   let num=r[0];
   let el=document.getElementById("msg"+num);
@@ -245,9 +207,9 @@ function analizarTodo(){
   let frasesVenta=["Busqué noticias, veo VENTA 🔴","Analicé, hay fuerza de venta","Mi poder dice VENTA"];
   el.innerHTML=esCompra?frasesCompra[Math.floor(Math.random()*3)]:frasesVenta[Math.floor(Math.random()*3)];
   luz.style.background=esCompra?"#00FF88":"#FF4444";
-  luz.style.boxShadow=`0 0 15px ${esCompra?"#00FF88":"#FF4444"}`;
+  luz.style.boxShadow="0 0 15px "+(esCompra?"#00FF88":"#FF4444");
  });
- document.getElementById("brokerMsg").innerHTML=`Jefe, ya analicé ${activo}. El Maestro dice ${senal}. ENTRADA $${entrada}, BOTÍN $${botin}. Yo te recomiendo esperar confirmación.`;
+ document.getElementById("brokerMsg").innerHTML="Jefe, ya analicé "+activo+". El Maestro dice "+senal+". ENTRADA $"+entrada+", BOTÍN $"+botin+". Yo te recomiendo esperar confirmación.";
 }
 setInterval(()=>{
  let d=new Date();
@@ -260,3 +222,11 @@ analizarTodo();
 </script>
 </body>
 </html>
+"""
+
+@app.route("/")
+def home():
+    return HTML
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
