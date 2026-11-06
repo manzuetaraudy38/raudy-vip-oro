@@ -2,9 +2,6 @@ from flask import Flask, jsonify
 import requests
 app = Flask(__name__)
 
-# ===== NO BORRÉ NADA - SOLO AGREGADO POR RAUDY =====
-# ===== SATELITE + BUSCADOR + MOTOR + ORIGEN + TODOS LOS ROBOTS CONECTADOS =====
-
 def get_precio_yahoo(symbol, fallback):
     try:
         url = f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}'
@@ -16,7 +13,6 @@ def get_precio_yahoo(symbol, fallback):
         return fallback
 
 def motor_fuerza_total(precio, simbolo):
-    # MOTOR ULTRA FUERZA 200% - RAUDY - NO BORRA NADA
     if simbolo == "ORO":
         if precio <= 3910 or precio >= 3970:
             return "🔥🔥🔥🔥🔥 FUERZA TOTAL ULTRA 200% - DIOS - SATELITE ACTIVO"
@@ -43,10 +39,7 @@ def buscador_nada_se_escape(datos):
     return "🔍 BUSCADOR ENCONTRÓ: " + " | ".join(encontrados)
 
 def conectar_todos_los_robots(datos):
-    # ===== CABLE QUE CONECTA LOS 40 ROBOTS A LA BOLSA USA =====
-    # Cada robot tiene su zona, pero TODOS leen el mismo precio real de USA
     robots_conectados = {}
-    # ZONAS REALES - DE DONDE SALE TODO
     zonas = {
         "ORO": {"compra": 3910, "venta": 3970, "fuente": "gold-api.com + Yahoo USA GC=F"},
         "NVDA": {"compra": 180, "venta": 195, "fuente": "Yahoo USA - NASDAQ"},
@@ -68,6 +61,34 @@ def conectar_todos_los_robots(datos):
                 robots_conectados[simbolo] = {"senal": "ESPERA", "precio": precio, "fuente": z["fuente"]}
     return robots_conectados
 
+# ===== ROBOT SHORTS SOLO - RAUDY VIP =====
+def generar_shorts(datos, robots):
+    shorts_listos = []
+    for simbolo, info in robots.items():
+        senal = info["senal"]
+        precio = info["precio"]
+        if senal == "COMPRA":
+            shorts_listos.append({
+                "simbolo": simbolo,
+                "senal": "COMPRA DIOS",
+                "precio": precio,
+                "titulo": f"RAUDY VIP {simbolo} COMPRA DIOS 🟢 ${precio} #shorts",
+                "guion": f"Jefe, atencion. {simbolo} esta en COMPRA DIOS en {precio}. Los 40 robots dicen COMPRA. No es consejo financiero, es educacion. Sigue a RAUDY VIP en YouTube @RaudyGoldVIP",
+                "hashtags": "#raudyvip #shorts #trading #oro #acciones",
+                "canal": "https://youtube.com/@raudygoldvip?si=qT6Dsx-iZpTDPh2P"
+            })
+        elif senal == "VENTA":
+            shorts_listos.append({
+                "simbolo": simbolo,
+                "senal": "VENTA DIOS",
+                "precio": precio,
+                "titulo": f"RAUDY VIP {simbolo} VENTA DIOS 🔴 ${precio} #shorts",
+                "guion": f"Jefe, atencion. {simbolo} esta en VENTA DIOS en {precio}. Los 40 robots dicen VENTA, se espera. No entres. Sigue a RAUDY VIP en YouTube @RaudyGoldVIP",
+                "hashtags": "#raudyvip #shorts #trading #oro #acciones",
+                "canal": "https://youtube.com/@raudygoldvip?si=qT6Dsx-iZpTDPh2P"
+            })
+    return shorts_listos
+
 HTML = """<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -82,7 +103,7 @@ header h1{margin:0;font-size:22px}
 header p{margin:5px 0;font-weight:bold}
 .top-btns{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;padding:10px;background:#111}
 .top-btns a{padding:12px 16px;border-radius:25px;text-decoration:none;font-weight:bold;color:white;font-size:14px}
-.wa{background:#25D366}.tg{background:#0088cc}.ig{background:#E1306C}.pay{background:#FFD700;color:black!important}
+.wa{background:#25D366}.tg{background:#0088cc}.ig{background:#E1306C}.pay{background:#FFD700;color:black!important}.yt{background:#FF0000}
 .clock{background:#111;padding:10px;border:2px solid #FFD700;margin:10px;border-radius:15px}
 .clock b{color:#FFD700;font-size:20px}
 .maestro{background:linear-gradient(180deg,#FFD700,#FF6B00);color:black;margin:10px;padding:18px;border-radius:20px;border:4px solid white;box-shadow:0 0 30px #FFD700}
@@ -113,6 +134,7 @@ header p{margin:5px 0;font-weight:bold}
 .buscadorbox{background:#0a2a00;margin:10px;padding:15px;border-radius:15px;border:2px solid #00FF88}
 .origen{font-size:11px;color:#aaa;background:#111;padding:8px;border-radius:10px;margin-top:8px;text-align:left}
 .conectado{background:#002a00;margin:10px;padding:12px;border-radius:15px;border:2px solid #00FF88}
+.shortsbox{background:#FF0000;margin:10px;padding:15px;border-radius:15px;border:2px solid white}
 </style>
 </head>
 <body>
@@ -126,9 +148,8 @@ header p{margin:5px 0;font-weight:bold}
 <a class="tg" href="https://t.me/raudy_vip_oro_bot" target="_blank">✈️ TELEGRAM @raudy_vip_oro_bot</a>
 <a class="ig" href="https://instagram.com/raudy_vip_oro_bot" target="_blank">📸 INSTAGRAM @raudy_vip_oro_bot</a>
 <a class="pay" href="https://paypal.me/RaudyManzueta/20" target="_blank">💰 PAGAR VIP $20</a>
+<a class="yt" href="https://youtube.com/@raudygoldvip?si=qT6Dsx-iZpTDPh2P" target="_blank">🔴 YOUTUBE RAUDY GOLD VIP</a>
 </div>
-
-<!-- ===== SATELITE USA - AGREGADO - NO BORRA NADA ===== -->
 <div class="satelite">
 <h2 style="color:#00FFFF;margin:0;">🛰️ SATÉLITE RAUDY - LLEGÓ A ESTADOS UNIDOS 🇺🇸</h2>
 <p style="font-size:14px;font-weight:bold;">Mirando WALL STREET - NEW YORK en vivo - NYSE + NASDAQ</p>
@@ -137,28 +158,28 @@ header p{margin:5px 0;font-weight:bold}
 <iframe src="https://www.google.com/maps?q=Wall+Street+New+York+USA&z=16&t=k&output=embed" width="100%" height="180" style="border:0;border-radius:10px;margin-top:8px;"></iframe>
 <div class="origen">📍 <b>SATÉLITE APUNTA A:</b> Wall Street, New York, USA - 40.7075° N, 74.0113° W<br>📍 <b>FUENTE BOLSA USA:</b> Yahoo Finance USA - query1.finance.yahoo.com - Precios reales de NYSE / NASDAQ</div>
 </div>
-
-<!-- ===== TODOS LOS ROBOTS CONECTADOS - NUEVO - NO BORRA NADA ===== -->
 <div class="conectado">
 <h2 style="color:#00FF88;margin:0;">🔌 TODOS LOS 40 ROBOTS CONECTADOS A LA BOLSA USA ✅</h2>
 <p id="conexion-texto" style="font-size:13px;font-weight:bold;">🔌 Conectando robots a Wall Street...</p>
 <p style="font-size:11px;color:#aaa;">Cada robot lee el mismo precio real de NYSE / NASDAQ - Ya no inventan</p>
 </div>
-
-<!-- ===== MOTOR FUERZA 200% - AGREGADO ===== -->
 <div class="motorbox">
 <h2 style="color:#FF4444;margin:0;">💪 MOTOR FUERZA TOTAL ULTRA 200% 🔥</h2>
 <p id="motor-texto" style="font-size:15px;font-weight:bold;">💪 MOTOR: Cargando fuerza...</p>
 <p style="font-size:12px;color:#aaa;">Motor vigilando ORO + ACCIONES USA con satélite</p>
 </div>
-
-<!-- ===== BUSCADOR QUE NADA SE ESCAPE - AGREGADO ===== -->
 <div class="buscadorbox">
 <h2 style="color:#00FF88;margin:0;">🔍 BUSCADOR RAUDY - NADA SE ESCAPA</h2>
 <p id="buscador-texto" style="font-size:13px;font-weight:bold;">🔍 Buscando en todo el mercado...</p>
 <p style="font-size:11px;color:#aaa;">Busca: ORO, NVDA, TESLA, APPLE, META, GOOGLE, AMAZON, MICROSOFT cada 15 segundos</p>
 </div>
-
+<div class="shortsbox">
+<h2 style="margin:0;">🎬 ROBOT SHORTS SOLO - YOUTUBE</h2>
+<p id="shorts-texto" style="font-size:13px;font-weight:bold;">Buscando COMPRA DIOS / VENTA DIOS para hacer Short...</p>
+<button onclick="verShorts()" style="padding:12px 20px;border:none;border-radius:20px;background:white;color:red;font-weight:bold;font-size:16px;cursor:pointer;">🎬 VER SHORTS LISTOS</button>
+<br><br><a href="https://youtube.com/@raudygoldvip?si=qT6Dsx-iZpTDPh2P" target="_blank" style="display:inline-block;padding:12px 20px;border-radius:20px;background:black;color:white;font-weight:bold;text-decoration:none;">🔴 IR A MI CANAL @RaudyGoldVIP</a>
+<p style="font-size:11px;">Si hay COMPRA DIOS o VENTA DIOS, crea titulo + guion solo. Si hay ESPERA, no sube nada.</p>
+</div>
 <div class="clock">SESION NEW YORK 🕐 <b id="reloj">--:--:--</b><br><span id="sesion">Buscando información...</span></div>
 <div class="acciones" id="acciones"></div>
 <div class="maestro">
@@ -179,15 +200,12 @@ header p{margin:5px 0;font-weight:bold}
 <h2>🤖 LOS 40 ROBOTS CON PODERES</h2>
 <p>Ellos buscan información, la analizan y te dicen COMPRA o VENTA solos.</p>
 <div class="grid" id="grid"></div>
-
-<!-- ===== ORIGEN DE PRECIOS - AGREGADO - NO BORRA NADA ===== -->
 <div style="background:#111;margin:10px;padding:15px;border-radius:15px;border:2px solid #FFD700;text-align:left;">
 <h3 style="color:#FFD700;margin:0;">📍 ¿DE DÓNDE SALE CADA PRECIO? - DIRECTO JEFE</h3>
 <p id="origen-precios" style="font-size:12px;line-height:1.6;">Cargando origen...</p>
 <p style="font-size:11px;color:#888;">Esto es para que tú sepas que no es inventado. Cada precio viene de USA.</p>
 </div>
-
-<div class="footer">RAUDY VIP © 2026 - Solo Robots Hacen Todo - WhatsApp 0767574050 - No es consejo financiero, es educación</div>
+<div class="footer">RAUDY VIP © 2026 - Solo Robots Hacen Todo - WhatsApp 0767574050 - YouTube @RaudyGoldVIP - No es consejo financiero, es educación</div>
 <script>
 const simbolos=[{id:"ORO",nombre:"ORO",precio:4088,emoji:"🥇"},{id:"NVDA",nombre:"NVIDIA",precio:185.20,emoji:"💚"},{id:"AAPL",nombre:"APPLE",precio:262.10,emoji:"🍎"},{id:"TSLA",nombre:"TESLA",precio:340.50,emoji:"🚗"},{id:"MSFT",nombre:"MICROSOFT",precio:495.30,emoji:"🪟"},{id:"AMZN",nombre:"AMAZON",precio:235.40,emoji:"📦"},{id:"META",nombre:"META",precio:645.20,emoji:"👍"},{id:"GOOGL",nombre:"GOOGLE",precio:282.10,emoji:"🔍"}];
 let activo="ORO";
@@ -302,11 +320,8 @@ function hablarBroker(){
  document.getElementById("brokerMsg").innerHTML=msg;
  hablar(msg);
 }
-
-// ===== AHORA SI - TODOS LOS ROBOTS CONECTADOS A LA BOLSA USA - NO BORRE NADA =====
 async function analizarTodo(){
  sonido();
- // 1. PEDIR PRECIO REAL A BOLSA USA - ESTE ES EL CABLE
  let datos = datosRealesGlobal;
  if(!datos){
    try{
@@ -316,7 +331,6 @@ async function analizarTodo(){
    }catch(e){ datos = null; }
  }
  let precioReal = datos && datos[activo] ? datos[activo] : simbolos.find(s=>s.id===activo).precio;
- // 2. DECISION REAL POR ZONAS, NO POR SUERTE
  let senalTexto = "ESPERA 🟡";
  let esCompra = false; let esVenta = false;
  if(activo==="ORO"){ if(precioReal<=3910){senalTexto="COMPRA DIOS 🟢"; esCompra=true;} else if(precioReal>=3970){senalTexto="VENTA DIOS 🔴"; esVenta=true;} }
@@ -328,18 +342,19 @@ async function analizarTodo(){
  else if(activo==="META"){ if(precioReal<=640){senalTexto="COMPRA DIOS 🟢"; esCompra=true;} else if(precioReal>=660){senalTexto="VENTA DIOS 🔴"; esVenta=true;} }
  else if(activo==="GOOGL"){ if(precioReal<=280){senalTexto="COMPRA DIOS 🟢"; esCompra=true;} else if(precioReal>=292){senalTexto="VENTA DIOS 🔴"; esVenta=true;} }
  let entrada = precioReal.toFixed(2);
- let botin = (precioReal*1.02).toFixed(2);
- let salida = (precioReal*0.99).toFixed(2);
+ let botin, salida;
+ if(esCompra){ botin = (precioReal*1.02).toFixed(2); salida = (precioReal*0.99).toFixed(2); }
+ else if(esVenta){ botin = (precioReal*0.98).toFixed(2); salida = (precioReal*1.01).toFixed(2); }
+ else { botin = entrada; salida = entrada; }
  let origen = activo==="ORO" ? "gold-api.com + Yahoo USA (GC=F)" : "Yahoo Finance USA - NYSE / NASDAQ";
  document.getElementById("maestroMsg").innerHTML="He analizado "+activo+" con PRECIO REAL de BOLSA USA. Los 40 robots están CONECTADOS. Decisión: <b>"+senalTexto+"</b><br>ENTRADA: $"+entrada+" | BOTÍN: $"+botin+" | SALIDA: $"+salida+"<br>📍 Fuente: "+origen;
  hablar("He analizado "+activo+" con precio real de bolsa USA, decisión "+senalTexto);
- // 3. CADA ROBOT HABLA CON EL MISMO PRECIO REAL
  robots.slice(0,39).forEach(r=>{
-  let num=r[0];
+  let num=r[0]; let funcion=r[3];
   let el=document.getElementById("msg"+num);
   let luz=document.getElementById("luz"+num);
   if(!el) return;
-  let texto = "🔌 Conectado a BOLSA USA ✅ - "+activo+" $"+entrada+" - Fuente: "+origen+" - Veo "+senalTexto;
+  let texto = "🔌 "+funcion+" - "+activo+" $"+entrada+" - Fuente: "+origen+" - Veo "+senalTexto;
   el.innerHTML = texto;
   let col = esCompra ? "#00FF88" : (esVenta ? "#FF4444" : "#FFD700");
   luz.style.background = col;
@@ -348,8 +363,6 @@ async function analizarTodo(){
  document.getElementById("brokerMsg").innerHTML="Jefe, ya analicé "+activo+" con BOLSA USA REAL. El Maestro dice "+senalTexto+". ENTRADA $"+entrada+", BOTÍN $"+botin+". Fuente: "+origen+". Yo te recomiendo esperar confirmación.";
  document.getElementById("conexion-texto").innerHTML="🔌 40/40 ROBOTS CONECTADOS ✅ - "+activo+" $"+entrada+" - Fuente: "+origen+" - Actualizado ahora";
 }
-
-// ===== NUEVO: SATELITE + BUSCADOR + MOTOR + ORIGEN - NO BORRA NADA =====
 async function actualizarSateliteUSA(){
   try{
     let r = await fetch('/api/satelite_usa?v='+Date.now());
@@ -359,7 +372,7 @@ async function actualizarSateliteUSA(){
     document.getElementById("satelite-usa").innerHTML = "🇺🇸 Wall Street: ORO $" + d.ORO + " | NVDA $" + d.NVDA + " | TESLA $" + d.TSLA + " | APPLE $" + d.AAPL;
     document.getElementById("motor-texto").innerHTML = "💪 MOTOR: " + d.motor + " | " + d.velocidad;
     document.getElementById("buscador-texto").innerHTML = d.buscador;
-    document.getElementById("conexion-texto").innerHTML = "🔌 40/40 ROBOTS CONECTADOS ✅ - ORO $"+d.ORO+" - Fuente: Yahoo USA + gold-api - Señales: "+JSON.stringify(d.robots_conectados);
+    document.getElementById("conexion-texto").innerHTML = "🔌 40/40 ROBOTS CONECTADOS ✅ - ORO $"+d.ORO+" - Fuente: Yahoo USA + gold-api";
     document.getElementById("origen-precios").innerHTML =
       "🥇 <b>ORO $" + d.ORO + "</b> → Viene de: <b>gold-api.com</b> + Yahoo Finance USA (GC=F) - Señal: "+d.robots_conectados.ORO.senal+"<br>" +
       "💚 <b>NVDA $" + d.NVDA + "</b> → Viene de: <b>Yahoo Finance USA - NASDAQ</b> - Señal: "+d.robots_conectados.NVDA.senal+"<br>" +
@@ -376,9 +389,23 @@ async function actualizarSateliteUSA(){
     document.getElementById("satelite-texto").innerHTML = "🛰️ Satélite buscando USA... Reintentando";
   }
 }
+async function verShorts(){
+  try{
+    let r = await fetch('/api/shorts?v='+Date.now());
+    let d = await r.json();
+    if(d.total == 0){
+      document.getElementById("shorts-texto").innerHTML = "🟡 Hoy no hay COMPRA DIOS ni VENTA DIOS. Robot de Shorts en ESPERA, no sube nada.";
+    } else {
+      let txt = "🎬 TENGO " + d.total + " SHORTS LISTOS: ";
+      d.shorts_listos.forEach(s => { txt += " | " + s.titulo + " - GUION: " + s.guion; });
+      document.getElementById("shorts-texto").innerHTML = txt;
+    }
+  }catch(e){
+    document.getElementById("shorts-texto").innerHTML = "🎬 Robot Shorts cargando...";
+  }
+}
 setInterval(actualizarSateliteUSA, 15000);
 actualizarSateliteUSA();
-
 setInterval(()=>{
  let d=new Date();
  document.getElementById("reloj").innerHTML=d.toLocaleTimeString("es-ES");
@@ -387,6 +414,8 @@ setInterval(()=>{
 },1000);
 setInterval(analizarTodo,30000);
 analizarTodo();
+setInterval(verShorts, 60000);
+verShorts();
 </script>
 </body>
 </html>
@@ -398,7 +427,6 @@ def home():
 
 @app.route("/api/satelite_usa")
 def satelite_usa():
-    # SATELITE USA - Precios reales de USA - TODOS LOS ROBOTS CONECTADOS AQUI
     try:
         r = requests.get('https://api.gold-api.com/price/XAU', timeout=4)
         oro = float(r.json().get('price', 4088))
@@ -428,6 +456,27 @@ def satelite_usa():
         "origen_oro": "gold-api.com + Yahoo Finance USA",
         "origen_acciones": "Yahoo Finance USA - NYSE / NASDAQ"
     })
+
+@app.route("/api/shorts")
+def api_shorts():
+    try:
+        r_oro = requests.get('https://api.gold-api.com/price/XAU', timeout=4)
+        oro = float(r_oro.json().get('price', 4088))
+    except:
+        oro = get_precio_yahoo('GC=F', 4088)
+    datos = {
+        "ORO": oro,
+        "NVDA": get_precio_yahoo('NVDA', 185.20),
+        "AAPL": get_precio_yahoo('AAPL', 262.10),
+        "TSLA": get_precio_yahoo('TSLA', 340.50),
+        "MSFT": get_precio_yahoo('MSFT', 495.30),
+        "AMZN": get_precio_yahoo('AMZN', 235.40),
+        "META": get_precio_yahoo('META', 645.20),
+        "GOOGL": get_precio_yahoo('GOOGL', 282.10),
+    }
+    robots = conectar_todos_los_robots(datos)
+    shorts = generar_shorts(datos, robots)
+    return jsonify({"shorts_listos": shorts, "total": len(shorts)})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
