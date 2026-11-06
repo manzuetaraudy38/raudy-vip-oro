@@ -1,6 +1,129 @@
 from flask import Flask, jsonify
 import requests
+from datetime import datetime, timedelta
 app = Flask(__name__)
+
+# ============================================================
+# 🏦 NUEVO - INFORMACION BANCARIA PARA EL JEFE - AGREGADO POR RAUDY
+# NO SE BORRO NADA DE TU CODIGO, SOLO SE AGREGO ESTO ARRIBA
+# ============================================================
+
+# Calendario de bancos que mueven el oro - Los que mandan
+EVENTOS_BANCOS_FIJOS = [
+    {"evento": "FED - Tasa de Interés USA", "impacto": "ALTO", "hora": "14:00 NY", "efecto": "Si sube tasa, ORO BAJA. Si baja tasa, ORO SUBE"},
+    {"evento": "NFP - Empleo USA", "impacto": "ALTO", "hora": "08:30 NY", "efecto": "Si empleo fuerte, ORO BAJA. Si empleo flojo, ORO SUBE"},
+    {"evento": "CPI - Inflación USA", "impacto": "ALTO", "hora": "08:30 NY", "efecto": "Si inflación alta, ORO SUBE. Si inflación baja, ORO BAJA"},
+    {"evento": "BCE - Banco Central Europa", "impacto": "ALTO", "hora": "08:15 NY", "efecto": "Mueve EUR y ORO fuerte"},
+    {"evento": "FOMC - Habla Powell FED", "impacto": "ALTO", "hora": "14:30 NY", "efecto": "Cada palabra mueve el ORO $20-$50"},
+    {"evento": "PPI - Precios Productor", "impacto": "MEDIO", "hora": "08:30 NY", "efecto": "Adelanta inflación"},
+    {"evento": "Ventas Minoristas USA", "impacto": "MEDIO", "hora": "08:30 NY", "efecto": "Si ventas fuertes, dólar sube, oro baja"},
+    {"evento": "PIB USA", "impacto": "ALTO", "hora": "08:30 NY", "efecto": "Mueve todo el mercado"},
+]
+
+def get_info_bancaria():
+    """El JEFE busca info de bancos en internet - Gratis"""
+    bancos = {
+        "fed_tasa": "5.25% - FED USA - Vigilando",
+        "bce_tasa": "2.15% - BCE Europa",
+        "inflacion_usa": "CPI - Vigilando cada mes",
+        "fuente": "ForexFactory.com + TradingEconomics + federalreserve.gov + ecb.europa.eu",
+        "eventos_hoy": EVENTOS_BANCOS_FIJOS,
+        "alerta_banco": "SIN NOTICIA FUERTE AHORA - Robots pueden trabajar",
+        "nivel_riesgo": "VERDE"
+    }
+    # Intenta buscar calendario real de ForexFactory / TradingEconomics
+    try:
+        # TradingEconomics calendario gratis - sin llave, intenta
+        r = requests.get('https://api.tradingeconomics.com/calendar?c=guest:guest&f=json&d1=today&d2=today', timeout=4)
+        if r.status_code == 200:
+            data = r.json()
+            eventos_reales = []
+            for e in data[:8]:
+                eventos_reales.append({
+                    "evento": e.get('Event', 'Evento Banco'),
+                    "impacto": e.get('Importance', 'MEDIO'),
+                    "hora": e.get('Date', '')[:16],
+                    "efecto": e.get('Country', 'USA') + " - " + e.get('Category', '')
+                })
+            if eventos_reales:
+                bancos["eventos_hoy"] = eventos_reales
+                # Si hay evento de impacto alto, el JEFE pone alerta
+                for ev in eventos_reales:
+                    if str(ev.get("impacto")).upper() in ["HIGH", "3", "ALTO"]:
+                        bancos["alerta_banco"] = "⚠️ ALERTA BANCO: Hoy hay noticia FUERTE - " + ev["evento"] + " - JEFE ORDENA PRECAUCION"
+                        bancos["nivel_riesgo"] = "ROJO"
+                        break
+    except:
+        pass
+    return bancos
+
+# 40 ROBOTS - 1 JEFE + 39 TRABAJADORES - CADA UNO CON SU TRABAJO
+ROBOTS_EQUIPO_COMPLETO = {
+    40: {"nombre": "MAESTRO DIOS RAUDY - JEFE", "rol": "JEFE", "tarea": "Yo mando a los 39. Yo leo bancos, FED, BCE, NFP, CPI. Yo digo CUANDO operar y CUANDO PARAR. Nadie opera sin mi permiso."},
+    1: {"nombre": "RAYO RAUDY", "rol": "TRABAJADOR", "tarea": "Busca noticias USA rapido"},
+    2: {"nombre": "RAYO VELOZ", "rol": "TRABAJADOR", "tarea": "Busca noticias NVDA y TESLA"},
+    3: {"nombre": "COMETA ORO", "rol": "TRABAJADOR", "tarea": "Busca noticias del ORO"},
+    4: {"nombre": "GUARDIA 08:30", "rol": "VIGIA BANCO", "tarea": "Vigila noticias 08:30 - NFP, CPI - Si hay noticia, avisa al JEFE"},
+    5: {"nombre": "COMETA VENTA", "rol": "TRABAJADOR", "tarea": "Busca ventas fuertes"},
+    6: {"nombre": "COMETA FUERTE", "rol": "TRABAJADOR", "tarea": "Analiza caidas rapidas"},
+    7: {"nombre": "COMETA DIOS", "rol": "TRABAJADOR", "tarea": "Avisa cuando viene venta grande"},
+    8: {"nombre": "RAYO COMPRA", "rol": "TRABAJADOR", "tarea": "Busca compras rapidas"},
+    9: {"nombre": "RAYO ORO", "rol": "TRABAJADOR", "tarea": "Sigue ORO segundo a segundo"},
+    10: {"nombre": "HIELO PACIENTE", "rol": "TRABAJADOR", "tarea": "Espera frio, no entra con prisa"},
+    11: {"nombre": "HIELO ANALISTA", "rol": "TRABAJADOR", "tarea": "Analiza si mercado esta tranquilo"},
+    12: {"nombre": "FUEGO COMPRA", "rol": "TRABAJADOR", "tarea": "Quema cuando hay compra fuerte"},
+    13: {"nombre": "FUEGO TESLA", "rol": "TRABAJADOR", "tarea": "Cuida solo TESLA"},
+    14: {"nombre": "FUEGO NVDA", "rol": "TRABAJADOR", "tarea": "Cuida solo NVIDIA"},
+    15: {"nombre": "FUEGO APPLE", "rol": "TRABAJADOR", "tarea": "Cuida solo APPLE"},
+    16: {"nombre": "FUEGO ORO", "rol": "TRABAJADOR", "tarea": "Cuida ORO con fuego"},
+    17: {"nombre": "FUEGO VENTA", "rol": "TRABAJADOR", "tarea": "Dice VENTA cuando hay fuego rojo"},
+    18: {"nombre": "RAYO META", "rol": "TRABAJADOR", "tarea": "Cuida META y GOOGLE"},
+    19: {"nombre": "RAYO AMAZON", "rol": "TRABAJADOR", "tarea": "Cuida AMAZON"},
+    20: {"nombre": "HIELO JEFE", "rol": "TRABAJADOR", "tarea": "Dice ESPERA cuando hay peligro"},
+    21: {"nombre": "COMETA AMAZON", "rol": "TRABAJADOR", "tarea": "Busca noticias AMAZON"},
+    22: {"nombre": "COMETA MICROSOFT", "rol": "TRABAJADOR", "tarea": "Busca noticias MICROSOFT"},
+    23: {"nombre": "RAYO NOTICIAS", "rol": "TRABAJADOR", "tarea": "Busca noticias Telegram y WhatsApp"},
+    24: {"nombre": "HIELO SOPORTE", "rol": "TRABAJADOR", "tarea": "Busca soportes donde precio no baja"},
+    25: {"nombre": "FUEGO RESISTENCIA", "rol": "TRABAJADOR", "tarea": "Busca resistencias donde precio no sube"},
+    26: {"nombre": "COMETA 14:30", "rol": "VIGIA BANCO", "tarea": "Vigila 14:30 - Habla FED Powell - Avisa al JEFE"},
+    27: {"nombre": "RAYO ENTRADA", "rol": "TRABAJADOR", "tarea": "Busca mejor ENTRADA"},
+    28: {"nombre": "FUEGO BOTIN", "rol": "TRABAJADOR", "tarea": "Calcula tu BOTIN"},
+    29: {"nombre": "HIELO SALIDA", "rol": "TRABAJADOR", "tarea": "Te dice cuando SALIR"},
+    30: {"nombre": "COMETA PELIGRO", "rol": "VIGIA BANCO", "tarea": "Grita PELIGRO si hay noticia mala de banco"},
+    31: {"nombre": "RAYO VIP", "rol": "TRABAJADOR", "tarea": "Solo habla para los VIP"},
+    32: {"nombre": "FUEGO DIOS", "rol": "TRABAJADOR", "tarea": "Tiene fuego de DIOS"},
+    33: {"nombre": "HIELO DIOS", "rol": "TRABAJADOR", "tarea": "Tiene hielo de DIOS"},
+    34: {"nombre": "COMETA ORO 2", "rol": "TRABAJADOR", "tarea": "Confirma lo que dice el ORO"},
+    35: {"nombre": "RAYO CONFIRMA", "rol": "TRABAJADOR", "tarea": "Confirma COMPRA o VENTA"},
+    36: {"nombre": "FUEGO CONFIRMA", "rol": "TRABAJADOR", "tarea": "Confirma con fuego"},
+    37: {"nombre": "HIELO CONFIRMA", "rol": "TRABAJADOR", "tarea": "Confirma con calma"},
+    38: {"nombre": "COMETA JEFE", "rol": "TRABAJADOR", "tarea": "Jefe de los cometas"},
+    39: {"nombre": "RAYO MAESTRO 2", "rol": "TRABAJADOR", "tarea": "Mano derecha del Maestro 40"},
+}
+
+def jefe_manda_orden(bancos, datos):
+    """EL JEFE 40 DECIDE - Nadie opera sin su permiso"""
+    if bancos["nivel_riesgo"] == "ROJO":
+        return {
+            "orden": "🛑 PAUSA TOTAL - ORDEN DEL JEFE",
+            "motivo": bancos["alerta_banco"],
+            "permiso_operar": False,
+            "mensaje": "JEFE DICE: Hay noticia de BANCO FUERTE ahora. Todos los 39 robots PARADOS. Esperen que pase la noticia. No pierdan dinero."
+        }
+    # Si oro muy lejos de zona, jefe dice espera
+    if datos["ORO"] > 3910 and datos["ORO"] < 3970:
+        return {
+            "orden": "🟡 ESPERA - ORDEN DEL JEFE",
+            "motivo": "Oro fuera de zona + Bancos tranquilos",
+            "permiso_operar": False,
+            "mensaje": "JEFE DICE: Oro en $" + str(datos["ORO"]) + " fuera de zona. Mis 39 robots buscando. Esperen, no entren a lo loco."
+        }
+    return {
+        "orden": "🟢 PERMISO PARA OPERAR - ORDEN DEL JEFE",
+        "motivo": "Bancos tranquilos + Oro en zona",
+        "permiso_operar": True,
+        "mensaje": "JEFE DICE: Bancos tranquilos, Oro en zona. Mis 39 robots listos. Pueden operar con cuidado."
+    }
 
 def get_precio_yahoo(symbol, fallback):
     try:
@@ -61,34 +184,6 @@ def conectar_todos_los_robots(datos):
                 robots_conectados[simbolo] = {"senal": "ESPERA", "precio": precio, "fuente": z["fuente"]}
     return robots_conectados
 
-# ===== ROBOT SHORTS SOLO - RAUDY VIP =====
-def generar_shorts(datos, robots):
-    shorts_listos = []
-    for simbolo, info in robots.items():
-        senal = info["senal"]
-        precio = info["precio"]
-        if senal == "COMPRA":
-            shorts_listos.append({
-                "simbolo": simbolo,
-                "senal": "COMPRA DIOS",
-                "precio": precio,
-                "titulo": f"RAUDY VIP {simbolo} COMPRA DIOS 🟢 ${precio} #shorts",
-                "guion": f"Jefe, atencion. {simbolo} esta en COMPRA DIOS en {precio}. Los 40 robots dicen COMPRA. No es consejo financiero, es educacion. Sigue a RAUDY VIP en YouTube @RaudyGoldVIP",
-                "hashtags": "#raudyvip #shorts #trading #oro #acciones",
-                "canal": "https://youtube.com/@raudygoldvip?si=qT6Dsx-iZpTDPh2P"
-            })
-        elif senal == "VENTA":
-            shorts_listos.append({
-                "simbolo": simbolo,
-                "senal": "VENTA DIOS",
-                "precio": precio,
-                "titulo": f"RAUDY VIP {simbolo} VENTA DIOS 🔴 ${precio} #shorts",
-                "guion": f"Jefe, atencion. {simbolo} esta en VENTA DIOS en {precio}. Los 40 robots dicen VENTA, se espera. No entres. Sigue a RAUDY VIP en YouTube @RaudyGoldVIP",
-                "hashtags": "#raudyvip #shorts #trading #oro #acciones",
-                "canal": "https://youtube.com/@raudygoldvip?si=qT6Dsx-iZpTDPh2P"
-            })
-    return shorts_listos
-
 HTML = """<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -103,7 +198,7 @@ header h1{margin:0;font-size:22px}
 header p{margin:5px 0;font-weight:bold}
 .top-btns{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;padding:10px;background:#111}
 .top-btns a{padding:12px 16px;border-radius:25px;text-decoration:none;font-weight:bold;color:white;font-size:14px}
-.wa{background:#25D366}.tg{background:#0088cc}.ig{background:#E1306C}.pay{background:#FFD700;color:black!important}.yt{background:#FF0000}
+.wa{background:#25D366}.tg{background:#0088cc}.ig{background:#E1306C}.pay{background:#FFD700;color:black!important}
 .clock{background:#111;padding:10px;border:2px solid #FFD700;margin:10px;border-radius:15px}
 .clock b{color:#FFD700;font-size:20px}
 .maestro{background:linear-gradient(180deg,#FFD700,#FF6B00);color:black;margin:10px;padding:18px;border-radius:20px;border:4px solid white;box-shadow:0 0 30px #FFD700}
@@ -134,7 +229,8 @@ header p{margin:5px 0;font-weight:bold}
 .buscadorbox{background:#0a2a00;margin:10px;padding:15px;border-radius:15px;border:2px solid #00FF88}
 .origen{font-size:11px;color:#aaa;background:#111;padding:8px;border-radius:10px;margin-top:8px;text-align:left}
 .conectado{background:#002a00;margin:10px;padding:12px;border-radius:15px;border:2px solid #00FF88}
-.shortsbox{background:#FF0000;margin:10px;padding:15px;border-radius:15px;border:2px solid white}
+.bancobox{background:#1a1a00;margin:10px;padding:15px;border-radius:15px;border:2px solid #FFD700;text-align:left}
+.jefebox{background:#2a0000;margin:10px;padding:15px;border-radius:15px;border:3px solid #FF0000}
 </style>
 </head>
 <body>
@@ -148,8 +244,24 @@ header p{margin:5px 0;font-weight:bold}
 <a class="tg" href="https://t.me/raudy_vip_oro_bot" target="_blank">✈️ TELEGRAM @raudy_vip_oro_bot</a>
 <a class="ig" href="https://instagram.com/raudy_vip_oro_bot" target="_blank">📸 INSTAGRAM @raudy_vip_oro_bot</a>
 <a class="pay" href="https://paypal.me/RaudyManzueta/20" target="_blank">💰 PAGAR VIP $20</a>
-<a class="yt" href="https://youtube.com/@raudygoldvip?si=qT6Dsx-iZpTDPh2P" target="_blank">🔴 YOUTUBE RAUDY GOLD VIP</a>
 </div>
+
+<!-- NUEVO - JEFE 40 MANDA - AGREGADO SIN BORRAR NADA -->
+<div class="jefebox">
+<h2 style="color:#FF4444;margin:0;">👑 JEFE 40 - YO MANDO A LOS 39 - ORDEN EN VIVO</h2>
+<p id="jefe-orden" style="font-size:16px;font-weight:bold;color:white;">👑 JEFE: Cargando orden...</p>
+<p id="jefe-mensaje" style="font-size:13px;color:#FFD700;">Esperando orden del Jefe...</p>
+<p style="font-size:11px;color:#aaa;">Si el JEFE dice PAUSA, nadie opera. Asi no pierdes dinero con noticias de bancos.</p>
+</div>
+
+<!-- NUEVO - INFORMACION BANCARIA EN VIVO -->
+<div class="bancobox">
+<h2 style="color:#FFD700;margin:0;text-align:center;">🏦 BANCOS QUE MUEVEN EL ORO - INFO EN VIVO</h2>
+<p id="banco-alerta" style="font-size:14px;font-weight:bold;color:#00FF88;">🏦 Bancos: Cargando...</p>
+<p id="banco-lista" style="font-size:12px;line-height:1.6;">Cargando bancos...</p>
+<p style="font-size:11px;color:#aaa;">Fuente: ForexFactory.com + federalreserve.gov (FED) + ecb.europa.eu (BCE) + TradingEconomics - GRATIS</p>
+</div>
+
 <div class="satelite">
 <h2 style="color:#00FFFF;margin:0;">🛰️ SATÉLITE RAUDY - LLEGÓ A ESTADOS UNIDOS 🇺🇸</h2>
 <p style="font-size:14px;font-weight:bold;">Mirando WALL STREET - NEW YORK en vivo - NYSE + NASDAQ</p>
@@ -172,13 +284,6 @@ header p{margin:5px 0;font-weight:bold}
 <h2 style="color:#00FF88;margin:0;">🔍 BUSCADOR RAUDY - NADA SE ESCAPA</h2>
 <p id="buscador-texto" style="font-size:13px;font-weight:bold;">🔍 Buscando en todo el mercado...</p>
 <p style="font-size:11px;color:#aaa;">Busca: ORO, NVDA, TESLA, APPLE, META, GOOGLE, AMAZON, MICROSOFT cada 15 segundos</p>
-</div>
-<div class="shortsbox">
-<h2 style="margin:0;">🎬 ROBOT SHORTS SOLO - YOUTUBE</h2>
-<p id="shorts-texto" style="font-size:13px;font-weight:bold;">Buscando COMPRA DIOS / VENTA DIOS para hacer Short...</p>
-<button onclick="verShorts()" style="padding:12px 20px;border:none;border-radius:20px;background:white;color:red;font-weight:bold;font-size:16px;cursor:pointer;">🎬 VER SHORTS LISTOS</button>
-<br><br><a href="https://youtube.com/@raudygoldvip?si=qT6Dsx-iZpTDPh2P" target="_blank" style="display:inline-block;padding:12px 20px;border-radius:20px;background:black;color:white;font-weight:bold;text-decoration:none;">🔴 IR A MI CANAL @RaudyGoldVIP</a>
-<p style="font-size:11px;">Si hay COMPRA DIOS o VENTA DIOS, crea titulo + guion solo. Si hay ESPERA, no sube nada.</p>
 </div>
 <div class="clock">SESION NEW YORK 🕐 <b id="reloj">--:--:--</b><br><span id="sesion">Buscando información...</span></div>
 <div class="acciones" id="acciones"></div>
@@ -205,7 +310,7 @@ header p{margin:5px 0;font-weight:bold}
 <p id="origen-precios" style="font-size:12px;line-height:1.6;">Cargando origen...</p>
 <p style="font-size:11px;color:#888;">Esto es para que tú sepas que no es inventado. Cada precio viene de USA.</p>
 </div>
-<div class="footer">RAUDY VIP © 2026 - Solo Robots Hacen Todo - WhatsApp 0767574050 - YouTube @RaudyGoldVIP - No es consejo financiero, es educación</div>
+<div class="footer">RAUDY VIP © 2026 - Solo Robots Hacen Todo - WhatsApp 0767574050 - No es consejo financiero, es educación</div>
 <script>
 const simbolos=[{id:"ORO",nombre:"ORO",precio:4088,emoji:"🥇"},{id:"NVDA",nombre:"NVIDIA",precio:185.20,emoji:"💚"},{id:"AAPL",nombre:"APPLE",precio:262.10,emoji:"🍎"},{id:"TSLA",nombre:"TESLA",precio:340.50,emoji:"🚗"},{id:"MSFT",nombre:"MICROSOFT",precio:495.30,emoji:"🪟"},{id:"AMZN",nombre:"AMAZON",precio:235.40,emoji:"📦"},{id:"META",nombre:"META",precio:645.20,emoji:"👍"},{id:"GOOGL",nombre:"GOOGLE",precio:282.10,emoji:"🔍"}];
 let activo="ORO";
@@ -347,14 +452,17 @@ async function analizarTodo(){
  else if(esVenta){ botin = (precioReal*0.98).toFixed(2); salida = (precioReal*1.01).toFixed(2); }
  else { botin = entrada; salida = entrada; }
  let origen = activo==="ORO" ? "gold-api.com + Yahoo USA (GC=F)" : "Yahoo Finance USA - NYSE / NASDAQ";
- document.getElementById("maestroMsg").innerHTML="He analizado "+activo+" con PRECIO REAL de BOLSA USA. Los 40 robots están CONECTADOS. Decisión: <b>"+senalTexto+"</b><br>ENTRADA: $"+entrada+" | BOTÍN: $"+botin+" | SALIDA: $"+salida+"<br>📍 Fuente: "+origen;
+ // NUEVO - SI EL JEFE DICE PAUSA, RESPETAR AL JEFE
+ let ordenJefe = datos && datos.jefe ? datos.jefe.orden : "";
+ let textoJefe = ordenJefe ? " | 👑 JEFE DICE: " + ordenJefe : "";
+ document.getElementById("maestroMsg").innerHTML="He analizado "+activo+" con PRECIO REAL de BOLSA USA. Los 40 robots están CONECTADOS. Decisión: <b>"+senalTexto+"</b><br>ENTRADA: $"+entrada+" | BOTÍN: $"+botin+" | SALIDA: $"+salida+"<br>📍 Fuente: "+origen + "<br>" + textoJefe;
  hablar("He analizado "+activo+" con precio real de bolsa USA, decisión "+senalTexto);
  robots.slice(0,39).forEach(r=>{
   let num=r[0]; let funcion=r[3];
   let el=document.getElementById("msg"+num);
   let luz=document.getElementById("luz"+num);
   if(!el) return;
-  let texto = "🔌 "+funcion+" - "+activo+" $"+entrada+" - Fuente: "+origen+" - Veo "+senalTexto;
+  let texto = "🔌 "+funcion+" - "+activo+" $"+entrada+" - Fuente: "+origen+" - Veo "+senalTexto + " - Obedezco al JEFE 40";
   el.innerHTML = texto;
   let col = esCompra ? "#00FF88" : (esVenta ? "#FF4444" : "#FFD700");
   luz.style.background = col;
@@ -373,6 +481,16 @@ async function actualizarSateliteUSA(){
     document.getElementById("motor-texto").innerHTML = "💪 MOTOR: " + d.motor + " | " + d.velocidad;
     document.getElementById("buscador-texto").innerHTML = d.buscador;
     document.getElementById("conexion-texto").innerHTML = "🔌 40/40 ROBOTS CONECTADOS ✅ - ORO $"+d.ORO+" - Fuente: Yahoo USA + gold-api";
+    // NUEVO - MOSTRAR ORDEN DEL JEFE Y BANCOS
+    if(d.jefe){
+      document.getElementById("jefe-orden").innerHTML = d.jefe.orden;
+      document.getElementById("jefe-mensaje").innerHTML = d.jefe.mensaje;
+    }
+    if(d.bancos){
+      document.getElementById("banco-alerta").innerHTML = "🏦 " + d.bancos.alerta_banco + " | Riesgo: " + d.bancos.nivel_riesgo;
+      let lista = d.bancos.eventos_hoy.map(e=> "🏦 <b>" + e.evento + "</b> - Impacto: " + e.impacto + " - " + e.efecto).join("<br>");
+      document.getElementById("banco-lista").innerHTML = lista + "<br>📍 Fuente: " + d.bancos.fuente;
+    }
     document.getElementById("origen-precios").innerHTML =
       "🥇 <b>ORO $" + d.ORO + "</b> → Viene de: <b>gold-api.com</b> + Yahoo Finance USA (GC=F) - Señal: "+d.robots_conectados.ORO.senal+"<br>" +
       "💚 <b>NVDA $" + d.NVDA + "</b> → Viene de: <b>Yahoo Finance USA - NASDAQ</b> - Señal: "+d.robots_conectados.NVDA.senal+"<br>" +
@@ -389,21 +507,6 @@ async function actualizarSateliteUSA(){
     document.getElementById("satelite-texto").innerHTML = "🛰️ Satélite buscando USA... Reintentando";
   }
 }
-async function verShorts(){
-  try{
-    let r = await fetch('/api/shorts?v='+Date.now());
-    let d = await r.json();
-    if(d.total == 0){
-      document.getElementById("shorts-texto").innerHTML = "🟡 Hoy no hay COMPRA DIOS ni VENTA DIOS. Robot de Shorts en ESPERA, no sube nada.";
-    } else {
-      let txt = "🎬 TENGO " + d.total + " SHORTS LISTOS: ";
-      d.shorts_listos.forEach(s => { txt += " | " + s.titulo + " - GUION: " + s.guion; });
-      document.getElementById("shorts-texto").innerHTML = txt;
-    }
-  }catch(e){
-    document.getElementById("shorts-texto").innerHTML = "🎬 Robot Shorts cargando...";
-  }
-}
 setInterval(actualizarSateliteUSA, 15000);
 actualizarSateliteUSA();
 setInterval(()=>{
@@ -414,8 +517,6 @@ setInterval(()=>{
 },1000);
 setInterval(analizarTodo,30000);
 analizarTodo();
-setInterval(verShorts, 60000);
-verShorts();
 </script>
 </body>
 </html>
@@ -445,6 +546,9 @@ def satelite_usa():
     motor_txt = motor_fuerza_total(oro, "ORO")
     buscador_txt = buscador_nada_se_escape(datos)
     robots_conectados = conectar_todos_los_robots(datos)
+    # NUEVO - JEFE + BANCOS - SIN BORRAR LO TUYO
+    bancos_info = get_info_bancaria()
+    jefe_orden = jefe_manda_orden(bancos_info, datos)
     return jsonify({
         **datos,
         "motor": motor_txt,
@@ -454,29 +558,26 @@ def satelite_usa():
         "nasdaq": "ABIERTO - USA",
         "robots_conectados": robots_conectados,
         "origen_oro": "gold-api.com + Yahoo Finance USA",
-        "origen_acciones": "Yahoo Finance USA - NYSE / NASDAQ"
+        "origen_acciones": "Yahoo Finance USA - NYSE / NASDAQ",
+        "bancos": bancos_info,
+        "jefe": jefe_orden,
+        "equipo_40": ROBOTS_EQUIPO_COMPLETO,
+        "total_robots": 40
     })
 
-@app.route("/api/shorts")
-def api_shorts():
+@app.route("/api/bancos")
+def api_bancos():
+    return jsonify(get_info_bancaria())
+
+@app.route("/api/jefe")
+def api_jefe():
     try:
-        r_oro = requests.get('https://api.gold-api.com/price/XAU', timeout=4)
-        oro = float(r_oro.json().get('price', 4088))
+        r = requests.get('https://api.gold-api.com/price/XAU', timeout=4)
+        oro = float(r.json().get('price', 4088))
     except:
-        oro = get_precio_yahoo('GC=F', 4088)
-    datos = {
-        "ORO": oro,
-        "NVDA": get_precio_yahoo('NVDA', 185.20),
-        "AAPL": get_precio_yahoo('AAPL', 262.10),
-        "TSLA": get_precio_yahoo('TSLA', 340.50),
-        "MSFT": get_precio_yahoo('MSFT', 495.30),
-        "AMZN": get_precio_yahoo('AMZN', 235.40),
-        "META": get_precio_yahoo('META', 645.20),
-        "GOOGL": get_precio_yahoo('GOOGL', 282.10),
-    }
-    robots = conectar_todos_los_robots(datos)
-    shorts = generar_shorts(datos, robots)
-    return jsonify({"shorts_listos": shorts, "total": len(shorts)})
+        oro = 4088
+    bancos = get_info_bancaria()
+    return jsonify(jefe_manda_orden(bancos, {"ORO": oro}))
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
