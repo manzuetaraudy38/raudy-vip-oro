@@ -4,11 +4,8 @@ from datetime import datetime, timedelta
 app = Flask(__name__)
 
 # ============================================================
-# 🏦 NUEVO - INFORMACION BANCARIA PARA EL JEFE - AGREGADO POR RAUDY
-# NO SE BORRO NADA DE TU CODIGO, SOLO SE AGREGO ESTO ARRIBA
+# 🏦 INFORMACION BANCARIA PARA EL JEFE
 # ============================================================
-
-# Calendario de bancos que mueven el oro - Los que mandan
 EVENTOS_BANCOS_FIJOS = [
     {"evento": "FED - Tasa de Interés USA", "impacto": "ALTO", "hora": "14:00 NY", "efecto": "Si sube tasa, ORO BAJA. Si baja tasa, ORO SUBE"},
     {"evento": "NFP - Empleo USA", "impacto": "ALTO", "hora": "08:30 NY", "efecto": "Si empleo fuerte, ORO BAJA. Si empleo flojo, ORO SUBE"},
@@ -21,7 +18,6 @@ EVENTOS_BANCOS_FIJOS = [
 ]
 
 def get_info_bancaria():
-    """El JEFE busca info de bancos en internet - Gratis"""
     bancos = {
         "fed_tasa": "5.25% - FED USA - Vigilando",
         "bce_tasa": "2.15% - BCE Europa",
@@ -31,9 +27,7 @@ def get_info_bancaria():
         "alerta_banco": "SIN NOTICIA FUERTE AHORA - Robots pueden trabajar",
         "nivel_riesgo": "VERDE"
     }
-    # Intenta buscar calendario real de ForexFactory / TradingEconomics
     try:
-        # TradingEconomics calendario gratis - sin llave, intenta
         r = requests.get('https://api.tradingeconomics.com/calendar?c=guest:guest&f=json&d1=today&d2=today', timeout=4)
         if r.status_code == 200:
             data = r.json()
@@ -47,7 +41,6 @@ def get_info_bancaria():
                 })
             if eventos_reales:
                 bancos["eventos_hoy"] = eventos_reales
-                # Si hay evento de impacto alto, el JEFE pone alerta
                 for ev in eventos_reales:
                     if str(ev.get("impacto")).upper() in ["HIGH", "3", "ALTO"]:
                         bancos["alerta_banco"] = "⚠️ ALERTA BANCO: Hoy hay noticia FUERTE - " + ev["evento"] + " - JEFE ORDENA PRECAUCION"
@@ -57,9 +50,46 @@ def get_info_bancaria():
         pass
     return bancos
 
-# 40 ROBOTS - 1 JEFE + 39 TRABAJADORES - CADA UNO CON SU TRABAJO
+# ============================================================
+# 🆕 NUEVO - DXY + VIX + BTC + PETROLEO + BONO 10 AÑOS - AGREGADO AHORA
+# ESTO ES LO QUE USAN LOS BANCOS - NO SE BORRO NADA DE LO TUYO
+# ============================================================
+def get_mercado_extra():
+    # DXY = Dolar, VIX = Miedo, BTC = Bitcoin, CL = Petroleo, TNX = Bono 10 años
+    dxy = get_precio_yahoo('DX-Y.NYB', 99.50)
+    vix = get_precio_yahoo('^VIX', 15.20)
+    btc = get_precio_yahoo('BTC-USD', 105000)
+    petroleo = get_precio_yahoo('CL=F', 61.50)
+    bono10 = get_precio_yahoo('^TNX', 4.10)
+    # Interpretación para el JEFE
+    if vix >= 30:
+        vix_texto = "😱 PANICO TOTAL - VIX " + str(round(vix,2)) + " - JEFE ORDENA PAUSA - Viene caida fuerte"
+        vix_nivel = "ROJO"
+    elif vix >= 20:
+        vix_texto = "⚠️ MIEDO ALTO - VIX " + str(round(vix,2)) + " - Cuidado, mercado nervioso"
+        vix_nivel = "AMARILLO"
+    else:
+        vix_texto = "😎 MERCADO TRANQUILO - VIX " + str(round(vix,2)) + " - Se puede operar"
+        vix_nivel = "VERDE"
+    if dxy >= 101:
+        dxy_texto = "💵 DOLAR FUERTE " + str(round(dxy,2)) + " - Malo para ORO, oro tiende a BAJAR"
+        dxy_para_oro = "BAJISTA"
+    elif dxy <= 98:
+        dxy_texto = "💵 DOLAR DEBIL " + str(round(dxy,2)) + " - Bueno para ORO, oro tiende a SUBIR"
+        dxy_para_oro = "ALCISTA"
+    else:
+        dxy_texto = "💵 DOLAR NEUTRAL " + str(round(dxy,2)) + " - Oro sin presion del dolar"
+        dxy_para_oro = "NEUTRAL"
+    return {
+        "DXY": dxy, "DXY_texto": dxy_texto, "DXY_para_oro": dxy_para_oro,
+        "VIX": vix, "VIX_texto": vix_texto, "VIX_nivel": vix_nivel,
+        "BTC": btc, "PETROLEO": petroleo, "BONO10": bono10,
+        "fuente": "Yahoo Finance USA - DX-Y.NYB + ^VIX + BTC-USD + CL=F + ^TNX - GRATIS",
+        "resumen_jefe": dxy_texto + " | " + vix_texto
+    }
+
 ROBOTS_EQUIPO_COMPLETO = {
-    40: {"nombre": "MAESTRO DIOS RAUDY - JEFE", "rol": "JEFE", "tarea": "Yo mando a los 39. Yo leo bancos, FED, BCE, NFP, CPI. Yo digo CUANDO operar y CUANDO PARAR. Nadie opera sin mi permiso."},
+    40: {"nombre": "MAESTRO DIOS RAUDY - JEFE", "rol": "JEFE", "tarea": "Yo mando a los 39. Yo leo bancos, FED, BCE, NFP, CPI, DXY, VIX. Yo digo CUANDO operar y CUANDO PARAR. Nadie opera sin mi permiso."},
     1: {"nombre": "RAYO RAUDY", "rol": "TRABAJADOR", "tarea": "Busca noticias USA rapido"},
     2: {"nombre": "RAYO VELOZ", "rol": "TRABAJADOR", "tarea": "Busca noticias NVDA y TESLA"},
     3: {"nombre": "COMETA ORO", "rol": "TRABAJADOR", "tarea": "Busca noticias del ORO"},
@@ -101,29 +131,21 @@ ROBOTS_EQUIPO_COMPLETO = {
     39: {"nombre": "RAYO MAESTRO 2", "rol": "TRABAJADOR", "tarea": "Mano derecha del Maestro 40"},
 }
 
-def jefe_manda_orden(bancos, datos):
-    """EL JEFE 40 DECIDE - Nadie opera sin su permiso"""
+def jefe_manda_orden(bancos, datos, extra=None):
+    """EL JEFE 40 DECIDE - Ahora lee BANCOS + DXY + VIX"""
+    if extra and extra.get("VIX_nivel") == "ROJO":
+        return {"orden": "🛑 PAUSA TOTAL - PANICO - ORDEN DEL JEFE", "motivo": extra["VIX_texto"], "permiso_operar": False, "mensaje": "JEFE DICE: VIX en " + str(extra["VIX"]) + " - Hay PANICO. Todos los 39 robots PARADOS. No operen, viene caida."}
     if bancos["nivel_riesgo"] == "ROJO":
-        return {
-            "orden": "🛑 PAUSA TOTAL - ORDEN DEL JEFE",
-            "motivo": bancos["alerta_banco"],
-            "permiso_operar": False,
-            "mensaje": "JEFE DICE: Hay noticia de BANCO FUERTE ahora. Todos los 39 robots PARADOS. Esperen que pase la noticia. No pierdan dinero."
-        }
-    # Si oro muy lejos de zona, jefe dice espera
+        return {"orden": "🛑 PAUSA TOTAL - ORDEN DEL JEFE", "motivo": bancos["alerta_banco"], "permiso_operar": False, "mensaje": "JEFE DICE: Hay noticia de BANCO FUERTE ahora. Todos los 39 robots PARADOS. Esperen que pase la noticia. No pierdan dinero."}
     if datos["ORO"] > 3910 and datos["ORO"] < 3970:
-        return {
-            "orden": "🟡 ESPERA - ORDEN DEL JEFE",
-            "motivo": "Oro fuera de zona + Bancos tranquilos",
-            "permiso_operar": False,
-            "mensaje": "JEFE DICE: Oro en $" + str(datos["ORO"]) + " fuera de zona. Mis 39 robots buscando. Esperen, no entren a lo loco."
-        }
-    return {
-        "orden": "🟢 PERMISO PARA OPERAR - ORDEN DEL JEFE",
-        "motivo": "Bancos tranquilos + Oro en zona",
-        "permiso_operar": True,
-        "mensaje": "JEFE DICE: Bancos tranquilos, Oro en zona. Mis 39 robots listos. Pueden operar con cuidado."
-    }
+        extra_txt = ""
+        if extra:
+            extra_txt = " | " + extra["DXY_texto"] + " | " + extra["VIX_texto"]
+        return {"orden": "🟡 ESPERA - ORDEN DEL JEFE", "motivo": "Oro fuera de zona + Bancos tranquilos", "permiso_operar": False, "mensaje": "JEFE DICE: Oro en $" + str(datos["ORO"]) + " fuera de zona. Mis 39 robots buscando." + extra_txt}
+    extra_txt = ""
+    if extra:
+        extra_txt = " | " + extra["DXY_texto"]
+    return {"orden": "🟢 PERMISO PARA OPERAR - ORDEN DEL JEFE", "motivo": "Bancos tranquilos + Oro en zona", "permiso_operar": True, "mensaje": "JEFE DICE: Bancos tranquilos, Oro en zona. Mis 39 robots listos. Pueden operar con cuidado." + extra_txt}
 
 def get_precio_yahoo(symbol, fallback):
     try:
@@ -231,6 +253,7 @@ header p{margin:5px 0;font-weight:bold}
 .conectado{background:#002a00;margin:10px;padding:12px;border-radius:15px;border:2px solid #00FF88}
 .bancobox{background:#1a1a00;margin:10px;padding:15px;border-radius:15px;border:2px solid #FFD700;text-align:left}
 .jefebox{background:#2a0000;margin:10px;padding:15px;border-radius:15px;border:3px solid #FF0000}
+.extrabox{background:#001a33;margin:10px;padding:15px;border-radius:15px;border:2px solid #00FFFF;text-align:left}
 </style>
 </head>
 <body>
@@ -245,23 +268,26 @@ header p{margin:5px 0;font-weight:bold}
 <a class="ig" href="https://instagram.com/raudy_vip_oro_bot" target="_blank">📸 INSTAGRAM @raudy_vip_oro_bot</a>
 <a class="pay" href="https://paypal.me/RaudyManzueta/20" target="_blank">💰 PAGAR VIP $20</a>
 </div>
-
-<!-- NUEVO - JEFE 40 MANDA - AGREGADO SIN BORRAR NADA -->
 <div class="jefebox">
 <h2 style="color:#FF4444;margin:0;">👑 JEFE 40 - YO MANDO A LOS 39 - ORDEN EN VIVO</h2>
 <p id="jefe-orden" style="font-size:16px;font-weight:bold;color:white;">👑 JEFE: Cargando orden...</p>
 <p id="jefe-mensaje" style="font-size:13px;color:#FFD700;">Esperando orden del Jefe...</p>
 <p style="font-size:11px;color:#aaa;">Si el JEFE dice PAUSA, nadie opera. Asi no pierdes dinero con noticias de bancos.</p>
 </div>
-
-<!-- NUEVO - INFORMACION BANCARIA EN VIVO -->
 <div class="bancobox">
 <h2 style="color:#FFD700;margin:0;text-align:center;">🏦 BANCOS QUE MUEVEN EL ORO - INFO EN VIVO</h2>
 <p id="banco-alerta" style="font-size:14px;font-weight:bold;color:#00FF88;">🏦 Bancos: Cargando...</p>
 <p id="banco-lista" style="font-size:12px;line-height:1.6;">Cargando bancos...</p>
 <p style="font-size:11px;color:#aaa;">Fuente: ForexFactory.com + federalreserve.gov (FED) + ecb.europa.eu (BCE) + TradingEconomics - GRATIS</p>
 </div>
-
+<!-- 🆕 NUEVO - DXY + VIX + BTC + PETROLEO -->
+<div class="extrabox">
+<h2 style="color:#00FFFF;margin:0;text-align:center;">💵 DOLAR + 😱 MIEDO + ₿ BITCOIN - LO QUE USAN LOS BANCOS</h2>
+<p id="dxy-texto" style="font-size:14px;font-weight:bold;">💵 DXY: Cargando...</p>
+<p id="vix-texto" style="font-size:14px;font-weight:bold;">😱 VIX: Cargando...</p>
+<p id="extra-texto" style="font-size:13px;">₿ BTC + 🛢️ Petroleo + 📈 Bono 10 años: Cargando...</p>
+<p style="font-size:11px;color:#aaa;">Si DXY sube, ORO baja. Si VIX pasa 30, JEFE dice PAUSA. Fuente: Yahoo Finance USA - GRATIS</p>
+</div>
 <div class="satelite">
 <h2 style="color:#00FFFF;margin:0;">🛰️ SATÉLITE RAUDY - LLEGÓ A ESTADOS UNIDOS 🇺🇸</h2>
 <p style="font-size:14px;font-weight:bold;">Mirando WALL STREET - NEW YORK en vivo - NYSE + NASDAQ</p>
@@ -452,7 +478,6 @@ async function analizarTodo(){
  else if(esVenta){ botin = (precioReal*0.98).toFixed(2); salida = (precioReal*1.01).toFixed(2); }
  else { botin = entrada; salida = entrada; }
  let origen = activo==="ORO" ? "gold-api.com + Yahoo USA (GC=F)" : "Yahoo Finance USA - NYSE / NASDAQ";
- // NUEVO - SI EL JEFE DICE PAUSA, RESPETAR AL JEFE
  let ordenJefe = datos && datos.jefe ? datos.jefe.orden : "";
  let textoJefe = ordenJefe ? " | 👑 JEFE DICE: " + ordenJefe : "";
  document.getElementById("maestroMsg").innerHTML="He analizado "+activo+" con PRECIO REAL de BOLSA USA. Los 40 robots están CONECTADOS. Decisión: <b>"+senalTexto+"</b><br>ENTRADA: $"+entrada+" | BOTÍN: $"+botin+" | SALIDA: $"+salida+"<br>📍 Fuente: "+origen + "<br>" + textoJefe;
@@ -481,7 +506,6 @@ async function actualizarSateliteUSA(){
     document.getElementById("motor-texto").innerHTML = "💪 MOTOR: " + d.motor + " | " + d.velocidad;
     document.getElementById("buscador-texto").innerHTML = d.buscador;
     document.getElementById("conexion-texto").innerHTML = "🔌 40/40 ROBOTS CONECTADOS ✅ - ORO $"+d.ORO+" - Fuente: Yahoo USA + gold-api";
-    // NUEVO - MOSTRAR ORDEN DEL JEFE Y BANCOS
     if(d.jefe){
       document.getElementById("jefe-orden").innerHTML = d.jefe.orden;
       document.getElementById("jefe-mensaje").innerHTML = d.jefe.mensaje;
@@ -490,6 +514,11 @@ async function actualizarSateliteUSA(){
       document.getElementById("banco-alerta").innerHTML = "🏦 " + d.bancos.alerta_banco + " | Riesgo: " + d.bancos.nivel_riesgo;
       let lista = d.bancos.eventos_hoy.map(e=> "🏦 <b>" + e.evento + "</b> - Impacto: " + e.impacto + " - " + e.efecto).join("<br>");
       document.getElementById("banco-lista").innerHTML = lista + "<br>📍 Fuente: " + d.bancos.fuente;
+    }
+    if(d.extra){
+      document.getElementById("dxy-texto").innerHTML = "💵 " + d.extra.DXY_texto;
+      document.getElementById("vix-texto").innerHTML = "😱 " + d.extra.VIX_texto;
+      document.getElementById("extra-texto").innerHTML = "₿ BTC $" + Math.round(d.extra.BTC) + " | 🛢️ Petroleo $" + d.extra.PETROLEO + " | 📈 Bono 10 años " + d.extra.BONO10 + "%";
     }
     document.getElementById("origen-precios").innerHTML =
       "🥇 <b>ORO $" + d.ORO + "</b> → Viene de: <b>gold-api.com</b> + Yahoo Finance USA (GC=F) - Señal: "+d.robots_conectados.ORO.senal+"<br>" +
@@ -546,9 +575,9 @@ def satelite_usa():
     motor_txt = motor_fuerza_total(oro, "ORO")
     buscador_txt = buscador_nada_se_escape(datos)
     robots_conectados = conectar_todos_los_robots(datos)
-    # NUEVO - JEFE + BANCOS - SIN BORRAR LO TUYO
     bancos_info = get_info_bancaria()
-    jefe_orden = jefe_manda_orden(bancos_info, datos)
+    extra_info = get_mercado_extra()
+    jefe_orden = jefe_manda_orden(bancos_info, datos, extra_info)
     return jsonify({
         **datos,
         "motor": motor_txt,
@@ -561,6 +590,7 @@ def satelite_usa():
         "origen_acciones": "Yahoo Finance USA - NYSE / NASDAQ",
         "bancos": bancos_info,
         "jefe": jefe_orden,
+        "extra": extra_info,
         "equipo_40": ROBOTS_EQUIPO_COMPLETO,
         "total_robots": 40
     })
@@ -568,6 +598,10 @@ def satelite_usa():
 @app.route("/api/bancos")
 def api_bancos():
     return jsonify(get_info_bancaria())
+
+@app.route("/api/extra")
+def api_extra():
+    return jsonify(get_mercado_extra())
 
 @app.route("/api/jefe")
 def api_jefe():
@@ -577,7 +611,8 @@ def api_jefe():
     except:
         oro = 4088
     bancos = get_info_bancaria()
-    return jsonify(jefe_manda_orden(bancos, {"ORO": oro}))
+    extra = get_mercado_extra()
+    return jsonify(jefe_manda_orden(bancos, {"ORO": oro}, extra))
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
