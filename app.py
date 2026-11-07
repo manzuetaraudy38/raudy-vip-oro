@@ -26,31 +26,59 @@ M5 = load("m5.json", {
     "v": [], "u": "Nada M5 aun.",
     "s": 0, "b": 0
 })
-CAP = load("cap.json", {
-    "h": [], "u": "Nada Capital aun.",
-    "c": 0, "b": 0
-})
-T212 = load("t212.json", {
-    "h": [], "u": "Nada T212 aun.",
-    "c": 0, "b": 0, "e": 0
-})
+
+# 7 PLATAFORMAS CON CEREBRO
+PLATS = {
+    "CAPITAL": load("cap.json", {
+        "h": [], "u": "Nada Capital.",
+        "c": 0, "b": 0
+    }),
+    "T212": load("t212.json", {
+        "h": [], "u": "Nada T212.",
+        "c": 0, "b": 0, "e": 0
+    }),
+    "BINANCE": load("bin.json", {
+        "h": [], "u": "Nada Binance.",
+        "c": 0, "b": 0, "e": 0
+    }),
+    "ETORO": load("eto.json", {
+        "h": [], "u": "Nada eToro.",
+        "c": 0, "b": 0, "e": 0
+    }),
+    "MT5": load("mt5.json", {
+        "h": [], "u": "Nada MT5.",
+        "c": 0, "b": 0, "e": 0
+    }),
+    "XTB": load("xtb.json", {
+        "h": [], "u": "Nada XTB.",
+        "c": 0, "b": 0, "e": 0
+    }),
+    "COINBASE": load("coin.json", {
+        "h": [], "u": "Nada Coinbase.",
+        "c": 0, "b": 0, "e": 0
+    })
+}
 
 CEREBROS = []
 for i in range(1, 101):
-    if i <= 15:
+    if i <= 12:
         rol = "M5 ORO"
-    elif i <= 30:
-        rol = "DIVISAS EUR GBP JPY"
-    elif i <= 45:
-        rol = "BITCOIN BTC ETH"
-    elif i <= 60:
-        rol = "Capital.com"
-    elif i <= 75:
-        rol = "Trading 212"
-    elif i <= 85:
-        rol = "APPLE TESLA NVDA"
+    elif i <= 24:
+        rol = "DIVISAS"
+    elif i <= 36:
+        rol = "BITCOIN"
+    elif i <= 48:
+        rol = "BINANCE"
+    elif i <= 58:
+        rol = "eTORO"
+    elif i <= 68:
+        rol = "MT5"
+    elif i <= 78:
+        rol = "XTB"
+    elif i <= 88:
+        rol = "COINBASE"
     elif i <= 99:
-        rol = "MEJORES ACCIONES"
+        rol = "CAPITAL T212 ACCIONES"
     else:
         rol = "JEFE RAUDY ORO"
     CEREBROS.append({
@@ -59,7 +87,6 @@ for i in range(1, 101):
         "jefe": "RAUDY ORO"
     })
 
-# ZONAS PARA TODO
 ZONAS = {
     "ORO": {"c": 3910, "v": 3970},
     "EURUSD": {"c": 1.1150, "v": 1.1250},
@@ -122,8 +149,28 @@ def oro_real():
     except:
         return yahoo("GC=F", 4088)
 
+def precio_binance():
+    try:
+        r = requests.get(
+            "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT",
+            timeout=4)
+        return float(r.json().get("price", 98000))
+    except:
+        return yahoo("BTC-USD", 98000)
+
+def precio_coinbase():
+    try:
+        r = requests.get(
+            "https://api.coinbase.com/v2/prices/BTC-USD/spot",
+            timeout=4)
+        return float(r.json()["data"]["amount"])
+    except:
+        return yahoo("BTC-USD", 98000)
+
 def todos_precios():
     oro = oro_real()
+    btc_b = precio_binance()
+    btc_c = precio_coinbase()
     d = {
         "ORO": oro,
         "EURUSD": yahoo("EURUSD=X", 1.1150),
@@ -131,7 +178,9 @@ def todos_precios():
         "USDJPY": yahoo("USDJPY=X", 149.5),
         "USDCHF": yahoo("USDCHF=X", 0.8850),
         "AUDUSD": yahoo("AUDUSD=X", 0.6550),
-        "BTC": yahoo("BTC-USD", 98000),
+        "BTC": btc_b,
+        "BTC_COINBASE": btc_c,
+        "BTC_BINANCE": btc_b,
         "ETH": yahoo("ETH-USD", 3400),
         "AAPL": yahoo("AAPL", 262),
         "TSLA": yahoo("TSLA", 340),
@@ -200,33 +249,46 @@ def m5_aprende(p):
             M5["u"] += " mezclado. ESPERA."
     save("m5.json", M5)
 
-def broker_aprende(D, pc, pr, nombre):
-    if pc >= 3970:
-        D["c"] += 1
-        lec = nombre + " CARO $" + str(pc)
-    elif pc <= 3910:
-        D["b"] += 1
-        lec = nombre + " BARATO $" + str(pc)
+def plat_aprende(key, pc, pr, nombre, archivo):
+    D = PLATS[key]
+    if activo_es_btc(pr, pc):
+        if pc <= 95000:
+            D["b"] += 1
+            lec = nombre + " BARATO BTC $" + str(pc)
+        elif pc >= 108000:
+            D["c"] += 1
+            lec = nombre + " CARO BTC $" + str(pc)
+        else:
+            if "e" in D:
+                D["e"] += 1
+            lec = nombre + " MEDIO BTC $" + str(pc)
     else:
-        if "e" in D:
-            D["e"] += 1
-        lec = nombre + " MEDIO $" + str(pc)
+        if pc >= 3970:
+            D["c"] += 1
+            lec = nombre + " CARO ORO $" + str(pc)
+        elif pc <= 3910:
+            D["b"] += 1
+            lec = nombre + " BARATO ORO $" + str(pc)
+        else:
+            if "e" in D:
+                D["e"] += 1
+            lec = nombre + " MEDIO ORO $" + str(pc)
     D["u"] = lec
     D["h"].append({
         "hora": datetime.now().strftime("%H:%M"),
         "p": pc
     })
     D["h"] = D["h"][-20:]
+    save(archivo, D)
     return lec
 
+def activo_es_btc(pr, pc):
+    # si precio es muy grande es BTC
+    return pc > 10000
+
 def calc_lote(lote, ganar, perder, precio, lado, activo):
-    # ORO y ACCIONES: 0.01 = $1 por $1
-    # DIVISAS: 0.01 = $1 por 0.0001? simplificado jefe
-    # BTC: 0.01 = $1 por $1
     div = lote * 100
     if activo in ["EURUSD", "GBPUSD", "AUDUSD"]:
-        # en divisas 0.01 lote = $0.10 por pip
-        # para ganar $5 necesitas 50 pips = 0.0050
         d_tp = ganar * 0.001
         d_sl = perder * 0.001
     elif activo in ["USDJPY", "USDCHF"]:
@@ -295,10 +357,6 @@ def chat_robot(msg, precios):
         lote = 0.05
     if "0.1" in msg:
         lote = 0.1
-    if "0.5" in msg:
-        lote = 0.5
-    if "1 lote" in m or "1.0" in msg:
-        lote = 1.0
     if "ganar" in m and len(nums) >= 2:
         try:
             ganar = float(nums[-2])
@@ -306,24 +364,34 @@ def chat_robot(msg, precios):
         except:
             pass
     if "hola" in m:
-        return "Hola jefe RAUDY ORO. 100 cerebros en vivo. Tengo DIVISAS BITCOIN APPLE TESLA ACCIONES. Dime: compro 0.01 bitcoin para ganar 5 y perder 2"
+        return "Hola jefe RAUDY ORO. 100 cerebros en vivo. Tengo BINANCE eTORO MT5 XTB COINBASE CAPITAL T212. Dime: compro 0.01 bitcoin para ganar 5 y perder 2"
+    if "binance" in m:
+        return "BINANCE jefe: BTC $" + str(precios["BTC_BINANCE"]) + ". " + PLATS["BINANCE"]["u"] + " | ORO $" + str(precios["ORO"])
+    if "etoro" in m or "e toro" in m:
+        return "eTORO jefe: APPLE $" + str(precios["AAPL"]) + " TESLA $" + str(precios["TSLA"]) + " NVDA $" + str(precios["NVDA"]) + ". " + PLATS["ETORO"]["u"]
+    if "mt5" in m or "metatrader" in m:
+        return "MT5 jefe: ORO $" + str(precios["ORO"]) + " EUR/USD $" + str(precios["EURUSD"]) + ". " + PLATS["MT5"]["u"]
+    if "xtb" in m:
+        return "XTB jefe: ORO $" + str(precios["ORO"]) + " BTC $" + str(precios["BTC"]) + ". " + PLATS["XTB"]["u"]
+    if "coinbase" in m:
+        return "COINBASE jefe: BTC $" + str(precios["BTC_COINBASE"]) + ". " + PLATS["COINBASE"]["u"]
     if "212" in m:
-        return "Trading 212 jefe: ORO $" + str(precios["ORO"]) + ". " + T212["u"]
+        return "Trading 212 jefe: ORO $" + str(precios["ORO"]) + ". " + PLATS["T212"]["u"]
     if "capital" in m:
-        return "Capital.com jefe: ORO $" + str(precios["ORO"]) + ". " + CAP["u"]
+        return "Capital.com jefe: ORO $" + str(precios["ORO"]) + ". " + PLATS["CAPITAL"]["u"]
     if "m5" in m:
         return "M5 jefe: " + M5["u"]
     if "mejor" in m or "mejores" in m:
-        return "Jefe las mejores hoy: ORO $" + str(precios["ORO"]) + " BTC $" + str(precios["BTC"]) + " APPLE $" + str(precios["AAPL"]) + " TESLA $" + str(precios["TSLA"]) + " NVDA $" + str(precios["NVDA"]) + ". Dime cual quieres y te digo TP SL."
+        return "Jefe mejores hoy: ORO $" + str(precios["ORO"]) + " BTC $" + str(precios["BTC"]) + " APPLE $" + str(precios["AAPL"]) + " TESLA $" + str(precios["TSLA"]) + " NVDA $" + str(precios["NVDA"])
     if "cuanto puedo comprar" in m or "a cuanto compro" in m or "a cuanto puedo compra" in m:
         z = ZONAS[activo]
-        return "Jefe puedes COMPRAR " + nombre + " en " + str(z["c"]) + ". Ahora $" + str(precio) + ". Si baja a " + str(z["c"]) + " COMPRA."
+        return "Jefe puedes COMPRAR " + nombre + " en " + str(z["c"]) + ". Ahora $" + str(precio)
     if "cuanto puedo vender" in m or "a cuanto vendo" in m or "a cuanto puedo vende" in m:
         z = ZONAS[activo]
-        return "Jefe puedes VENDER " + nombre + " en " + str(z["v"]) + ". Ahora $" + str(precio) + ". Si sube a " + str(z["v"]) + " VENTA."
+        return "Jefe puedes VENDER " + nombre + " en " + str(z["v"]) + ". Ahora $" + str(precio)
     if "donde pongo" in m and ("tp" in m or "sl" in m):
         tp, sl, dt, ds = calc_lote(0.01, 5, 2, precio, "COMPRA", activo)
-        r = "Jefe " + nombre + " en $" + str(precio) + " 0.01 para ganar $5 perder $2: "
+        r = "Jefe " + nombre + " $" + str(precio) + " 0.01 ganar $5 perder $2: "
         r += "COMPRA $" + str(round(precio, 4)) + " TP $" + str(round(tp, 4))
         r += " SL $" + str(round(sl, 4)) + ". 100 cerebros en vivo."
         return r
@@ -334,18 +402,12 @@ def chat_robot(msg, precios):
             if precio <= z["c"]:
                 entrada = precio
             tp, sl, dt, ds = calc_lote(lote, ganar, perder, entrada, "COMPRA", activo)
-            r = "Jefe RAUDY LISTO 100 cerebros en vivo: "
-            r += "COMPRA " + nombre + " " + str(lote) + " lote en " + str(round(entrada, 4))
+            r = "Jefe RAUDY LISTO 100 cerebros: "
+            r += "COMPRA " + nombre + " " + str(lote) + " en " + str(round(entrada, 4))
             r += " TP " + str(round(tp, 4)) + " ganas $" + str(ganar)
             r += " SL " + str(round(sl, 4)) + " pierdes $" + str(perder)
-            r += ". Ahora $" + str(precio) + ". M5: " + M5["u"]
+            r += ". Ahora $" + str(precio)
             return r
-        if len(nums) > 0:
-            q = float(nums[0])
-            z = ZONAS[activo]
-            if q <= z["c"] + 1:
-                return "SI JEFE COMPRA " + nombre + " a " + str(q) + " BARATO. Ahora $" + str(precio)
-            return "ESPERA jefe espera " + str(z["c"]) + ". " + nombre + " ahora $" + str(precio)
         return "Dime: compro 0.01 bitcoin para ganar 5 y perder 2"
     if "vend" in m:
         if "ganar" in m or "perder" in m:
@@ -357,53 +419,57 @@ def chat_robot(msg, precios):
             r += " SL " + str(round(sl, 4)) + " pierdes $" + str(perder)
             return r
         return "VENTA " + nombre + " en " + str(ZONAS[activo]["v"]) + " jefe. Ahora $" + str(precio)
-    if "tp" in m or "sl" in m:
-        tp, sl, dt, ds = calc_lote(lote, ganar, perder, precio, "COMPRA", activo)
-        return "Jefe " + nombre + " TP " + str(round(tp, 4)) + " SL " + str(round(sl, 4)) + " con 0.01 en $" + str(precio)
-    return "Te entendi jefe: " + msg + ". " + nombre + " en vivo $" + str(precio) + ". Dime: compro 0.01 para ganar 5 y perder 2"
+    return "Te entendi jefe: " + msg + ". " + nombre + " en vivo $" + str(precio)
 
 H = []
 H.append("<!DOCTYPE html><html lang='es'><head>")
 H.append("<meta charset='UTF-8'>")
 H.append("<meta name='viewport' content='width=device-width, initial-scale=1.0'>")
-H.append("<title>RAUDY VIP 100 TODO MERCADO</title>")
+H.append("<title>RAUDY VIP 7 PLATAFORMAS</title>")
 H.append("<style>body{background:#050505;color:#fff;font-family:Arial;text-align:center;margin:0}")
 H.append("header{background:#FFD700;color:#000;padding:15px}")
 H.append(".box{margin:10px;padding:15px;border-radius:15px;border:3px solid #FFD700}")
 H.append(".m5{border-color:#00FF88}.cap{border-color:#00FFFF}.t212{border-color:#00FF88}")
 H.append(".chat{border-color:#FFD700}.sl{border-color:#FF4444}.vivo{border-color:#00FF88}")
-H.append(".divisas{border-color:#00FFFF}.btc{border-color:#FFA500}.acc{border-color:#00FF88}")
+H.append(".bin{border-color:#FFD700}.eto{border-color:#00FF88}.mt5{border-color:#FF4444}")
+H.append(".xtb{border-color:#FF00FF}.coin{border-color:#FFA500}")
 H.append("input{width:100%;padding:12px;margin:4px 0;border-radius:10px;background:#111;color:#fff}")
 H.append("button{width:100%;padding:14px;border-radius:15px;font-weight:bold;margin-top:5px}")
 H.append(".grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px}")
 H.append(".robot{background:#1a1a1a;padding:8px;border-radius:12px;font-size:12px}")
 H.append(".luz{width:14px;height:14px;border-radius:50%;background:#00FF88;margin:auto}")
-H.append(".act{background:#1a1a1a;border:1px solid #333;padding:8px;border-radius:12px;font-size:12px}")
 H.append("</style></head><body>")
 H.append("<header><h1>👑 RAUDY VIP 100 CEREBROS ⚡</h1>")
-H.append("<p>JEFE: RAUDY ORO - TODO EL MERCADO EN VIVO 🟢</p>")
+H.append("<p>JEFE: RAUDY ORO - 7 PLATAFORMAS EN VIVO 🟢</p>")
 H.append("<p id='vivo'>🟢 EN VIVO...</p></header>")
-H.append("<div class='box vivo'><h2>🟢 EN VIVO EN DIRECTO</h2><p id='vivo2'>Conectando...</p>")
-H.append("<p>Se actualiza solo cada 5 segundos.</p></div>")
+H.append("<div class='box vivo'><h2>🟢 EN VIVO EN DIRECTO</h2><p id='vivo2'>Conectando...</p></div>")
 H.append("<div class='box'><h2>🧠 CEREBRO JEFE</h2><p id='c1'></p><p id='c2'></p></div>")
-H.append("<div class='box m5'><h2>🧠 CEREBRO M5</h2><p id='m1'></p><p id='m2'></p><p id='m3'></p></div>")
+H.append("<div class='box m5'><h2>🧠 CEREBRO M5</h2><p id='m1'></p><p id='m2'></p></div>")
+H.append("<div class='box bin'><h2>🟡 BINANCE</h2><p id='bin1'></p><p id='bin2'></p></div>")
+H.append("<div class='box eto'><h2>🔵 eTORO</h2><p id='eto1'></p><p id='eto2'></p></div>")
+H.append("<div class='box mt5'><h2>📊 MT5 - METATRADER 5</h2><p id='mt51'></p><p id='mt52'></p></div>")
+H.append("<div class='box xtb'><h2>🟣 XTB</h2><p id='xtb1'></p><p id='xtb2'></p></div>")
+H.append("<div class='box coin'><h2>🟠 COINBASE</h2><p id='coin1'></p><p id='coin2'></p></div>")
 H.append("<div class='box cap'><h2>🏦 CAPITAL.COM</h2><p id='cap1'></p><p id='cap2'></p></div>")
 H.append("<div class='box t212'><h2>🟢 TRADING 212</h2><p id='t1'></p><p id='t2'></p></div>")
-H.append("<div class='box chat'><h2>💬 CHAT LOTE 0.01 - TODO MERCADO</h2>")
-H.append("<p>Escribe: compro 0.01 bitcoin para ganar 5 y perder 2</p>")
+H.append("<div class='box chat'><h2>💬 CHAT LOTE 0.01 - 7 PLATAFORMAS</h2>")
 H.append("<input id='chat' placeholder='Ej: compro 0.01 bitcoin para ganar 5 y perder 2'>")
 H.append("<button onclick='enviarChat()' style='background:#FFD700'>💬 ENVIAR</button>")
 H.append("<p id='chatR' style='background:#111;padding:12px;border-radius:10px;text-align:left'>🤖 Hola jefe...</p>")
-H.append("<button onclick=\"ej('compro 0.01 para ganar 5 y perder 2)')\" style='background:#00FF88'>✅ ORO 0.01 ganar 5 perder 2</button>")
-H.append("<button onclick=\"ej('compro 0.01 bitcoin para ganar 5 y perder 2)')\" style='background:#FFA500'>₿ BITCOIN 0.01 ganar 5 perder 2</button>")
-H.append("<button onclick=\"ej('compro 0.01 euro para ganar 5 y perder 2)')\" style='background:#00FFFF'>💶 EUR/USD 0.01 ganar 5 perder 2</button>")
-H.append("<button onclick=\"ej('compro 0.01 apple para ganar 5 y perder 2)')\" style='background:#00FF88'>🍎 APPLE 0.01 ganar 5 perder 2</button>")
-H.append("<button onclick=\"ej('compro 0.01 tesla para ganar 5 y perder 2)')\" style='background:#FF4444;color:#fff'>🚗 TESLA 0.01 ganar 5 perder 2</button>")
-H.append("<button onclick=\"ej('a cuanto puedo comprar bitcoin)')\" style='background:#FFD700'>🟢 a cuanto compro bitcoin</button>")
-H.append("<button onclick=\"ej('cuales son las mejores acciones)')\" style='background:#00FFFF'>📈 mejores acciones</button></div>")
-H.append("<div class='box divisas'><h2>💶 DIVISAS EN VIVO</h2><p id='divisas'></p></div>")
-H.append("<div class='box btc'><h2>₿ BITCOIN + ETH EN VIVO</h2><p id='crypto'></p></div>")
-H.append("<div class='box acc'><h2>📈 MEJORES ACCIONES EN VIVO</h2><p id='acciones'></p></div>")
+H.append("<button onclick=\"ej('compro 0.01 para ganar 5 y perder 2)')\" style='background:#00FF88'>✅ ORO 0.01</button>")
+H.append("<button onclick=\"ej('compro 0.01 bitcoin para ganar 5 y perder 2)')\" style='background:#FFA500'>₿ BITCOIN 0.01</button>")
+H.append("<button onclick=\"ej('Binance)')\" style='background:#FFD700'>🟡 Binance</button>")
+H.append("<button onclick=\"ej('eToro)')\" style='background:#00FF88'>🔵 eToro</button>")
+H.append("<button onclick=\"ej('MT5)')\" style='background:#FF4444;color:#fff'>📊 MT5</button>")
+H.append("<button onclick=\"ej('XTB)')\" style='background:#FF00FF'>🟣 XTB</button>")
+H.append("<button onclick=\"ej('Coinbase)')\" style='background:#FFA500'>🟠 Coinbase</button>")
+H.append("<button onclick=\"ej('compro 0.01 euro para ganar 5 y perder 2)')\" style='background:#00FFFF'>💶 EUR/USD 0.01</button>")
+H.append("<button onclick=\"ej('compro 0.01 apple para ganar 5 y perder 2)')\" style='background:#00FF88'>🍎 APPLE 0.01</button>")
+H.append("<button onclick=\"ej('compro 0.01 tesla para ganar 5 y perder 2)')\" style='background:#FF4444;color:#fff'>🚗 TESLA 0.01</button></div>")
+H.append("<div class='box'><h2>💶 DIVISAS EN VIVO</h2><p id='divisas'></p></div>")
+H.append("<div class='box'><h2>₿ BITCOIN + ETH EN VIVO</h2><p id='crypto'></p></div>")
+H.append("<div class='box'><h2>📈 MEJORES ACCIONES EN VIVO</h2><p id='acciones'></p></div>")
+H.append("<div class='box'><h2>🏦 7 PLATAFORMAS COMPARADAS EN VIVO</h2><p id='plats'></p></div>")
 H.append("<div class='box sl'><h2>🛑 CALCULADORA LOTE 0.01</h2>")
 H.append("<select id='selAct'><option value='ORO'>ORO</option><option value='BTC'>BITCOIN</option><option value='EURUSD'>EUR/USD</option><option value='AAPL'>APPLE</option><option value='TSLA'>TESLA</option><option value='NVDA'>NVDA</option></select>")
 H.append("<input id='lote' type='number' value='0.01' step='0.01'>")
@@ -413,7 +479,6 @@ H.append("<input id='entrada' type='number' value='3910'>")
 H.append("<button onclick='calcLote()' style='background:#FF4444;color:#fff'>🛑 CALCULAR TP SL</button>")
 H.append("<p id='loteR' style='background:#111;padding:12px;border-radius:10px'></p></div>")
 H.append("<div class='box'><h2>👑 JEFE 100 - RAUDY ORO</h2><p id='j1'></p><p id='j2'></p></div>")
-H.append("<div class='box'><h2>🛰️ SATELITE EN VIVO</h2><p id='s1'></p><p id='s2'></p></div>")
 H.append("<h2>🧠 LOS 100 CEREBROS EN VIVO</h2>")
 H.append("<div class='grid' id='grid'></div>")
 H.append("<p>RAUDY VIP 2026 - WhatsApp 0767574050</p>")
@@ -422,12 +487,14 @@ H.append("let g=document.getElementById('grid');")
 H.append("for(let i=1;i<=100;i++){let d=document.createElement('div');")
 H.append("d.className='robot';")
 H.append("let rol='M5';")
-H.append("if(i>15 && i<=30) rol='DIVISAS';")
-H.append("if(i>30 && i<=45) rol='BITCOIN';")
-H.append("if(i>45 && i<=60) rol='Capital.com';")
-H.append("if(i>60 && i<=75) rol='Trading 212';")
-H.append("if(i>75 && i<=85) rol='APPLE TESLA';")
-H.append("if(i>85 && i<100) rol='MEJORES ACCIONES';")
+H.append("if(i>12 && i<=24) rol='DIVISAS';")
+H.append("if(i>24 && i<=36) rol='BITCOIN';")
+H.append("if(i>36 && i<=48) rol='BINANCE';")
+H.append("if(i>48 && i<=58) rol='eTORO';")
+H.append("if(i>58 && i<=68) rol='MT5';")
+H.append("if(i>68 && i<=78) rol='XTB';")
+H.append("if(i>78 && i<=88) rol='COINBASE';")
+H.append("if(i>88 && i<100) rol='CAPITAL T212';")
 H.append("if(i==100) rol='JEFE RAUDY ORO';")
 H.append("d.innerHTML='<div class=luz></div><b>Cerebro '+i+'</b><br>'+rol+'<br><span id=m'+i+'>VIVO</span>';")
 H.append("g.appendChild(d)}")
@@ -450,23 +517,31 @@ H.append("document.getElementById('loteR').innerHTML=d.respuesta;hablar(d.respue
 H.append("async function up(){try{")
 H.append("let r=await fetch('/api/satelite_usa?v='+Date.now());let d=await r.json();")
 H.append("document.getElementById('vivo').innerHTML='🟢 EN VIVO '+d.hora+' - ORO $'+d.ORO+' BTC $'+d.BTC;")
-H.append("document.getElementById('vivo2').innerHTML='ORO $'+d.ORO+' BTC $'+d.BTC+' EUR $'+d.EURUSD+' EN VIVO 100 cerebros';")
+H.append("document.getElementById('vivo2').innerHTML='ORO $'+d.ORO+' BTC $'+d.BTC+' EUR $'+d.EURUSD+' 7 plataformas';")
 H.append("document.getElementById('c1').innerHTML=d.cerebro.mensaje;")
 H.append("document.getElementById('c2').innerHTML=d.cerebro.leccion;")
 H.append("document.getElementById('m1').innerHTML=d.cerebro_m5.mensaje;")
 H.append("document.getElementById('m2').innerHTML=d.cerebro_m5.leccion;")
-H.append("document.getElementById('m3').innerHTML='Velas: '+d.cerebro_m5.velas.map(v=>v.p).join(' -> ');")
-H.append("document.getElementById('cap1').innerHTML=d.cerebro_capital.mensaje;")
-H.append("document.getElementById('cap2').innerHTML=d.cerebro_capital.leccion;")
-H.append("document.getElementById('t1').innerHTML=d.cerebro_t212.mensaje;")
-H.append("document.getElementById('t2').innerHTML=d.cerebro_t212.leccion;")
-H.append("document.getElementById('divisas').innerHTML='EUR/USD $'+d.EURUSD+' | GBP/USD $'+d.GBPUSD+' | USD/JPY $'+d.USDJPY+' | USD/CHF $'+d.USDCHF+' | AUD/USD $'+d.AUDUSD;")
+H.append("document.getElementById('bin1').innerHTML=d.plats.BINANCE.mensaje;")
+H.append("document.getElementById('bin2').innerHTML=d.plats.BINANCE.leccion+' | BTC Binance $'+d.BTC_BINANCE;")
+H.append("document.getElementById('eto1').innerHTML=d.plats.ETORO.mensaje;")
+H.append("document.getElementById('eto2').innerHTML=d.plats.ETORO.leccion+' | APPLE $'+d.AAPL;")
+H.append("document.getElementById('mt51').innerHTML=d.plats.MT5.mensaje;")
+H.append("document.getElementById('mt52').innerHTML=d.plats.MT5.leccion+' | EUR $'+d.EURUSD;")
+H.append("document.getElementById('xtb1').innerHTML=d.plats.XTB.mensaje;")
+H.append("document.getElementById('xtb2').innerHTML=d.plats.XTB.leccion;")
+H.append("document.getElementById('coin1').innerHTML=d.plats.COINBASE.mensaje;")
+H.append("document.getElementById('coin2').innerHTML=d.plats.COINBASE.leccion+' | BTC Coinbase $'+d.BTC_COINBASE;")
+H.append("document.getElementById('cap1').innerHTML=d.plats.CAPITAL.mensaje;")
+H.append("document.getElementById('cap2').innerHTML=d.plats.CAPITAL.leccion;")
+H.append("document.getElementById('t1').innerHTML=d.plats.T212.mensaje;")
+H.append("document.getElementById('t2').innerHTML=d.plats.T212.leccion;")
+H.append("document.getElementById('divisas').innerHTML='EUR $'+d.EURUSD+' | GBP $'+d.GBPUSD+' | JPY $'+d.USDJPY+' | CHF $'+d.USDCHF+' | AUD $'+d.AUDUSD;")
 H.append("document.getElementById('crypto').innerHTML='BTC $'+d.BTC+' | ETH $'+d.ETH;")
-H.append("document.getElementById('acciones').innerHTML='APPLE $'+d.AAPL+' | TESLA $'+d.TSLA+' | NVDA $'+d.NVDA+' | MSFT $'+d.MSFT+' | AMZN $'+d.AMZN+' | META $'+d.META+' | GOOGLE $'+d.GOOGL+' | NFLX $'+d.NFLX+' | AMD $'+d.AMD;")
+H.append("document.getElementById('acciones').innerHTML='APPLE $'+d.AAPL+' | TESLA $'+d.TSLA+' | NVDA $'+d.NVDA+' | MSFT $'+d.MSFT+' | AMZN $'+d.AMZN+' | META $'+d.META+' | GOOGLE $'+d.GOOGL;")
+H.append("document.getElementById('plats').innerHTML='BINANCE BTC $'+d.BTC_BINANCE+' | COINBASE BTC $'+d.BTC_COINBASE+' | eTORO APPLE $'+d.AAPL+' | MT5 ORO $'+d.ORO+' | XTB ORO $'+d.ORO+' | CAPITAL ORO $'+d.ORO+' | T212 ORO $'+d.ORO;")
 H.append("document.getElementById('j1').innerHTML=d.jefe.orden;")
 H.append("document.getElementById('j2').innerHTML=d.jefe.mensaje;")
-H.append("document.getElementById('s1').innerHTML='ORO $'+d.ORO+' BTC $'+d.BTC+' EUR $'+d.EURUSD;")
-H.append("document.getElementById('s2').innerHTML='APPLE $'+d.AAPL+' TESLA $'+d.TSLA;")
 H.append("for(let i=1;i<=100;i++){let el=document.getElementById('m'+i);")
 H.append("if(el)el.innerHTML='VIVO $'+d.ORO+' - '+d.jefe.orden}")
 H.append("}catch(e){}}")
@@ -482,6 +557,7 @@ def home():
 def sat():
     d = todos_precios()
     oro = d["ORO"]
+    btc = d["BTC"]
     if oro <= 3910:
         orden = "COMPRA"
     elif oro >= 3970:
@@ -490,14 +566,23 @@ def sat():
         orden = "ESPERA"
     aprende(oro, orden)
     m5_aprende(oro)
-    broker_aprende(CAP, oro, oro, "Capital.com")
-    save("cap.json", CAP)
-    broker_aprende(T212, oro, oro, "Trading 212")
-    save("t212.json", T212)
+    plat_aprende("CAPITAL", oro, oro, "Capital.com", "cap.json")
+    plat_aprende("T212", oro, oro, "Trading 212", "t212.json")
+    plat_aprende("BINANCE", btc, btc, "Binance", "bin.json")
+    plat_aprende("ETORO", oro, oro, "eToro", "eto.json")
+    plat_aprende("MT5", oro, oro, "MT5", "mt5.json")
+    plat_aprende("XTB", oro, oro, "XTB", "xtb.json")
+    plat_aprende("COINBASE", d["BTC_COINBASE"], btc, "Coinbase", "coin.json")
     jefe = {
         "orden": "🟢 PERMISO" if orden != "ESPERA" else "🟡 ESPERA",
-        "mensaje": "JEFE RAUDY ORO DICE: ORO $" + str(oro) + " - " + orden + " - 100 cerebros en vivo"
+        "mensaje": "JEFE RAUDY ORO DICE: ORO $" + str(oro) + " - " + orden + " - 100 cerebros 7 plataformas"
     }
+    plats_out = {}
+    for k in PLATS:
+        plats_out[k] = {
+            "mensaje": k + " - " + str(len(PLATS[k]["h"])) + " jugadas",
+            "leccion": PLATS[k]["u"]
+        }
     return jsonify({
         **d,
         "hora": datetime.now().strftime("%H:%M:%S"),
@@ -510,14 +595,7 @@ def sat():
             "leccion": M5["u"],
             "velas": M5["v"][-5:]
         },
-        "cerebro_capital": {
-            "mensaje": "Capital - " + str(len(CAP["h"])) + " jugadas",
-            "leccion": CAP["u"]
-        },
-        "cerebro_t212": {
-            "mensaje": "T212 - " + str(len(T212["h"])) + " jugadas",
-            "leccion": T212["u"]
-        },
+        "plats": plats_out,
         "jefe": jefe,
         "cerebros": CEREBROS,
         "total_cerebros": 100
