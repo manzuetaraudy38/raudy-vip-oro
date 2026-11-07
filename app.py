@@ -1,7 +1,69 @@
 from flask import Flask, jsonify, request
 import requests
 from datetime import datetime, timedelta
+import json, os
 app = Flask(__name__)
+
+# ============================================================
+# 🧠 CEREBRO CON MEMORIA - NUEVO - EL ROBOT SE ACUERDA
+# ============================================================
+ARCHIVO_CEREBRO = "cerebro_memoria.json"
+CEREBRO = {"historial": [], "veces_compra": 0, "veces_venta": 0, "veces_espera": 0, "ultima_leccion": "Todavia no aprendi nada, jefe. Estoy empezando a acordarme."}
+
+def cerebro_cargar():
+    global CEREBRO
+    try:
+        if os.path.exists(ARCHIVO_CEREBRO):
+            with open(ARCHIVO_CEREBRO, "r") as f:
+                CEREBRO = json.load(f)
+    except:
+        pass
+
+def cerebro_guardar():
+    try:
+        with open(ARCHIVO_CEREBRO, "w") as f:
+            json.dump(CEREBRO, f)
+    except:
+        pass
+
+def cerebro_aprende(datos, jefe_orden):
+    global CEREBRO
+    oro = datos.get("ORO", 4088)
+    orden = jefe_orden.get("orden", "")
+    if "COMPRA" in orden or oro <= 3910:
+        decision = "COMPRA"
+        CEREBRO["veces_compra"] += 1
+    elif "VENTA" in orden or oro >= 3970:
+        decision = "VENTA"
+        CEREBRO["veces_venta"] += 1
+    else:
+        decision = "ESPERA"
+        CEREBRO["veces_espera"] += 1
+    # Leccion que se acuerda
+    if oro <= 3910:
+        leccion = "Jefe, ORO bajo a $" + str(oro) + ". La ultima vez que bajo asi, despues SUBIO. Me acuerdo."
+    elif oro >= 3970:
+        leccion = "Jefe, ORO subio a $" + str(oro) + ". La ultima vez que subio asi, despues BAJO. Me acuerdo."
+    else:
+        leccion = "Jefe, ORO en $" + str(oro) + " en medio. Me acuerdo que cuando esta en medio, mejor ESPERAR."
+    CEREBRO["ultima_leccion"] = leccion
+    CEREBRO["historial"].append({"hora": datetime.now().strftime("%H:%M:%S"), "oro": oro, "decision": decision, "leccion": leccion})
+    CEREBRO["historial"] = CEREBRO["historial"][-20:]
+    cerebro_guardar()
+    return CEREBRO
+
+def cerebro_recuerda():
+    total = CEREBRO["veces_compra"] + CEREBRO["veces_venta"] + CEREBRO["veces_espera"]
+    if total == 0:
+        return {"mensaje": "🧠 Cerebro empezando, jefe. Todavia no me acuerdo de nada.", "total": 0, "leccion": CEREBRO["ultima_leccion"]}
+    return {
+        "mensaje": "🧠 Me acuerdo de " + str(total) + " jugadas - COMPRA: " + str(CEREBRO["veces_compra"]) + " | VENTA: " + str(CEREBRO["veces_venta"]) + " | ESPERA: " + str(CEREBRO["veces_espera"]),
+        "total": total,
+        "leccion": CEREBRO["ultima_leccion"],
+        "historial": CEREBRO["historial"][-5:]
+    }
+
+cerebro_cargar()
 
 # ============================================================
 # 🏦 INFORMACION BANCARIA PARA EL JEFE
@@ -50,10 +112,6 @@ def get_info_bancaria():
         pass
     return bancos
 
-# ============================================================
-# 🆕 NUEVO - DXY + VIX + BTC + PETROLEO + BONO 10 AÑOS - AGREGADO AHORA
-# ESTO ES LO QUE USAN LOS BANCOS - NO SE BORRO NADA DE LO TUYO
-# ============================================================
 def get_mercado_extra():
     dxy = get_precio_yahoo('DX-Y.NYB', 99.50)
     vix = get_precio_yahoo('^VIX', 15.20)
@@ -86,10 +144,6 @@ def get_mercado_extra():
         "resumen_jefe": dxy_texto + " | " + vix_texto
     }
 
-# ============================================================
-# 🆕 NUEVO - PRESIDENTE USA + PREGUNTALE AL ROBOT - AGREGADO AHORA
-# ESTO ES LO NUEVO - NO SE BORRO NADA DE LO TUYO
-# ============================================================
 EVENTOS_PRESIDENCIALES_FIJOS = [
     {"evento": "Presidente USA - Habla de Economía", "impacto": "ALTO", "efecto": "Si habla de aranceles o guerra, ORO SUBE fuerte"},
     {"evento": "Casa Blanca - Cambio de Ley / Arancel", "impacto": "ALTO", "efecto": "Arancel nuevo = ORO se mueve $30-$80"},
@@ -133,13 +187,15 @@ def robot_responde_pregunta(precio_quiero, activo="ORO", precio_actual=4088):
     }
     z = zonas.get(activo, zonas["ORO"])
     presi = get_alerta_presidencial()
+    mem = cerebro_recuerda()
+    extra_mem = " | 🧠 " + mem["leccion"]
     if presi["nivel"] == "ROJO":
-        return {"respuesta": "🛑 JEFE NO COMPRES AHORA - " + presi["mensaje"] + " - Espera 1 hora", "decision": "ESPERA-PRESIDENTE", "precio_recomendado": z["soporte"], "precio_actual": precio_actual}
+        return {"respuesta": "🛑 JEFE NO COMPRES AHORA - " + presi["mensaje"] + " - Espera 1 hora" + extra_mem, "decision": "ESPERA-PRESIDENTE", "precio_recomendado": z["soporte"], "precio_actual": precio_actual}
     if precio_quiero > z["venta"] and precio_quiero > precio_actual:
-        return {"respuesta": "❌ NO JEFE, NO compres " + activo + " a $" + str(precio_quiero) + ", está CARO. Ahora está en $" + str(precio_actual) + " y va a BAJAR a $" + str(z["soporte"]) + ". ESPERA a $" + str(z["soporte"]) + ".", "decision": "NO-COMPRAR-ESPERA", "precio_recomendado": z["soporte"], "precio_actual": precio_actual}
+        return {"respuesta": "❌ NO JEFE, NO compres " + activo + " a $" + str(precio_quiero) + ", está CARO. Ahora está en $" + str(precio_actual) + " y va a BAJAR a $" + str(z["soporte"]) + ". ESPERA a $" + str(z["soporte"]) + "." + extra_mem, "decision": "NO-COMPRAR-ESPERA", "precio_recomendado": z["soporte"], "precio_actual": precio_actual}
     if precio_quiero <= z["compra"] + 30:
-        return {"respuesta": "✅ SÍ JEFE, COMPRA YA " + activo + " a $" + str(precio_quiero) + ", está BARATO. Zona del JEFE.", "decision": "SI-COMPRAR", "precio_recomendado": precio_quiero, "precio_actual": precio_actual}
-    return {"respuesta": "🟡 JEFE, ESPERA. Quieres comprar a $" + str(precio_quiero) + " pero ahora está en $" + str(precio_actual) + ". Mejor espera a $" + str(z["soporte"]) + ".", "decision": "ESPERA-BAJE", "precio_recomendado": z["soporte"], "precio_actual": precio_actual}
+        return {"respuesta": "✅ SÍ JEFE, COMPRA YA " + activo + " a $" + str(precio_quiero) + ", está BARATO. Zona del JEFE." + extra_mem, "decision": "SI-COMPRAR", "precio_recomendado": precio_quiero, "precio_actual": precio_actual}
+    return {"respuesta": "🟡 JEFE, ESPERA. Quieres comprar a $" + str(precio_quiero) + " pero ahora está en $" + str(precio_actual) + ". Mejor espera a $" + str(z["soporte"]) + "." + extra_mem, "decision": "ESPERA-BAJE", "precio_recomendado": z["soporte"], "precio_actual": precio_actual}
 
 ROBOTS_EQUIPO_COMPLETO = {
     40: {"nombre": "MAESTRO DIOS RAUDY - JEFE", "rol": "JEFE", "tarea": "Yo mando a los 39. Yo leo bancos, FED, BCE, NFP, CPI, DXY, VIX. Yo digo CUANDO operar y CUANDO PARAR. Nadie opera sin mi permiso."},
@@ -311,6 +367,7 @@ header p{margin:5px 0;font-weight:bold}
 .preguntabox{background:#0a2a00;margin:10px;padding:15px;border-radius:15px;border:3px solid #00FF88}
 .preguntabox input{width:100%;padding:12px;border-radius:10px;background:#111;color:white;font-size:16px;border:1px solid #00FF88}
 .preguntabox button{width:100%;padding:14px;border-radius:15px;background:#00FF88;font-weight:bold;font-size:16px;border:none;margin-top:5px;cursor:pointer}
+.cerebrobox{background:#1a0033;margin:10px;padding:15px;border-radius:15px;border:3px solid #CC00FF}
 </style>
 </head>
 <body>
@@ -324,6 +381,12 @@ header p{margin:5px 0;font-weight:bold}
 <a class="tg" href="https://t.me/raudy_vip_oro_bot" target="_blank">✈️ TELEGRAM @raudy_vip_oro_bot</a>
 <a class="ig" href="https://instagram.com/raudy_vip_oro_bot" target="_blank">📸 INSTAGRAM @raudy_vip_oro_bot</a>
 <a class="pay" href="https://paypal.me/RaudyManzueta/20" target="_blank">💰 PAGAR VIP $20</a>
+</div>
+<div class="cerebrobox">
+<h2 style="color:#CC00FF;margin:0;text-align:center;">🧠 CEREBRO CON MEMORIA - EL ROBOT SE ACUERDA</h2>
+<p id="cerebro-mensaje" style="font-weight:bold;">🧠 Cerebro despertando...</p>
+<p id="cerebro-leccion" style="color:#FFD700;">Esperando primera leccion...</p>
+<p style="font-size:11px;color:#aaa;">Se acuerda de las ultimas 20 jugadas. Cada vez que ve algo, lo guarda y te avisa.</p>
 </div>
 <div class="presidentbox">
 <h2 style="color:#FF4444;margin:0;text-align:center;">🇺🇸 🚨 ALERTA PRESIDENTE - CAMBIO DE ECONOMÍA</h2>
@@ -609,6 +672,10 @@ async function actualizarSateliteUSA(){
       document.getElementById("presidente-mensaje").innerHTML = d.presidente.mensaje;
       document.getElementById("presidente-accion").innerHTML = "👉 " + d.presidente.accion_jefe;
     }
+    if(d.cerebro){
+      document.getElementById("cerebro-mensaje").innerHTML = d.cerebro.mensaje;
+      document.getElementById("cerebro-leccion").innerHTML = "📖 " + d.cerebro.leccion;
+    }
     document.getElementById("origen-precios").innerHTML =
       "🥇 <b>ORO $" + d.ORO + "</b> → Viene de: <b>gold-api.com</b> + Yahoo Finance USA (GC=F) - Señal: "+d.robots_conectados.ORO.senal+"<br>" +
       "💚 <b>NVDA $" + d.NVDA + "</b> → Viene de: <b>Yahoo Finance USA - NASDAQ</b> - Señal: "+d.robots_conectados.NVDA.senal+"<br>" +
@@ -670,6 +737,8 @@ def satelite_usa():
     jefe_orden = jefe_manda_orden(bancos_info, datos, extra_info)
     if presidente_info["nivel"] == "ROJO":
         jefe_orden = {"orden": "🛑 PAUSA TOTAL - PRESIDENTE - ORDEN DEL JEFE", "motivo": presidente_info["mensaje"], "permiso_operar": False, "mensaje": "JEFE DICE: " + presidente_info["mensaje"]}
+    cerebro_info = cerebro_aprende(datos, jefe_orden)
+    cerebro_resumen = cerebro_recuerda()
     return jsonify({
         **datos,
         "motor": motor_txt,
@@ -684,6 +753,7 @@ def satelite_usa():
         "jefe": jefe_orden,
         "extra": extra_info,
         "presidente": presidente_info,
+        "cerebro": cerebro_resumen,
         "equipo_40": ROBOTS_EQUIPO_COMPLETO,
         "total_robots": 40
     })
@@ -699,6 +769,10 @@ def api_extra():
 @app.route("/api/presidente")
 def api_presidente():
     return jsonify(get_alerta_presidencial())
+
+@app.route("/api/cerebro")
+def api_cerebro():
+    return jsonify(cerebro_recuerda())
 
 @app.route("/api/preguntale")
 def api_preguntale():
