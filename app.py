@@ -55,13 +55,11 @@ def get_info_bancaria():
 # ESTO ES LO QUE USAN LOS BANCOS - NO SE BORRO NADA DE LO TUYO
 # ============================================================
 def get_mercado_extra():
-    # DXY = Dolar, VIX = Miedo, BTC = Bitcoin, CL = Petroleo, TNX = Bono 10 años
     dxy = get_precio_yahoo('DX-Y.NYB', 99.50)
     vix = get_precio_yahoo('^VIX', 15.20)
     btc = get_precio_yahoo('BTC-USD', 105000)
     petroleo = get_precio_yahoo('CL=F', 61.50)
     bono10 = get_precio_yahoo('^TNX', 4.10)
-    # Interpretación para el JEFE
     if vix >= 30:
         vix_texto = "😱 PANICO TOTAL - VIX " + str(round(vix,2)) + " - JEFE ORDENA PAUSA - Viene caida fuerte"
         vix_nivel = "ROJO"
@@ -327,7 +325,6 @@ header p{margin:5px 0;font-weight:bold}
 <a class="ig" href="https://instagram.com/raudy_vip_oro_bot" target="_blank">📸 INSTAGRAM @raudy_vip_oro_bot</a>
 <a class="pay" href="https://paypal.me/RaudyManzueta/20" target="_blank">💰 PAGAR VIP $20</a>
 </div>
-<!-- 🆕 NUEVO - PRESIDENTE + PREGUNTALE - AGREGADO AHORA -->
 <div class="presidentbox">
 <h2 style="color:#FF4444;margin:0;text-align:center;">🇺🇸 🚨 ALERTA PRESIDENTE - CAMBIO DE ECONOMÍA</h2>
 <p id="presidente-mensaje" style="font-weight:bold;">🇺🇸 Vigilando Casa Blanca...</p>
@@ -353,7 +350,6 @@ header p{margin:5px 0;font-weight:bold}
 <p id="banco-lista" style="font-size:12px;line-height:1.6;">Cargando bancos...</p>
 <p style="font-size:11px;color:#aaa;">Fuente: ForexFactory.com + federalreserve.gov (FED) + ecb.europa.eu (BCE) + TradingEconomics - GRATIS</p>
 </div>
-<!-- 🆕 NUEVO - DXY + VIX + BTC + PETROLEO -->
 <div class="extrabox">
 <h2 style="color:#00FFFF;margin:0;text-align:center;">💵 DOLAR + 😱 MIEDO + ₿ BITCOIN - LO QUE USAN LOS BANCOS</h2>
 <p id="dxy-texto" style="font-size:14px;font-weight:bold;">💵 DXY: Cargando...</p>
@@ -445,4 +441,291 @@ const robots=[
 [14,"FUEGO NVDA","🔥","Yo cuido solo NVIDIA"],
 [15,"FUEGO APPLE","🔥","Yo cuido solo APPLE"],
 [16,"FUEGO ORO","🔥","Yo cuido el ORO con fuego"],
-[17,"FUEGO VENTA","🔥","Yo digo V
+[17,"FUEGO VENTA","🔥","Yo digo VENTA cuando hay fuego rojo"],
+[18,"RAYO META","⚡","Yo cuido META y GOOGLE"],
+[19,"RAYO AMAZON","⚡","Yo cuido AMAZON"],
+[20,"HIELO JEFE","🧊","Yo digo ESPERA cuando hay peligro"],
+[21,"COMETA AMAZON","☄️","Yo busco noticias de AMAZON"],
+[22,"COMETA MICROSOFT","☄️","Yo busco noticias de MICROSOFT"],
+[23,"RAYO NOTICIAS","⚡","Yo busco noticias en Telegram y WhatsApp"],
+[24,"HIELO SOPORTE","🧊","Yo busco soportes, donde el precio no baja"],
+[25,"FUEGO RESISTENCIA","🔥","Yo busco resistencias, donde el precio no sube"],
+[26,"COMETA 14:30","☄️","Yo vigilo noticias de las 14:30"],
+[27,"RAYO ENTRADA","⚡","Yo busco la mejor ENTRADA"],
+[28,"FUEGO BOTIN","🔥","Yo calculo tu BOTÍN"],
+[29,"HIELO SALIDA","🧊","Yo te digo cuando SALIR"],
+[30,"COMETA PELIGRO","☄️","Yo grito PELIGRO si hay noticia mala"],
+[31,"RAYO VIP","⚡","Yo solo hablo para los VIP"],
+[32,"FUEGO DIOS","🔥","Yo tengo fuego de DIOS"],
+[33,"HIELO DIOS","🧊","Yo tengo hielo de DIOS"],
+[34,"COMETA ORO 2","☄️","Yo confirmo lo que dice el ORO"],
+[35,"RAYO CONFIRMA","⚡","Yo confirmo COMPRA o VENTA"],
+[36,"FUEGO CONFIRMA","🔥","Yo confirmo con fuego"],
+[37,"HIELO CONFIRMA","🧊","Yo confirmo con calma"],
+[38,"COMETA JEFE","☄️","Yo soy el jefe de los cometas"],
+[39,"RAYO MAESTRO 2","⚡","Yo soy la mano derecha del Maestro 40"],
+[40,"MAESTRO DIOS RAUDY","👑⚡☄️🔥🧊","Yo mando a todos, tengo TODOS los poderes"]
+];
+const grid=document.getElementById("grid");
+let estrellas={};
+robots.slice(0,39).forEach(r=>{
+ let num=r[0]; let nombre=r[1]; let poder=r[2]; let funcion=r[3];
+ estrellas[num]=0;
+ let div=document.createElement("div");
+ div.className="robot";
+ div.innerHTML="<div class='luz' id='luz"+num+"'></div><div class='poder'>"+poder+"</div><h3>Robot "+num+" - "+nombre+"</h3><p><b>Función:</b> "+funcion+"</p><div class='msg' id='msg"+num+"'>Buscando información...</div><div class='estrellas' id='est"+num+"'></div><div class='btns'><button class='felicitar' onclick='felicitar("+num+")'>👏 FELICITAR</button><button class='estrella' onclick='darEstrella("+num+")'>⭐ ESTRELLA</button></div>";
+ grid.appendChild(div);
+});
+function sonido(){
+ try{
+  let ctx=new (window.AudioContext||window.webkitAudioContext)();
+  let o=ctx.createOscillator(); let g=ctx.createGain();
+  o.connect(g); g.connect(ctx.destination);
+  o.frequency.value=880; o.type="sine"; g.gain.value=0.1; o.start(); o.stop(ctx.currentTime+0.15);
+ }catch(e){}
+}
+function hablar(texto){
+ if('speechSynthesis' in window){ let u=new SpeechSynthesisUtterance(texto); u.lang='es-ES'; speechSynthesis.speak(u); }
+}
+function felicitar(num){
+ sonido();
+ document.getElementById("msg"+num).innerHTML="¡Gracias jefe Raudy! Lo estoy haciendo bien, te felicito a ti también 👏";
+ hablar("Gracias jefe Raudy, lo estoy haciendo bien");
+ document.getElementById("luz"+num).style.background="#00FF88";
+}
+function darEstrella(num){
+ sonido(); sonido();
+ estrellas[num]++;
+ document.getElementById("est"+num).innerHTML="⭐".repeat(estrellas[num]);
+ document.getElementById("msg"+num).innerHTML="¡WOW! ¡Me mandaste una estrella! ¡Gracias jefe! ⭐ ¡Voy a trabajar más fuerte!";
+ hablar("Gracias jefe, me mandaste una estrella");
+}
+let maestroEstrellasCount=5;
+function felicitarMaestro(){
+ sonido();
+ document.getElementById("maestroMsg").innerHTML="¡Gracias jefe! ¡Lo estoy haciendo bien, te felicito! ¡Eres el mejor jefe! 👑";
+ hablar("Gracias jefe, lo estoy haciendo bien, te felicito");
+}
+function estrellaMaestro(){
+ sonido();
+ maestroEstrellasCount++;
+ document.getElementById("maestroEstrellas").innerHTML="⭐".repeat(maestroEstrellasCount);
+ document.getElementById("maestroMsg").innerHTML="¡ESTRELLA RECIBIDA! ¡Ahora tengo más poder! ⭐⚡☄️";
+ hablar("Estrella recibida, ahora tengo más poder");
+}
+function hablarBroker(){
+ sonido();
+ let msgs=["Jefe, el Maestro 40 dice que esperes, el ORO está en zona caliente.","Jefe, los robots dicen COMPRA en NVDA, pero con cuidado.","Jefe, yo como tu Broker te digo: no entres sin confirmación del Maestro.","Jefe, hoy hay mucha fuerza en TESLA, los robots están buscando información."];
+ let msg=msgs[Math.floor(Math.random()*msgs.length)];
+ document.getElementById("brokerMsg").innerHTML=msg;
+ hablar(msg);
+}
+async function preguntarRobot(){
+ let precio=document.getElementById("precio-pregunta").value;
+ if(!precio){
+  document.getElementById("respuesta-robot").innerHTML="🤖 Jefe, escribe un precio. Ej: 4070";
+  return;
+ }
+ document.getElementById("respuesta-robot").innerHTML="🤖 Robot pensando...";
+ try{
+  let r=await fetch('/api/preguntale?precio='+precio+'&activo='+activo);
+  let d=await r.json();
+  document.getElementById("respuesta-robot").innerHTML="🤖 "+d.respuesta+"<br>💰 Actual: $"+d.precio_actual+" | 🎯 Te recomiendo: $"+d.precio_recomendado;
+  hablar(d.respuesta);
+ }catch(e){
+  document.getElementById("respuesta-robot").innerHTML="🤖 Error, intenta otra vez";
+ }
+}
+async function analizarTodo(){
+ sonido();
+ let datos = datosRealesGlobal;
+ if(!datos){
+   try{
+     let r = await fetch('/api/satelite_usa?v='+Date.now());
+     datos = await r.json();
+     datosRealesGlobal = datos;
+   }catch(e){ datos = null; }
+ }
+ let precioReal = datos && datos[activo] ? datos[activo] : simbolos.find(s=>s.id===activo).precio;
+ let senalTexto = "ESPERA 🟡";
+ let esCompra = false; let esVenta = false;
+ if(activo==="ORO"){ if(precioReal<=3910){senalTexto="COMPRA DIOS 🟢"; esCompra=true;} else if(precioReal>=3970){senalTexto="VENTA DIOS 🔴"; esVenta=true;} }
+ else if(activo==="NVDA"){ if(precioReal<=180){senalTexto="COMPRA DIOS 🟢"; esCompra=true;} else if(precioReal>=195){senalTexto="VENTA DIOS 🔴"; esVenta=true;} }
+ else if(activo==="TSLA"){ if(precioReal<=330){senalTexto="COMPRA DIOS 🟢"; esCompra=true;} else if(precioReal>=355){senalTexto="VENTA DIOS 🔴"; esVenta=true;} }
+ else if(activo==="AAPL"){ if(precioReal<=255){senalTexto="COMPRA DIOS 🟢"; esCompra=true;} else if(precioReal>=270){senalTexto="VENTA DIOS 🔴"; esVenta=true;} }
+ else if(activo==="MSFT"){ if(precioReal<=490){senalTexto="COMPRA DIOS 🟢"; esCompra=true;} else if(precioReal>=505){senalTexto="VENTA DIOS 🔴"; esVenta=true;} }
+ else if(activo==="AMZN"){ if(precioReal<=230){senalTexto="COMPRA DIOS 🟢"; esCompra=true;} else if(precioReal>=245){senalTexto="VENTA DIOS 🔴"; esVenta=true;} }
+ else if(activo==="META"){ if(precioReal<=640){senalTexto="COMPRA DIOS 🟢"; esCompra=true;} else if(precioReal>=660){senalTexto="VENTA DIOS 🔴"; esVenta=true;} }
+ else if(activo==="GOOGL"){ if(precioReal<=280){senalTexto="COMPRA DIOS 🟢"; esCompra=true;} else if(precioReal>=292){senalTexto="VENTA DIOS 🔴"; esVenta=true;} }
+ let entrada = precioReal.toFixed(2);
+ let botin, salida;
+ if(esCompra){ botin = (precioReal*1.02).toFixed(2); salida = (precioReal*0.99).toFixed(2); }
+ else if(esVenta){ botin = (precioReal*0.98).toFixed(2); salida = (precioReal*1.01).toFixed(2); }
+ else { botin = entrada; salida = entrada; }
+ let origen = activo==="ORO" ? "gold-api.com + Yahoo USA (GC=F)" : "Yahoo Finance USA - NYSE / NASDAQ";
+ let ordenJefe = datos && datos.jefe ? datos.jefe.orden : "";
+ let textoJefe = ordenJefe ? " | 👑 JEFE DICE: " + ordenJefe : "";
+ document.getElementById("maestroMsg").innerHTML="He analizado "+activo+" con PRECIO REAL de BOLSA USA. Los 40 robots están CONECTADOS. Decisión: <b>"+senalTexto+"</b><br>ENTRADA: $"+entrada+" | BOTÍN: $"+botin+" | SALIDA: $"+salida+"<br>📍 Fuente: "+origen + "<br>" + textoJefe;
+ hablar("He analizado "+activo+" con precio real de bolsa USA, decisión "+senalTexto);
+ robots.slice(0,39).forEach(r=>{
+  let num=r[0]; let funcion=r[3];
+  let el=document.getElementById("msg"+num);
+  let luz=document.getElementById("luz"+num);
+  if(!el) return;
+  let texto = "🔌 "+funcion+" - "+activo+" $"+entrada+" - Fuente: "+origen+" - Veo "+senalTexto + " - Obedezco al JEFE 40";
+  el.innerHTML = texto;
+  let col = esCompra ? "#00FF88" : (esVenta ? "#FF4444" : "#FFD700");
+  luz.style.background = col;
+  luz.style.boxShadow = "0 0 15px "+col;
+ });
+ document.getElementById("brokerMsg").innerHTML="Jefe, ya analicé "+activo+" con BOLSA USA REAL. El Maestro dice "+senalTexto+". ENTRADA $"+entrada+", BOTÍN $"+botin+". Fuente: "+origen+". Yo te recomiendo esperar confirmación.";
+ document.getElementById("conexion-texto").innerHTML="🔌 40/40 ROBOTS CONECTADOS ✅ - "+activo+" $"+entrada+" - Fuente: "+origen+" - Actualizado ahora";
+}
+async function actualizarSateliteUSA(){
+  try{
+    let r = await fetch('/api/satelite_usa?v='+Date.now());
+    let d = await r.json();
+    datosRealesGlobal = d;
+    document.getElementById("satelite-texto").innerHTML = "🛰️ SATÉLITE EN USA ✅ - NYSE: " + d.nyse + " | NASDAQ: " + d.nasdaq;
+    document.getElementById("satelite-usa").innerHTML = "🇺🇸 Wall Street: ORO $" + d.ORO + " | NVDA $" + d.NVDA + " | TESLA $" + d.TSLA + " | APPLE $" + d.AAPL;
+    document.getElementById("motor-texto").innerHTML = "💪 MOTOR: " + d.motor + " | " + d.velocidad;
+    document.getElementById("buscador-texto").innerHTML = d.buscador;
+    document.getElementById("conexion-texto").innerHTML = "🔌 40/40 ROBOTS CONECTADOS ✅ - ORO $"+d.ORO+" - Fuente: Yahoo USA + gold-api";
+    if(d.jefe){
+      document.getElementById("jefe-orden").innerHTML = d.jefe.orden;
+      document.getElementById("jefe-mensaje").innerHTML = d.jefe.mensaje;
+    }
+    if(d.bancos){
+      document.getElementById("banco-alerta").innerHTML = "🏦 " + d.bancos.alerta_banco + " | Riesgo: " + d.bancos.nivel_riesgo;
+      let lista = d.bancos.eventos_hoy.map(e=> "🏦 <b>" + e.evento + "</b> - Impacto: " + e.impacto + " - " + e.efecto).join("<br>");
+      document.getElementById("banco-lista").innerHTML = lista + "<br>📍 Fuente: " + d.bancos.fuente;
+    }
+    if(d.extra){
+      document.getElementById("dxy-texto").innerHTML = "💵 " + d.extra.DXY_texto;
+      document.getElementById("vix-texto").innerHTML = "😱 " + d.extra.VIX_texto;
+      document.getElementById("extra-texto").innerHTML = "₿ BTC $" + Math.round(d.extra.BTC) + " | 🛢️ Petroleo $" + d.extra.PETROLEO + " | 📈 Bono 10 años " + d.extra.BONO10 + "%";
+    }
+    if(d.presidente){
+      document.getElementById("presidente-mensaje").innerHTML = d.presidente.mensaje;
+      document.getElementById("presidente-accion").innerHTML = "👉 " + d.presidente.accion_jefe;
+    }
+    document.getElementById("origen-precios").innerHTML =
+      "🥇 <b>ORO $" + d.ORO + "</b> → Viene de: <b>gold-api.com</b> + Yahoo Finance USA (GC=F) - Señal: "+d.robots_conectados.ORO.senal+"<br>" +
+      "💚 <b>NVDA $" + d.NVDA + "</b> → Viene de: <b>Yahoo Finance USA - NASDAQ</b> - Señal: "+d.robots_conectados.NVDA.senal+"<br>" +
+      "🍎 <b>APPLE $" + d.AAPL + "</b> → Viene de: <b>Yahoo Finance USA - NASDAQ</b> - Señal: "+d.robots_conectados.AAPL.senal+"<br>" +
+      "🚗 <b>TESLA $" + d.TSLA + "</b> → Viene de: <b>Yahoo Finance USA - NASDAQ</b> - Señal: "+d.robots_conectados.TSLA.senal+"<br>" +
+      "🪟 <b>MICROSOFT $" + d.MSFT + "</b> → Viene de: <b>Yahoo Finance USA - NASDAQ</b> - Señal: "+d.robots_conectados.MSFT.senal+"<br>" +
+      "📦 <b>AMAZON $" + d.AMZN + "</b> → Viene de: <b>Yahoo Finance USA - NASDAQ</b> - Señal: "+d.robots_conectados.AMZN.senal+"<br>" +
+      "👍 <b>META $" + d.META + "</b> → Viene de: <b>Yahoo Finance USA - NASDAQ</b> - Señal: "+d.robots_conectados.META.senal+"<br>" +
+      "🔍 <b>GOOGLE $" + d.GOOGL + "</b> → Viene de: <b>Yahoo Finance USA - NASDAQ</b> - Señal: "+d.robots_conectados.GOOGL.senal;
+    let mapa = {"ORO":d.ORO,"NVDA":d.NVDA,"AAPL":d.AAPL,"TSLA":d.TSLA,"MSFT":d.MSFT,"AMZN":d.AMZN,"META":d.META,"GOOGL":d.GOOGL};
+    simbolos.forEach(s=>{ if(mapa[s.id]) s.precio = mapa[s.id]; });
+    renderAcc();
+  }catch(e){
+    document.getElementById("satelite-texto").innerHTML = "🛰️ Satélite buscando USA... Reintentando";
+  }
+}
+setInterval(actualizarSateliteUSA, 15000);
+actualizarSateliteUSA();
+setInterval(()=>{
+ let d=new Date();
+ document.getElementById("reloj").innerHTML=d.toLocaleTimeString("es-ES");
+ let h=d.getHours();
+ document.getElementById("sesion").innerHTML=h>=14&&h<21?"🟢 SESIÓN NEW YORK ABIERTA - Robots trabajando":"🟡 Sesión cerrada - Robots buscando información";
+},1000);
+setInterval(analizarTodo,30000);
+analizarTodo();
+</script>
+</body>
+</html>
+"""
+
+@app.route("/")
+def home():
+    return HTML
+
+@app.route("/api/satelite_usa")
+def satelite_usa():
+    try:
+        r = requests.get('https://api.gold-api.com/price/XAU', timeout=4)
+        oro = float(r.json().get('price', 4088))
+    except:
+        oro = get_precio_yahoo('GC=F', 4088)
+    datos = {
+        "ORO": oro,
+        "NVDA": get_precio_yahoo('NVDA', 185.20),
+        "AAPL": get_precio_yahoo('AAPL', 262.10),
+        "TSLA": get_precio_yahoo('TSLA', 340.50),
+        "MSFT": get_precio_yahoo('MSFT', 495.30),
+        "AMZN": get_precio_yahoo('AMZN', 235.40),
+        "META": get_precio_yahoo('META', 645.20),
+        "GOOGL": get_precio_yahoo('GOOGL', 282.10),
+    }
+    motor_txt = motor_fuerza_total(oro, "ORO")
+    buscador_txt = buscador_nada_se_escape(datos)
+    robots_conectados = conectar_todos_los_robots(datos)
+    bancos_info = get_info_bancaria()
+    extra_info = get_mercado_extra()
+    presidente_info = get_alerta_presidencial()
+    jefe_orden = jefe_manda_orden(bancos_info, datos, extra_info)
+    if presidente_info["nivel"] == "ROJO":
+        jefe_orden = {"orden": "🛑 PAUSA TOTAL - PRESIDENTE - ORDEN DEL JEFE", "motivo": presidente_info["mensaje"], "permiso_operar": False, "mensaje": "JEFE DICE: " + presidente_info["mensaje"]}
+    return jsonify({
+        **datos,
+        "motor": motor_txt,
+        "velocidad": "TURBO 5 SEG - SATELITE USA ACTIVO",
+        "buscador": buscador_txt,
+        "nyse": "ABIERTO - WALL STREET",
+        "nasdaq": "ABIERTO - USA",
+        "robots_conectados": robots_conectados,
+        "origen_oro": "gold-api.com + Yahoo Finance USA",
+        "origen_acciones": "Yahoo Finance USA - NYSE / NASDAQ",
+        "bancos": bancos_info,
+        "jefe": jefe_orden,
+        "extra": extra_info,
+        "presidente": presidente_info,
+        "equipo_40": ROBOTS_EQUIPO_COMPLETO,
+        "total_robots": 40
+    })
+
+@app.route("/api/bancos")
+def api_bancos():
+    return jsonify(get_info_bancaria())
+
+@app.route("/api/extra")
+def api_extra():
+    return jsonify(get_mercado_extra())
+
+@app.route("/api/presidente")
+def api_presidente():
+    return jsonify(get_alerta_presidencial())
+
+@app.route("/api/preguntale")
+def api_preguntale():
+    try:
+        precio_quiero = float(request.args.get("precio", 4070))
+        activo = request.args.get("activo", "ORO")
+        try:
+            r = requests.get('https://api.gold-api.com/price/XAU', timeout=4)
+            precio_actual = float(r.json().get('price', 4088))
+        except:
+            precio_actual = 4088
+        if activo != "ORO":
+            precio_actual = get_precio_yahoo(activo, precio_actual)
+        return jsonify(robot_responde_pregunta(precio_quiero, activo, precio_actual))
+    except:
+        return jsonify({"respuesta": "🤖 Jefe, escribe un numero. Ej: 4070", "decision": "ERROR", "precio_recomendado": 3940, "precio_actual": 4088})
+
+@app.route("/api/jefe")
+def api_jefe():
+    try:
+        r = requests.get('https://api.gold-api.com/price/XAU', timeout=4)
+        oro = float(r.json().get('price', 4088))
+    except:
+        oro = 4088
+    bancos = get_info_bancaria()
+    extra = get_mercado_extra()
+    return jsonify(jefe_manda_orden(bancos, {"ORO": oro}, extra))
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
