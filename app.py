@@ -1,6 +1,6 @@
 from flask import Flask
 from flask import jsonify, request
-import requests, json, os, re, urllib.parse, time
+import requests, json, os, re, urllib.parse, time, hmac, hashlib
 from datetime import datetime
 app = Flask(__name__)
 
@@ -8,7 +8,49 @@ LINK_BROKER = "https://www.bybit.com/invite?ref=RAUDYORO"
 NOMBRE_BROKER_QR = "BYBIT - RAUDY ORO"
 M5_CONFIG = {"plataforma": "MT5", "timeframe": "M5", "simbolo": "XAUUSD", "activa": True, "jefe": "RAUDY ORO"}
 
-# ===== ARREGLO NO PRENDE - CACHE 30 SEGUNDOS =====
+# ===== BYBIT - CONEXION ROBOT =====
+BYBIT_KEY = os.environ.get("BYBIT_API_KEY", "")
+BYBIT_SECRET = os.environ.get("BYBIT_API_SECRET", "")
+BYBIT_TESTNET = os.environ.get("BYBIT_TESTNET", "true") == "true"
+BYBIT_BASE = "https://api-testnet.bybit.com" if BYBIT_TESTNET else "https://api.bybit.com"
+# ORO en Bybit = PAXGUSDT, EUR/USD no hay en Spot, usamos EURUSDT, BTC = BTCUSDT
+MAP_BYBIT = {"ORO": "PAXGUSDT", "BTC": "BTCUSDT", "EURUSD": "EURUSDT"}
+
+def bybit_firma(ts, body_str):
+    msg = ts + BYBIT_KEY + "5000" + body_str
+    return hmac.new(BYBIT_SECRET.encode(), msg.encode(), hashlib.sha256).hexdigest()
+
+def bybit_orden_real(simbolo, lado, cantidad):
+    # lado: Buy / Sell
+    if not BYBIT_KEY or not BYBIT_SECRET:
+        return {"ok": False, "msg": "Sin llave Bybit - sigue en SIMULACION"}
+    try:
+        ts = str(int(time.time()*1000))
+        body = {"category": "spot", "symbol": simbolo, "side": lado, "orderType": "Market", "qty": str(cantidad)}
+        body_str = json.dumps(body)
+        headers = {"X-BAPI-API-KEY": BYBIT_KEY, "X-BAPI-TIMESTAMP": ts, "X-BAPI-RECV-WINDOW": "5000", "X-BAPI-SIGN": bybit_firma(ts, body_str), "Content-Type": "application/json"}
+        r = requests.post(BYBIT_BASE + "/v5/order/create", json=body, headers=headers, timeout=10)
+        j = r.json()
+        if j.get("retCode") == 0:
+            return {"ok": True, "msg": "Orden Bybit OK " + simbolo + " " + lado, "data": j}
+        else:
+            return {"ok": False, "msg": "Bybit error: " + str(j.get("retMsg")), "data": j}
+    except Exception as e:
+        return {"ok": False, "msg": "Error Bybit: " + str(e)}
+
+def bybit_balance():
+    if not BYBIT_KEY or not BYBIT_SECRET:
+        return {"ok": False, "msg": "Sin llave - pon BYBIT_API_KEY en Render Environment"}
+    try:
+        ts = str(int(time.time()*1000))
+        params = "accountType=SPOT"
+        firma = hmac.new(BYBIT_SECRET.encode(), (ts + BYBIT_KEY + "5000" + params).encode(), hashlib.sha256).hexdigest()
+        headers = {"X-BAPI-API-KEY": BYBIT_KEY, "X-BAPI-TIMESTAMP": ts, "X-BAPI-RECV-WINDOW": "5000", "X-BAPI-SIGN": firma}
+        r = requests.get(BYBIT_BASE + "/v5/account/wallet-balance?" + params, headers=headers, timeout=10)
+        return {"ok": True, "data": r.json(), "modo": "TESTNET" if BYBIT_TESTNET else "REAL"}
+    except Exception as e:
+        return {"ok": False, "msg": str(e)}
+
 _CACHE = {"tiempo": 0, "datos": None}
 def load(n, d):
     try:
@@ -92,16 +134,12 @@ def precio_bybit():
 def todos_precios():
     global _CACHE
     ahora = time.time()
-    # Si ya buscamos hace menos de 30 seg, usa lo mismo, no busques otra vez
     if _CACHE["datos"] is not None and (ahora - _CACHE["tiempo"] < 30):
         return _CACHE["datos"]
     try:
-        oro = oro_real()
-        btc_b = precio_binance()
-        btc_c = precio_coinbase()
-        btc_y = precio_bybit()
+        oro = oro_real(); btc_b = precio_binance(); btc_c = precio_coinbase(); btc_y = precio_bybit()
         d = {"ORO": oro, "EURUSD": yahoo("EURUSD=X", 1.1150),"GBPUSD": yahoo("GBPUSD=X", 1.2750), "USDJPY": yahoo("USDJPY=X", 149.5),"USDCHF": yahoo("USDCHF=X", 0.8850), "AUDUSD": yahoo("AUDUSD=X", 0.6550),"BTC": btc_b, "BTC_COINBASE": btc_c, "BTC_BINANCE": btc_b, "BTC_BYBIT": btc_y,"ETH": yahoo("ETH-USD", 3400), "AAPL": yahoo("AAPL", 262),"TSLA": yahoo("TSLA", 340), "NVDA": yahoo("NVDA", 185),"MSFT": yahoo("MSFT", 495), "AMZN": yahoo("AMZN", 235),"META": yahoo("META", 645), "GOOGL": yahoo("GOOGL", 282),"NFLX": yahoo("NFLX", 765), "AMD": yahoo("AMD", 125)}
-    except Exception as e:
+    except:
         d = {"ORO": 4070, "EURUSD": 1.1140, "GBPUSD": 1.2750, "USDJPY": 149.5, "USDCHF": 0.8850, "AUDUSD": 0.6550, "BTC": 98000, "BTC_COINBASE": 98000, "BTC_BINANCE": 98000, "BTC_BYBIT": 98000, "ETH": 3400, "AAPL": 262, "TSLA": 340, "NVDA": 185, "MSFT": 495, "AMZN": 235, "META": 645, "GOOGL": 282, "NFLX": 765, "AMD": 125}
     _CACHE = {"tiempo": ahora, "datos": d}
     return d
@@ -122,6 +160,10 @@ def robot_decide_y_opera(activo, precio, m5_dato):
             if gano or perdio:
                 op["cierre"] = precio; op["hora_cierre"] = datetime.now().strftime("%H:%M")
                 op["resultado"] = "GANO +$" + str(op["ganar"]) if gano else "PERDIO -$" + str(op["perder"])
+                # Si gano/perdio, cierra tambien en Bybit con orden contraria
+                if op.get("bybit_id"):
+                    lado_cierre = "Sell" if op["lado"] == "COMPRA" else "Buy"
+                    bybit_orden_real(MAP_BYBIT.get(activo, "PAXGUSDT"), lado_cierre, op.get("bybit_qty", "0.002"))
                 OPS["abiertas"].remove(op); OPS["cerradas"].append(op); OPS["h"].append(op)
                 if gano: OPS["ganado"] += op["ganar"]
                 else: OPS["perdido"] += op["perder"]
@@ -136,9 +178,23 @@ def robot_decide_y_opera(activo, precio, m5_dato):
         elif "VENTA" in accion: lado = "VENTA"; tp = m5_dato.get("tp_m5"); sl = m5_dato.get("sl_m5")
         else:
             save("ops.json", OPS); return "Robot M5: ESPERA - " + activo + " $" + str(precio) + " no toco zona, no opera"
-        nueva = {"activo": activo, "lado": lado, "entrada": precio, "tp": tp, "sl": sl, "lote": 0.01, "ganar": 5, "perder": 2, "hora": datetime.now().strftime("%H:%M"), "estado": "ABIERTA", "motivo": m5_dato.get("mensaje", "")}
+        # ===== CONECTA A BYBIT - SOLO SI HAY LLAVE =====
+        bybit_msg = "SIMULACION"
+        bybit_qty = "0.002"
+        if activo == "BTC": bybit_qty = "0.0001"
+        if activo == "EURUSD": bybit_qty = "5"
+        bybit_id = ""
+        if BYBIT_KEY:
+            simbolo = MAP_BYBIT.get(activo, "PAXGUSDT")
+            lado_bybit = "Buy" if lado == "COMPRA" else "Sell"
+            res = bybit_orden_real(simbolo, lado_bybit, bybit_qty)
+            bybit_msg = res.get("msg", "")
+            if res.get("ok"):
+                try: bybit_id = res["data"]["result"].get("orderId", "")
+                except: bybit_id = "OK"
+        nueva = {"activo": activo, "lado": lado, "entrada": precio, "tp": tp, "sl": sl, "lote": 0.01, "ganar": 5, "perder": 2, "hora": datetime.now().strftime("%H:%M"), "estado": "ABIERTA", "motivo": m5_dato.get("mensaje", ""), "bybit": bybit_msg, "bybit_id": bybit_id, "bybit_qty": bybit_qty}
         OPS["abiertas"].append(nueva); OPS["h"].append(nueva)
-        OPS["u"] = "🤖 ROBOT ABRIO SOLO: " + lado + " " + activo + " en $" + str(precio) + " TP $" + str(tp) + " SL $" + str(sl)
+        OPS["u"] = "🤖 ROBOT ABRIO SOLO: " + lado + " " + activo + " en $" + str(precio) + " TP $" + str(tp) + " SL $" + str(sl) + " | BYBIT: " + bybit_msg
         save("ops.json", OPS); save("grafico.json", GRAFICO)
         return OPS["u"]
     except Exception as e:
@@ -162,7 +218,6 @@ def m5_zona_analiza(activo, precio):
     M5_ZONA["u"] = msg; M5_ZONA["h"].append({"hora": datetime.now().strftime("%H:%M"), "a": activo, "p": precio, "accion": accion, "tf": "M5"}); M5_ZONA["h"] = M5_ZONA["h"][-20:]
     save("m5_zona.json", M5_ZONA); save("m5.json", M5)
     return {"activo": activo, "precio": precio, "tf": "M5", "plataforma": "MT5", "mensaje": msg, "accion": accion, "direccion_m5": dir_m5, "tp_m5": round(tp, 4), "sl_m5": round(sl, 4), "velas_m5": velas}
-
 def zona_analiza(activo, precio, precios):
     z = ZONAS[activo]; zc = z["c"]; zv = z["v"]; rango = zv - zc; tol = rango * 0.15
     pos = (precio - zc) / rango * 100 if rango != 0 else 50
@@ -252,7 +307,7 @@ def chat_robot(msg, precios, zonas, m5_dato):
     if "hola" in m: return "Hola jefe RAUDY ORO. 100 cerebros M5 ZONA en vivo. Dime: m5 oro o compro 0.01 en m5 para ganar 5 y perder 2"
     if "m5" in m: return "M5 MT5 PEGADO - " + m5_dato.get("mensaje", "") + " | TP M5 " + str(m5_dato.get("tp_m5")) + " SL M5 " + str(m5_dato.get("sl_m5")) + " | " + nombre + " $" + str(precio)
     if "zona" in m: return "ZONA " + nombre + ": " + z.get("mensaje", "") + " | TP ZONA " + str(z.get("tp_zona")) + " SL ZONA " + str(z.get("sl_zona"))
-    if "bybit" in m: return "BYBIT jefe: BTC $" + str(precios["BTC_BYBIT"]) + ". " + PLATS["BYBIT"]["u"]
+    if "bybit" in m: return "BYBIT jefe: BTC $" + str(precios["BTC_BYBIT"]) + ". " + PLATS["BYBIT"]["u"] + " | Llave: " + ("SI CONECTADA " + ("TESTNET" if BYBIT_TESTNET else "REAL") if BYBIT_KEY else "NO - pon llave en Render")
     if "binance" in m: return "BINANCE jefe: BTC $" + str(precios["BTC_BINANCE"]) + ". " + PLATS["BINANCE"]["u"]
     if "mt5" in m: return "MT5 M5 PEGADO jefe: ORO $" + str(precios["ORO"]) + " EUR $" + str(precios["EURUSD"]) + " - " + m5_dato.get("mensaje", "")
     if "qr" in m or "broker" in m: return "QR JEFE: Escanea para entrar a " + NOMBRE_BROKER_QR + " Link: " + LINK_BROKER
@@ -264,7 +319,7 @@ def chat_robot(msg, precios, zonas, m5_dato):
         if "ganar" in m or "perder" in m:
             entrada = ZONAS[activo]["v"] if precio < ZONAS[activo]["v"] else precio; tp, sl, dt, ds = calc_lote(lote, ganar, perder, entrada, "VENTA", activo); return "Jefe M5 PEGADO: VENTA " + nombre + " " + str(lote) + " en M5 ZONA $" + str(round(tp, 4)) + " ganas $" + str(ganar) + " SL " + str(round(sl, 4)) + " pierdes $" + str(perder)
         return "VENTA " + nombre + " en ZONA $" + str(ZONAS[activo]["v"])
-    if "opera" in m or "robot" in m or "auto" in m: return "🤖 ROBOT AUTO: " + OPS["u"] + " | Abiertas: " + str(len(OPS["abiertas"])) + " | Ganado: $" + str(OPS["ganado"]) + " Perdido: $" + str(OPS["perdido"])
+    if "opera" in m or "robot" in m or "auto" in m: return "🤖 ROBOT AUTO: " + OPS["u"] + " | Abiertas: " + str(len(OPS["abiertas"])) + " | Ganado: $" + str(OPS["ganado"]) + " Perdido: $" + str(OPS["perdido"]) + " | BYBIT: " + ("CONECTADO " + ("TESTNET" if BYBIT_TESTNET else "REAL") if BYBIT_KEY else "SIMULACION")
     return "Te entendi jefe: " + msg + ". " + nombre + " $" + str(precio) + ". " + m5_dato.get("mensaje", "")
 def qr_url():
     return "https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=" + urllib.parse.quote(LINK_BROKER)
@@ -280,8 +335,6 @@ H.append(".box{margin:10px;padding:15px;border-radius:15px;border:3px solid #FFD
 H.append(".zona{border-color:#00FFFF;background:#001a2a}")
 H.append(".qr{border-color:#00FF88;background:#001a00}")
 H.append(".m5box{border-color:#FF00FF;background:#1a001a}")
-H.append(".m5{border-color:#00FF88}.chat{border-color:#FFD700}.sl{border-color:#FF4444}")
-H.append(".vivo{border-color:#00FF88}.bin{border-color:#FFD700}")
 H.append("input{width:100%;padding:12px;margin:4px 0;border-radius:10px;background:#111;color:#fff}")
 H.append("button{width:100%;padding:14px;border-radius:15px;font-weight:bold;margin-top:5px}")
 H.append(".grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px}")
@@ -292,49 +345,20 @@ H.append(".relleno{height:100%;background:linear-gradient(90deg,#00FF88,#FFD700,
 H.append("canvas{width:100%;background:#000;border-radius:10px}")
 H.append("table{width:100%;font-size:12px;border-collapse:collapse}td,th{border:1px solid #333;padding:5px}")
 H.append("</style></head><body>")
-H.append("<header><h1>👑 RAUDY VIP M5 PEGADO ⚡</h1>")
-H.append("<p>JEFE: RAUDY ORO - MT5 + M5 + ZONA + QR</p>")
-H.append("<p id='vivo'>🟢 EN VIVO M5...</p></header>")
-H.append("<div class='box' style='border-color:#00FF88;background:#001100'><h2>📈 GRAFICO OPERACIONES - ROBOT M5</h2>")
-H.append("<canvas id='graf' width='360' height='220'></canvas>")
-H.append("<p id='robotEstado' style='font-weight:bold'>🤖 Robot esperando...</p>")
-H.append("<p id='robotOps'></p>")
-H.append("<button onclick='toggleAuto()' style='background:#00FF88'>🤖 PRENDER / APAGAR ROBOT AUTO</button>")
-H.append("<p id='autoEstado'></p></div>")
+H.append("<header><h1>👑 RAUDY VIP M5 PEGADO ⚡</h1><p>JEFE: RAUDY ORO - MT5 + M5 + ZONA + QR</p><p id='vivo'>🟢 EN VIVO M5...</p></header>")
+H.append("<div class='box' style='border-color:#FFD700;background:#1a1500'><h2>🟡 BYBIT CONECTADO - ROBOT</h2><p id='bybitEstado'>Revisando Bybit...</p><button onclick='probarBybit()' style='background:#FFD700'>🔌 PROBAR CONEXION BYBIT</button><button onclick='verBalance()' style='background:#00FFFF'>💰 VER MI BALANCE BYBIT</button><p id='bybitRes' style='background:#111;padding:10px;border-radius:10px;text-align:left;font-size:12px'>...</p></div>")
+H.append("<div class='box' style='border-color:#00FF88;background:#001100'><h2>📈 GRAFICO OPERACIONES - ROBOT M5</h2><canvas id='graf' width='360' height='220'></canvas><p id='robotEstado' style='font-weight:bold'>🤖 Robot esperando...</p><p id='robotOps'></p><button onclick='toggleAuto()' style='background:#00FF88'>🤖 PRENDER / APAGAR ROBOT AUTO</button><p id='autoEstado'></p></div>")
 H.append("<div class='box' style='border-color:#FF4444'><h2>📋 OPERACIONES DEL ROBOT - ORO + EUR + BTC</h2><div id='tablaOps' style='text-align:left'>Cargando operaciones...</div></div>")
-H.append("<div class='box m5box'><h2>📊 PEGADO A M5 - MT5 - CADA 5 MINUTOS</h2>")
-H.append("<p>Plataforma: MT5 | Timeframe: M5 | Simbolo: XAUUSD ORO</p>")
-H.append("<p id='m5Zona' style='font-weight:bold;font-size:16px'>Cargando M5...</p>")
-H.append("<p id='m5Dir'></p><p id='m5TP'></p><p id='m5Velas' style='font-size:12px'></p></div>")
-H.append("<div class='box qr'><h2>📱 ESCANEA MI BROKER - RAUDY ORO</h2>")
-H.append("<img id='qrImg' src='" + qr_url() + "' style='width:250px;height:250px;background:#fff;padding:10px;border-radius:15px'>")
-H.append("<p style='font-weight:bold'>BYBIT - RAUDY ORO</p>")
-H.append("<p style='font-size:12px;word-break:break-all'>" + LINK_BROKER + "</p>")
-H.append("<button onclick=\"window.open('" + LINK_BROKER + "','_blank')\" style='background:#00FF88'>🔗 ABRIR MI BROKER</button></div>")
-H.append("<div class='box zona'><h2>📊 ESTRATEGIA ZONA M5 - COMO LA FOTO</h2>")
-H.append("<p>⬆️ Si toca ZONA ABAJO en M5 - REBOTA ARRIBA = COMPRA</p>")
-H.append("<p>⬇️ Si toca ZONA ARRIBA en M5 - REBOTA ABAJO = VENTA</p>")
-H.append("<p id='zonaOro' style='font-weight:bold'>Cargando ZONA...</p>")
-H.append("<p>ZONA ARRIBA 🔴 VENTA</p><div class='barra'><div class='relleno' id='barraZona' style='width:50%'></div></div><p>ZONA ABAJO 🟢 COMPRA</p><p id='zonaPos'></p><p id='zonaTP'></p></div>")
+H.append("<div class='box m5box'><h2>📊 PEGADO A M5 - MT5 - CADA 5 MINUTOS</h2><p>Plataforma: MT5 | Timeframe: M5 | Simbolo: XAUUSD ORO</p><p id='m5Zona' style='font-weight:bold;font-size:16px'>Cargando M5...</p><p id='m5Dir'></p><p id='m5TP'></p><p id='m5Velas' style='font-size:12px'></p></div>")
+H.append("<div class='box qr'><h2>📱 ESCANEA MI BROKER - RAUDY ORO</h2><img src='" + qr_url() + "' style='width:250px;height:250px;background:#fff;padding:10px;border-radius:15px'><p style='font-weight:bold'>BYBIT - RAUDY ORO</p><p style='font-size:12px;word-break:break-all'>" + LINK_BROKER + "</p><button onclick=\"window.open('" + LINK_BROKER + "','_blank')\" style='background:#00FF88'>🔗 ABRIR MI BROKER</button></div>")
+H.append("<div class='box zona'><h2>📊 ESTRATEGIA ZONA M5 - COMO LA FOTO</h2><p>⬆️ Si toca ZONA ABAJO en M5 - REBOTA ARRIBA = COMPRA</p><p>⬇️ Si toca ZONA ARRIBA en M5 - REBOTA ABAJO = VENTA</p><p id='zonaOro' style='font-weight:bold'>Cargando ZONA...</p><p>ZONA ARRIBA 🔴 VENTA</p><div class='barra'><div class='relleno' id='barraZona' style='width:50%'></div></div><p>ZONA ABAJO 🟢 COMPRA</p><p id='zonaPos'></p><p id='zonaTP'></p></div>")
 H.append("<div class='box vivo'><h2>🟢 EN VIVO M5</h2><p id='vivo2'>Conectando M5...</p></div>")
-H.append("<div class='box chat'><h2>💬 CHAT M5 + LOTE 0.01</h2>")
-H.append("<input id='chat' placeholder='Ej: m5 oro o compro 0.01 en m5 para ganar 5 y perder 2'>")
-H.append("<button onclick='enviarChat()' style='background:#FFD700'>💬 ENVIAR</button>")
-H.append("<p id='chatR' style='background:#111;padding:12px;border-radius:10px;text-align:left'>🤖 Hola jefe M5...</p>")
-H.append("<button onclick=\"ej('m5 oro)')\" style='background:#FF00FF;color:#fff'>📊 M5 ORO PEGADO</button>")
-H.append("<button onclick=\"ej('m5 bitcoin)')\" style='background:#FFA500'>📊 M5 BITCOIN</button>")
-H.append("<button onclick=\"ej('compro 0.01 en m5 para ganar 5 y perder 2)')\" style='background:#00FF88'>✅ COMPRA M5 0.01</button>")
-H.append("<button onclick=\"ej('zona oro)')\" style='background:#00FFFF'>📊 zona oro</button>")
-H.append("<button onclick=\"ej('bybit)')\" style='background:#FFD700'>🟡 BYBIT</button>")
-H.append("<button onclick=\"ej('qr)')\" style='background:#00FF88'>📱 MI QR BROKER</button></div>")
+H.append("<div class='box chat'><h2>💬 CHAT M5 + LOTE 0.01</h2><input id='chat' placeholder='Ej: m5 oro o bybit'><button onclick='enviarChat()' style='background:#FFD700'>💬 ENVIAR</button><p id='chatR' style='background:#111;padding:12px;border-radius:10px;text-align:left'>🤖 Hola jefe M5...</p><button onclick=\"ej('m5 oro)')\" style='background:#FF00FF;color:#fff'>📊 M5 ORO PEGADO</button><button onclick=\"ej('bybit)')\" style='background:#FFD700'>🟡 BYBIT</button><button onclick=\"ej('robot)')\" style='background:#00FF88'>🤖 ROBOT</button></div>")
 H.append("<div class='box'><h2>💶 DIVISAS M5 EN VIVO</h2><p id='divisas'></p></div>")
 H.append("<div class='box'><h2>₿ BITCOIN M5 EN VIVO</h2><p id='crypto'></p></div>")
 H.append("<div class='box'><h2>📈 ACCIONES M5 EN VIVO</h2><p id='acciones'></p></div>")
 H.append("<div class='box'><h2>🏦 8 PLATAFORMAS M5 EN VIVO</h2><p id='plats'></p></div>")
-H.append("<div class='box sl'><h2>🛑 CALCULADORA M5 LOTE 0.01</h2>")
-H.append("<select id='selAct'><option value='ORO'>ORO M5</option><option value='BTC'>BITCOIN M5</option><option value='EURUSD'>EUR/USD M5</option><option value='AAPL'>APPLE M5</option><option value='TSLA'>TESLA M5</option></select>")
-H.append("<input id='lote' type='number' value='0.01' step='0.01'><input id='ganar' type='number' value='5'><input id='perder' type='number' value='2'><input id='entrada' type='number' value='3910'>")
-H.append("<button onclick='calcLote()' style='background:#FF4444;color:#fff'>🛑 CALCULAR TP SL M5</button><p id='loteR' style='background:#111;padding:12px;border-radius:10px'></p></div>")
+H.append("<div class='box sl'><h2>🛑 CALCULADORA M5 LOTE 0.01</h2><select id='selAct'><option value='ORO'>ORO M5</option><option value='BTC'>BITCOIN M5</option><option value='EURUSD'>EUR/USD M5</option><option value='AAPL'>APPLE M5</option><option value='TSLA'>TESLA M5</option></select><input id='lote' type='number' value='0.01' step='0.01'><input id='ganar' type='number' value='5'><input id='perder' type='number' value='2'><input id='entrada' type='number' value='3910'><button onclick='calcLote()' style='background:#FF4444;color:#fff'>🛑 CALCULAR TP SL M5</button><p id='loteR' style='background:#111;padding:12px;border-radius:10px'></p></div>")
 H.append("<div class='box'><h2>👑 JEFE 100 M5 - RAUDY ORO</h2><p id='j1'></p><p id='j2'></p></div>")
 H.append("<h2>🧠 LOS 100 CEREBROS M5 PEGADOS</h2><div class='grid' id='grid'></div><p>RAUDY VIP M5 2026 - WhatsApp 0767574050</p>")
 H.append("<script>")
@@ -345,8 +369,10 @@ H.append("async function enviarChat(){let t=document.getElementById('chat').valu
 H.append("function ej(t){document.getElementById('chat').value=t;enviarChat()}")
 H.append("async function calcLote(){let lote=parseFloat(document.getElementById('lote').value);let ganar=parseFloat(document.getElementById('ganar').value);let perder=parseFloat(document.getElementById('perder').value);let ent=parseFloat(document.getElementById('entrada').value);let act=document.getElementById('selAct').value;let r=await fetch('/api/lote?lote='+lote+'&ganar='+ganar+'&perder='+perder+'&entrada='+ent+'&activo='+act);let d=await r.json();document.getElementById('loteR').innerHTML=d.respuesta;hablar(d.respuesta)}")
 H.append("async function toggleAuto(){try{let r=await fetch('/api/robot_auto');let d=await r.json();document.getElementById('autoEstado').innerHTML='Robot AUTO: '+(d.auto?'🟢 PRENDIDO - opera solo':'🔴 APAGADO - solo mira');hablar('Robot '+(d.auto?'prendido':'apagado'))}catch(e){document.getElementById('autoEstado').innerHTML='Error, espera 10 seg y dale otra vez'}}")
+H.append("async function probarBybit(){document.getElementById('bybitRes').innerHTML='Probando Bybit...';let r=await fetch('/api/bybit_test');let d=await r.json();document.getElementById('bybitRes').innerHTML=JSON.stringify(d).substring(0,800);document.getElementById('bybitEstado').innerHTML=d.mensaje||'Revisado';hablar(d.mensaje||'Bybit revisado')}")
+H.append("async function verBalance(){document.getElementById('bybitRes').innerHTML='Buscando balance...';let r=await fetch('/api/bybit_balance');let d=await r.json();document.getElementById('bybitRes').innerHTML=JSON.stringify(d).substring(0,1000)}")
 H.append("function dibujaGrafico(velas,ops){let c=document.getElementById('graf');if(!c||!velas||velas.length<2)return;let x=c.getContext('2d');x.clearRect(0,0,360,220);let solo=velas.filter(v=>v.a=='ORO');if(solo.length<2)solo=velas;let precios=solo.map(v=>v.p);let mn=Math.min(...precios)-5;let mx=Math.max(...precios)+5;if(mx==mn)mx=mn+1;x.strokeStyle='#FFD700';x.beginPath();solo.forEach((v,i)=>{let px=i/(solo.length-1)*340+10;let py=210-(v.p-mn)/(mx-mn)*190;if(i==0)x.moveTo(px,py);else x.lineTo(px,py)});x.stroke();x.fillStyle='#00FF88';x.fillText('COMPRA ZONA 3910',10,210);x.fillStyle='#FF4444';x.fillText('VENTA ZONA 3970',10,20);if(ops)ops.forEach(o=>{if(o.activo!='ORO')return;let py=210-(o.entrada-mn)/(mx-mn)*190;x.fillStyle=o.lado=='COMPRA'?'#00FF88':'#FF4444';x.beginPath();x.arc(340,py,7,0,7);x.fill();x.fillText(o.lado+' $'+o.entrada,200,py)});}")
-H.append("async function up(){try{let r=await fetch('/api/satelite_usa?v='+Date.now());let d=await r.json();document.getElementById('vivo').innerHTML='🟢 EN VIVO M5 '+d.hora+' - ORO $'+d.ORO+' BTC $'+d.BTC;document.getElementById('vivo2').innerHTML='ORO $'+d.ORO+' BTC $'+d.BTC+' EUR $'+d.EURUSD+' M5 PEGADO';document.getElementById('m5Zona').innerHTML=d.m5.mensaje;document.getElementById('m5Dir').innerHTML=d.m5.direccion_m5+' | MT5 M5 | Señales M5: '+d.m5_senales;document.getElementById('m5TP').innerHTML='TP M5 $'+d.m5.tp_m5+' SL M5 $'+d.m5.sl_m5+' - Accion: '+d.m5.accion;document.getElementById('m5Velas').innerHTML='Velas M5: '+JSON.stringify(d.m5.velas_m5);if(d.robot){document.getElementById('robotEstado').innerHTML=d.robot.mensaje;document.getElementById('robotOps').innerHTML='Abiertas: '+d.robot.abiertas.length+' | Cerradas: '+d.robot.cerradas.length+' | Ganado $'+d.robot.ganado+' | Perdido $'+d.robot.perdido+' | AUTO: '+(d.robot.auto?'🟢 ON':'🔴 OFF');let html='<table><tr><th>Hora</th><th>Activo</th><th>Lado</th><th>Entrada</th><th>TP</th><th>SL</th><th>Resultado</th></tr>';d.robot.abiertas.forEach(o=>{html+='<tr><td>'+o.hora+'</td><td>'+o.activo+'</td><td>'+o.lado+'</td><td>'+o.entrada+'</td><td>'+o.tp+'</td><td>'+o.sl+'</td><td>🟢 ABIERTA</td></tr>'});d.robot.cerradas.slice(-5).forEach(o=>{html+='<tr><td>'+o.hora+'</td><td>'+o.activo+'</td><td>'+o.lado+'</td><td>'+o.entrada+'</td><td>'+o.tp+'</td><td>'+o.sl+'</td><td>'+(o.resultado||'')+'</td></tr>'});html+='</table>';document.getElementById('tablaOps').innerHTML=html;dibujaGrafico(d.grafico_velas,d.robot.abiertas);}let z=d.zonas.ORO;document.getElementById('zonaOro').innerHTML=z.mensaje;document.getElementById('barraZona').style.width=z.posicion+'%';document.getElementById('zonaPos').innerHTML='Posicion ZONA M5: '+z.posicion+'% - Abajo $'+z.zona_abajo+' Arriba $'+z.zona_arriba;document.getElementById('zonaTP').innerHTML='TP ZONA $'+z.tp_zona+' SL ZONA $'+z.sl_zona;document.getElementById('divisas').innerHTML='EUR $'+d.EURUSD+' '+d.zonas.EURUSD.accion+' | GBP $'+d.GBPUSD+' '+d.zonas.GBPUSD.accion+' | JPY $'+d.USDJPY+' '+d.zonas.USDJPY.accion;document.getElementById('crypto').innerHTML='BTC $'+d.BTC+' '+d.zonas.BTC.mensaje+' | ETH $'+d.ETH+' '+d.zonas.ETH.accion;document.getElementById('acciones').innerHTML='APPLE $'+d.AAPL+' '+d.zonas.AAPL.accion+' | TESLA $'+d.TSLA+' '+d.zonas.TSLA.accion+' | NVDA $'+d.NVDA+' '+d.zonas.NVDA.accion;document.getElementById('plats').innerHTML='MT5 M5 ORO $'+d.ORO+' | BYBIT BTC $'+d.BTC_BYBIT+' | BINANCE BTC $'+d.BTC_BINANCE+' | COINBASE BTC $'+d.BTC_COINBASE;document.getElementById('j1').innerHTML=d.jefe.orden;document.getElementById('j2').innerHTML=d.jefe.mensaje;for(let i=1;i<=100;i++){let el=document.getElementById('m'+i);if(el)el.innerHTML='M5 VIVO $'+d.ORO+' - '+d.jefe.orden}}catch(e){console.log('esperando server...')}}")
+H.append("async function up(){try{let r=await fetch('/api/satelite_usa?v='+Date.now());let d=await r.json();document.getElementById('vivo').innerHTML='🟢 EN VIVO M5 '+d.hora+' - ORO $'+d.ORO+' BTC $'+d.BTC;document.getElementById('vivo2').innerHTML='ORO $'+d.ORO+' BTC $'+d.BTC+' EUR $'+d.EURUSD+' M5 PEGADO';document.getElementById('m5Zona').innerHTML=d.m5.mensaje;document.getElementById('m5Dir').innerHTML=d.m5.direccion_m5+' | MT5 M5 | Señales M5: '+d.m5_senales;document.getElementById('m5TP').innerHTML='TP M5 $'+d.m5.tp_m5+' SL M5 $'+d.m5.sl_m5+' - Accion: '+d.m5.accion;document.getElementById('m5Velas').innerHTML='Velas M5: '+JSON.stringify(d.m5.velas_m5);if(d.bybit)document.getElementById('bybitEstado').innerHTML=d.bybit;if(d.robot){document.getElementById('robotEstado').innerHTML=d.robot.mensaje;document.getElementById('robotOps').innerHTML='Abiertas: '+d.robot.abiertas.length+' | Cerradas: '+d.robot.cerradas.length+' | Ganado $'+d.robot.ganado+' | Perdido $'+d.robot.perdido+' | AUTO: '+(d.robot.auto?'🟢 ON':'🔴 OFF');let html='<table><tr><th>Hora</th><th>Activo</th><th>Lado</th><th>Entrada</th><th>TP</th><th>SL</th><th>Bybit</th><th>Resultado</th></tr>';d.robot.abiertas.forEach(o=>{html+='<tr><td>'+o.hora+'</td><td>'+o.activo+'</td><td>'+o.lado+'</td><td>'+o.entrada+'</td><td>'+o.tp+'</td><td>'+o.sl+'</td><td>'+(o.bybit||'')+'</td><td>🟢 ABIERTA</td></tr>'});d.robot.cerradas.slice(-5).forEach(o=>{html+='<tr><td>'+o.hora+'</td><td>'+o.activo+'</td><td>'+o.lado+'</td><td>'+o.entrada+'</td><td>'+o.tp+'</td><td>'+o.sl+'</td><td>'+(o.bybit||'')+'</td><td>'+(o.resultado||'')+'</td></tr>'});html+='</table>';document.getElementById('tablaOps').innerHTML=html;dibujaGrafico(d.grafico_velas,d.robot.abiertas);}let z=d.zonas.ORO;document.getElementById('zonaOro').innerHTML=z.mensaje;document.getElementById('barraZona').style.width=z.posicion+'%';document.getElementById('zonaPos').innerHTML='Posicion ZONA M5: '+z.posicion+'% - Abajo $'+z.zona_abajo+' Arriba $'+z.zona_arriba;document.getElementById('zonaTP').innerHTML='TP ZONA $'+z.tp_zona+' SL ZONA $'+z.sl_zona;document.getElementById('divisas').innerHTML='EUR $'+d.EURUSD+' '+d.zonas.EURUSD.accion+' | GBP $'+d.GBPUSD+' '+d.zonas.GBPUSD.accion+' | JPY $'+d.USDJPY+' '+d.zonas.USDJPY.accion;document.getElementById('crypto').innerHTML='BTC $'+d.BTC+' '+d.zonas.BTC.mensaje+' | ETH $'+d.ETH+' '+d.zonas.ETH.accion;document.getElementById('acciones').innerHTML='APPLE $'+d.AAPL+' '+d.zonas.AAPL.accion+' | TESLA $'+d.TSLA+' '+d.zonas.TSLA.accion+' | NVDA $'+d.NVDA+' '+d.zonas.NVDA.accion;document.getElementById('plats').innerHTML='MT5 M5 ORO $'+d.ORO+' | BYBIT BTC $'+d.BTC_BYBIT+' | BINANCE BTC $'+d.BTC_BINANCE+' | COINBASE BTC $'+d.BTC_COINBASE;document.getElementById('j1').innerHTML=d.jefe.orden;document.getElementById('j2').innerHTML=d.jefe.mensaje;for(let i=1;i<=100;i++){let el=document.getElementById('m'+i);if(el)el.innerHTML='M5 VIVO $'+d.ORO+' - '+d.jefe.orden}}catch(e){console.log('esperando server...')}}")
 H.append("setInterval(up,10000);up();")
 H.append("</script></body></html>")
 HTML = "".join(H)
@@ -356,7 +382,18 @@ def home():
     return HTML
 @app.route("/api/ping")
 def ping():
-    return jsonify({"ok": True, "hora": datetime.now().strftime("%H:%M:%S"), "auto": OPS.get("auto", True)})
+    return jsonify({"ok": True, "hora": datetime.now().strftime("%H:%M:%S"), "auto": OPS.get("auto", True), "bybit": "CONECTADO " + ("TESTNET" if BYBIT_TESTNET else "REAL") if BYBIT_KEY else "SIN LLAVE - SIMULACION"})
+@app.route("/api/bybit_test")
+def bybit_test():
+    if not BYBIT_KEY:
+        return jsonify({"ok": False, "mensaje": "❌ SIN LLAVE - Ve a Render > Environment y pon BYBIT_API_KEY y BYBIT_API_SECRET. Mientras, robot en SIMULACION."})
+    b = bybit_balance()
+    if b.get("ok"):
+        return jsonify({"ok": True, "mensaje": "✅ BYBIT CONECTADO - " + ("TESTNET dinero falso" if BYBIT_TESTNET else "⚠️ REAL dinero real"), "balance": b})
+    return jsonify({"ok": False, "mensaje": "❌ Llave mal o sin permiso Spot. Revisa en Bybit que tenga Spot Trade.", "detalle": b})
+@app.route("/api/bybit_balance")
+def bybit_bal():
+    return jsonify(bybit_balance())
 @app.route("/api/qr")
 def api_qr():
     return jsonify({"link": LINK_BROKER, "nombre": NOMBRE_BROKER_QR, "qr_url": qr_url()})
@@ -389,9 +426,10 @@ def sat():
         jefe = {"orden": "🟢 PERMISO M5" if orden != "ESPERA" else "🟡 ESPERA M5", "mensaje": "JEFE RAUDY ORO DICE M5: " + m5_dato["mensaje"]}
         plats_out = {}
         for k in PLATS: plats_out[k] = {"mensaje": k + " - " + str(len(PLATS[k]["h"])) + " jugadas", "leccion": PLATS[k]["u"]}
-        return jsonify({**d, "hora": datetime.now().strftime("%H:%M:%S"), "zonas": zonas, "zona_oro": zonas["ORO"], "m5": m5_dato, "m5_senales": M5_ZONA["senales"], "m5_config": M5_CONFIG, "qr": {"link": LINK_BROKER, "nombre": NOMBRE_BROKER_QR, "qr_url": qr_url()}, "cerebro": {"mensaje": "100 cerebros M5 recuerdan " + str(MEM["c"] + MEM["v"] + MEM["e"]) + " jugadas", "leccion": MEM["l"]}, "cerebro_m5": {"mensaje": "M5 - " + str(len(M5["v"])) + " velas", "leccion": M5["u"], "velas": M5["v"][-5:]}, "plats": plats_out, "jefe": jefe, "cerebros": CEREBROS, "total_cerebros": 100, "robot": {"mensaje": robot_msg, "abiertas": OPS["abiertas"], "cerradas": OPS["cerradas"], "ganado": OPS["ganado"], "perdido": OPS["perdido"], "auto": OPS.get("auto", True)}, "grafico_velas": GRAFICO["velas"]})
+        bybit_estado = "✅ BYBIT " + ("TESTNET" if BYBIT_TESTNET else "REAL") + " CONECTADO" if BYBIT_KEY else "🟡 BYBIT SIMULACION - sin llave, pon llave en Render"
+        return jsonify({**d, "hora": datetime.now().strftime("%H:%M:%S"), "zonas": zonas, "zona_oro": zonas["ORO"], "m5": m5_dato, "m5_senales": M5_ZONA["senales"], "m5_config": M5_CONFIG, "bybit": bybit_estado, "qr": {"link": LINK_BROKER, "nombre": NOMBRE_BROKER_QR, "qr_url": qr_url()}, "cerebro": {"mensaje": "100 cerebros M5 recuerdan " + str(MEM["c"] + MEM["v"] + MEM["e"]) + " jugadas", "leccion": MEM["l"]}, "cerebro_m5": {"mensaje": "M5 - " + str(len(M5["v"])) + " velas", "leccion": M5["u"], "velas": M5["v"][-5:]}, "plats": plats_out, "jefe": jefe, "cerebros": CEREBROS, "total_cerebros": 100, "robot": {"mensaje": robot_msg, "abiertas": OPS["abiertas"], "cerradas": OPS["cerradas"], "ganado": OPS["ganado"], "perdido": OPS["perdido"], "auto": OPS.get("auto", True)}, "grafico_velas": GRAFICO["velas"]})
     except Exception as e:
-        return jsonify({"ORO": 4070, "BTC": 98000, "EURUSD": 1.1140, "GBPUSD": 1.2750, "USDJPY": 149.5, "USDCHF": 0.8850, "AUDUSD": 0.6550, "ETH": 3400, "AAPL": 262, "TSLA": 340, "NVDA": 185, "MSFT": 495, "AMZN": 235, "META": 645, "GOOGL": 282, "NFLX": 765, "AMD": 125, "BTC_COINBASE": 98000, "BTC_BINANCE": 98000, "BTC_BYBIT": 98000, "hora": datetime.now().strftime("%H:%M:%S"), "error": str(e), "zonas": {"ORO": {"mensaje": "Error, reintentando", "posicion": 50, "zona_abajo": 3910, "zona_arriba": 3970, "tp_zona": 3910, "sl_zona": 3970, "accion": "ESPERA"}, "EURUSD": {"accion": "ESPERA"}, "GBPUSD": {"accion": "ESPERA"}, "USDJPY": {"accion": "ESPERA"}, "BTC": {"mensaje": "BTC", "accion": "ESPERA"}, "ETH": {"accion": "ESPERA"}, "AAPL": {"accion": "ESPERA"}, "TSLA": {"accion": "ESPERA"}, "NVDA": {"accion": "ESPERA"}}, "m5": {"mensaje": "Reintentando...", "direccion_m5": "ESPERA", "tp_m5": 3910, "sl_m5": 3970, "accion": "ESPERA", "velas_m5": []}, "m5_senales": 0, "robot": {"mensaje": "Robot esperando server...", "abiertas": OPS["abiertas"], "cerradas": OPS["cerradas"], "ganado": OPS["ganado"], "perdido": OPS["perdido"], "auto": OPS.get("auto", True)}, "grafico_velas": GRAFICO["velas"], "jefe": {"orden": "ESPERA", "mensaje": "Reintentando"}, "cerebros": CEREBROS})
+        return jsonify({"ORO": 4070, "BTC": 98000, "EURUSD": 1.1140, "GBPUSD": 1.2750, "USDJPY": 149.5, "USDCHF": 0.8850, "AUDUSD": 0.6550, "ETH": 3400, "AAPL": 262, "TSLA": 340, "NVDA": 185, "MSFT": 495, "AMZN": 235, "META": 645, "GOOGL": 282, "NFLX": 765, "AMD": 125, "BTC_COINBASE": 98000, "BTC_BINANCE": 98000, "BTC_BYBIT": 98000, "hora": datetime.now().strftime("%H:%M:%S"), "error": str(e), "zonas": {"ORO": {"mensaje": "Error, reintentando", "posicion": 50, "zona_abajo": 3910, "zona_arriba": 3970, "tp_zona": 3910, "sl_zona": 3970, "accion": "ESPERA"}, "EURUSD": {"accion": "ESPERA"}, "GBPUSD": {"accion": "ESPERA"}, "USDJPY": {"accion": "ESPERA"}, "BTC": {"mensaje": "BTC", "accion": "ESPERA"}, "ETH": {"accion": "ESPERA"}, "AAPL": {"accion": "ESPERA"}, "TSLA": {"accion": "ESPERA"}, "NVDA": {"accion": "ESPERA"}}, "m5": {"mensaje": "Reintentando...", "direccion_m5": "ESPERA", "tp_m5": 3910, "sl_m5": 3970, "accion": "ESPERA", "velas_m5": []}, "m5_senales": 0, "bybit": "Reintentando", "robot": {"mensaje": "Robot esperando server...", "abiertas": OPS["abiertas"], "cerradas": OPS["cerradas"], "ganado": OPS["ganado"], "perdido": OPS["perdido"], "auto": OPS.get("auto", True)}, "grafico_velas": GRAFICO["velas"], "jefe": {"orden": "ESPERA", "mensaje": "Reintentando"}, "cerebros": CEREBROS})
 @app.route("/api/chat")
 def api_chat():
     msg = request.args.get("msg", ""); precios = todos_precios(); zonas = zona_todos(precios); activo = busca_activo(msg.lower()); m5_dato = m5_zona_analiza(activo, precios.get(activo, 4088)); r = chat_robot(msg, precios, zonas, m5_dato); return jsonify({"respuesta": r})
