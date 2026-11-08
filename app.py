@@ -314,4 +314,5 @@ def chat_robot(msg, precios, zonas, m5_dato):
     if "compr" in m:
         if "ganar" in m or "gana" in m or "perder" in m:
             entrada = ZONAS[activo]["c"] if precio > ZONAS[activo]["c"] else precio; tp, sl, dt, ds = calc_lote(lote, ganar, perder, entrada, "COMPRA", activo); return "Jefe M5 PEGADO: COMPRA " + nombre + " " + str(lote) + " en M5 ZONA $" + str(round(entrada, 4)) + " TP " + str(round(tp, 4)) + " ganas $" + str(ganar) + " SL " + str(round(sl, 4)) + " pierdes $" + str(perder) + ". " + m5_dato.get("mensaje", "")
-                    return "Dime: compro 0.01 en m5 para ganar 5 y perder 2"
+        return "Dime: compro 0.01 en m5 para ganar 5
+y perder 2"
