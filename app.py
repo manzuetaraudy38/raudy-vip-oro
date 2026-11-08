@@ -8,7 +8,7 @@ LINK_BROKER = "https://www.bybit.com/invite?ref=RAUDYORO"
 NOMBRE_BROKER_QR = "BYBIT - RAUDY ORO"
 M5_CONFIG = {"plataforma": "MT5", "timeframe": "M5", "simbolo": "XAUUSD", "activa": True, "jefe": "RAUDY ORO"}
 
-# ===== BYBIT - CONEXION ROBOT - CORREGIDO PARA REAL - BYTICK =====
+# ===== BYBIT - CONEXION ROBOT =====
 BYBIT_KEY = os.environ.get("BYBIT_API_KEY", "")
 BYBIT_SECRET = os.environ.get("BYBIT_API_SECRET", "")
 BYBIT_TESTNET = os.environ.get("BYBIT_TESTNET", "false") == "true"
@@ -30,10 +30,7 @@ def bybit_orden_real(simbolo, lado, cantidad):
         body_str = json.dumps(body)
         headers = {"X-BAPI-API-KEY": BYBIT_KEY, "X-BAPI-TIMESTAMP": ts, "X-BAPI-RECV-WINDOW": "5000", "X-BAPI-SIGN": bybit_firma(ts, body_str), "Content-Type": "application/json"}
         r = requests.post(BYBIT_BASE + "/v5/order/create", json=body, headers=headers, timeout=10)
-        try:
-            j = r.json()
-        except:
-            return {"ok": False, "msg": "Bybit devolvio respuesta no JSON: " + r.text[:300]}
+        j = r.json()
         if j.get("retCode") == 0:
             return {"ok": True, "msg": "Orden Bybit OK " + simbolo + " " + lado, "data": j}
         else:
@@ -44,27 +41,15 @@ def bybit_orden_real(simbolo, lado, cantidad):
 def bybit_balance():
     if not BYBIT_KEY or not BYBIT_SECRET:
         return {"ok": False, "msg": "Sin llave - pon BYBIT_API_KEY en Render Environment"}
-    # Probamos UNIFIED primero (cuenta real de Raudy), luego SPOT
-    for account_type in ["UNIFIED", "SPOT"]:
-        try:
-            ts = str(int(time.time()*1000))
-            params = "accountType=" + account_type
-            firma = hmac.new(BYBIT_SECRET.encode(), (ts + BYBIT_KEY + "5000" + params).encode(), hashlib.sha256).hexdigest()
-            headers = {"X-BAPI-API-KEY": BYBIT_KEY, "X-BAPI-TIMESTAMP": ts, "X-BAPI-RECV-WINDOW": "5000", "X-BAPI-SIGN": firma}
-            r = requests.get(BYBIT_BASE + "/v5/account/wallet-balance?" + params, headers=headers, timeout=10)
-            try:
-                j = r.json()
-            except:
-                continue
-            if j.get("retCode") == 0:
-                return {"ok": True, "data": j, "modo": "TESTNET" if BYBIT_TESTNET else "REAL", "accountType": account_type}
-            else:
-                ultimo_error = str(j.get("retMsg"))
-                continue
-        except Exception as e:
-            ultimo_error = str(e)
-            continue
-    return {"ok": False, "msg": "Bybit dice: " + str(ultimo_error)}
+    try:
+        ts = str(int(time.time()*1000))
+        params = "accountType=UNIFIED"
+        firma = hmac.new(BYBIT_SECRET.encode(), (ts + BYBIT_KEY + "5000" + params).encode(), hashlib.sha256).hexdigest()
+        headers = {"X-BAPI-API-KEY": BYBIT_KEY, "X-BAPI-TIMESTAMP": ts, "X-BAPI-RECV-WINDOW": "5000", "X-BAPI-SIGN": firma}
+        r = requests.get(BYBIT_BASE + "/v5/account/wallet-balance?" + params, headers=headers, timeout=10)
+        return {"ok": True, "data": r.json(), "modo": "TESTNET" if BYBIT_TESTNET else "REAL"}
+    except Exception as e:
+        return {"ok": False, "msg": str(e)}
 
 _CACHE = {"tiempo": 0, "datos": None}
 def load(n, d):
@@ -329,37 +314,4 @@ def chat_robot(msg, precios, zonas, m5_dato):
     if "compr" in m:
         if "ganar" in m or "gana" in m or "perder" in m:
             entrada = ZONAS[activo]["c"] if precio > ZONAS[activo]["c"] else precio; tp, sl, dt, ds = calc_lote(lote, ganar, perder, entrada, "COMPRA", activo); return "Jefe M5 PEGADO: COMPRA " + nombre + " " + str(lote) + " en M5 ZONA $" + str(round(entrada, 4)) + " TP " + str(round(tp, 4)) + " ganas $" + str(ganar) + " SL " + str(round(sl, 4)) + " pierdes $" + str(perder) + ". " + m5_dato.get("mensaje", "")
-        return "Dime: compro 0.01 en m5 para ganar 5 y perder 2"
-    if "vend" in m:
-        if "ganar" in m or "perder" in m:
-            entrada = ZONAS[activo]["v"] if precio < ZONAS[activo]["v"] else precio; tp, sl, dt, ds = calc_lote(lote, ganar, perder, entrada, "VENTA", activo); return "Jefe M5 PEGADO: VENTA " + nombre + " " + str(lote) + " en M5 ZONA $" + str(round(tp, 4)) + " ganas $" + str(ganar) + " SL " + str(round(sl, 4)) + " pierdes $" + str(perder)
-        return "VENTA " + nombre + " en ZONA $" + str(ZONAS[activo]["v"])
-    if "opera" in m or "robot" in m or "auto" in m: return "🤖 ROBOT AUTO: " + OPS["u"] + " | Abiertas: " + str(len(OPS["abiertas"])) + " | Ganado: $" + str(OPS["ganado"]) + " Perdido: $" + str(OPS["perdido"]) + " | BYBIT: " + ("CONECTADO " + ("TESTNET" if BYBIT_TESTNET else "REAL") if BYBIT_KEY else "SIMULACION")
-    return "Te entendi jefe: " + msg + ". " + nombre + " $" + str(precio) + ". " + m5_dato.get("mensaje", "")
-def qr_url():
-    return "https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=" + urllib.parse.quote(LINK_BROKER)
-
-H = []
-H.append("<!DOCTYPE html><html lang='es'><head>")
-H.append("<meta charset='UTF-8'>")
-H.append("<meta name='viewport' content='width=device-width, initial-scale=1.0'>")
-H.append("<title>RAUDY VIP M5 PEGADO</title>")
-H.append("<style>body{background:#050505;color:#fff;font-family:Arial;text-align:center;margin:0}")
-H.append("header{background:#FFD700;color:#000;padding:15px}")
-H.append(".box{margin:10px;padding:15px;border-radius:15px;border:3px solid #FFD700}")
-H.append(".zona{border-color:#00FFFF;background:#001a2a}")
-H.append(".qr{border-color:#00FF88;background:#001a00}")
-H.append(".m5box{border-color:#FF00FF;background:#1a001a}")
-H.append("input{width:100%;padding:12px;margin:4px 0;border-radius:10px;background:#111;color:#fff}")
-H.append("button{width:100%;padding:14px;border-radius:15px;font-weight:bold;margin-top:5px}")
-H.append(".grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px}")
-H.append(".robot{background:#1a1a1a;padding:8px;border-radius:12px;font-size:12px}")
-H.append(".luz{width:14px;height:14px;border-radius:50%;background:#FF00FF;margin:auto}")
-H.append(".barra{width:100%;height:22px;background:#111;border-radius:10px;overflow:hidden}")
-H.append(".relleno{height:100%;background:linear-gradient(90deg,#00FF88,#FFD700,#FF4444)}")
-H.append("canvas{width:100%;background:#000;border-radius:10px}")
-H.append("table{width:100%;font-size:12px;border-collapse:collapse}td,th{border:1px solid #333;padding:5px}")
-H.append("</style></head><body>")
-H.append("<header><h1>👑 RAUDY VIP M5 PEGADO ⚡</h1><p>JEFE: RAUDY ORO - MT5 + M5 + ZONA + QR</p><p id='vivo'>🟢 EN VIVO M5...</p></header>")
-H.append("<div class='box' style='border-color:#FFD700;background:#1a1500'><h2>🟡 BYBIT CONECTADO - ROBOT</h2><p id='bybitEstado'>Revisando Bybit...</p><button onclick='probarBybit()' style='background:#FFD700'>🔌 PROBAR CONEXION BYBIT</button><button onclick='verBalance()' style='background:#00FFFF'>💰 VER MI BALANCE BYBIT</button><p id='bybitRes' style='background:#111;padding:10px;border-radius:10px;text-align:left;font-size:12px'>...</p></div>")
-H.append("<div class='box' style='border-color:#00FF88;background:#001100'><h2>📈 GRAFICO OPERACIONES - ROBOT M5</h2><canvas id='graf' width='360' height='220'></canvas><p id='robotEstado' style='font-weight:bold'>🤖 Robot esperando...</p><p id='robotOps'></p><button onclick='toggleAuto()' style='background:#00FF88'>🤖 PRENDER / APAGAR ROBOT AUTO</button><p id='autoEstado'></p
+        return "Dime: compro 0.01 en m5 para
