@@ -36,6 +36,10 @@ M5 = load("m5.json", {"v": [], "u": "Nada M5 aun.", "s": 0, "b": 0})
 M5_ZONA = load("m5_zona.json", {"h": [], "senales": 0, "u": "Nada M5 ZONA aun."})
 ZONA_H = load("zona.json", {"h": [], "toques_c": 0, "toques_v": 0, "u": "Nada zona."})
 
+# ===== NUEVO - OPERACIONES DEL ROBOT - NO BORRA NADA VIEJO =====
+OPS = load("ops.json", {"h": [], "abiertas": [], "cerradas": [], "auto": True, "ganado": 0, "perdido": 0, "u": "Robot esperando zona..."})
+GRAFICO = load("grafico.json", {"velas": []})
+
 PLATS = {
     "CAPITAL": load("cap.json", {"h": [], "u": "Nada Capital.", "c": 0, "b": 0}),
     "T212": load("t212.json", {"h": [], "u": "Nada T212.", "c": 0, "b": 0, "e": 0}),
@@ -154,6 +158,75 @@ def todos_precios():
     }
     return d
 
+# ===== NUEVO - CEREBRO QUE DECIDE Y OPERA SOLO =====
+def robot_decide_y_opera(activo, precio, m5_dato):
+    # 1. Guarda punto para el grafico
+    GRAFICO["velas"].append({"hora": datetime.now().strftime("%H:%M"), "p": precio, "a": activo})
+    GRAFICO["velas"] = GRAFICO["velas"][-60:]
+    save("grafico.json", GRAFICO)
+    # 2. Revisa operaciones abiertas - si toco TP o SL, cierra
+    for op in list(OPS["abiertas"]):
+        if op["activo"] != activo:
+            continue
+        gano = False
+        perdio = False
+        if op["lado"] == "COMPRA":
+            if precio >= op["tp"]:
+                gano = True
+            elif precio <= op["sl"]:
+                perdio = True
+        else: # VENTA
+            if precio <= op["tp"]:
+                gano = True
+            elif precio >= op["sl"]:
+                perdio = True
+        if gano or perdio:
+            op["cierre"] = precio
+            op["hora_cierre"] = datetime.now().strftime("%H:%M")
+            op["resultado"] = "GANO +$" + str(op["ganar"]) if gano else "PERDIO -$" + str(op["perder"])
+            OPS["abiertas"].remove(op)
+            OPS["cerradas"].append(op)
+            OPS["h"].append(op)
+            if gano:
+                OPS["ganado"] += op["ganar"]
+            else:
+                OPS["perdido"] += op["perder"]
+            OPS["u"] = "Robot cerro " + op["lado"] + " " + op["activo"] + " en $" + str(precio) + " - " + op["resultado"]
+    # 3. Si AUTO apagado, no abre nuevas
+    if not OPS.get("auto", True):
+        save("ops.json", OPS)
+        return OPS["u"]
+    # 4. Si ya hay una abierta de este activo, no abre otra
+    for op in OPS["abiertas"]:
+        if op["activo"] == activo:
+            save("ops.json", OPS)
+            return "Robot ya tiene abierta " + activo + " - esperando TP/SL"
+    # 5. DECISION - usa tu misma regla M5 ZONA
+    accion = m5_dato.get("accion", "ESPERA M5")
+    if "COMPRA" in accion:
+        lado = "COMPRA"
+        tp = m5_dato.get("tp_m5")
+        sl = m5_dato.get("sl_m5")
+    elif "VENTA" in accion:
+        lado = "VENTA"
+        tp = m5_dato.get("tp_m5")
+        sl = m5_dato.get("sl_m5")
+    else:
+        save("ops.json", OPS)
+        return "Robot M5: ESPERA - " + activo + " $" + str(precio) + " no toco zona, no opera"
+    # 6. ABRE OPERACION SOLO
+    nueva = {
+        "activo": activo, "lado": lado, "entrada": precio,
+        "tp": tp, "sl": sl, "lote": 0.01, "ganar": 5, "perder": 2,
+        "hora": datetime.now().strftime("%H:%M"), "estado": "ABIERTA",
+        "motivo": m5_dato.get("mensaje", "")
+    }
+    OPS["abiertas"].append(nueva)
+    OPS["h"].append(nueva)
+    OPS["u"] = "🤖 ROBOT ABRIO SOLO: " + lado + " " + activo + " en $" + str(precio) + " TP $" + str(tp) + " SL $" + str(sl)
+    save("ops.json", OPS)
+    return OPS["u"]
+
 # ===== PEGADO A M5 - ESTRATEGIA M5 ZONA =====
 def m5_zona_analiza(activo, precio):
     z = ZONAS[activo]
@@ -161,10 +234,8 @@ def m5_zona_analiza(activo, precio):
     zv = z["v"]
     rango = zv - zc
     tol = rango * 0.15
-    # M5 = mira velas de 5 minutos
     M5["v"].append({"hora": datetime.now().strftime("%H:%M"), "p": precio, "a": activo})
     M5["v"] = M5["v"][-30:]
-    # Direccion M5 con ultimas 3 velas
     velas = [x["p"] for x in M5["v"][-3:] if x["a"] == activo]
     if len(velas) >= 3:
         if velas[-1] > velas[-2] > velas[-3]:
@@ -423,9 +494,11 @@ def chat_robot(msg, precios, zonas, m5_dato):
         if "ganar" in m or "perder" in m:
             entrada = ZONAS[activo]["v"] if precio < ZONAS[activo]["v"] else precio
             tp, sl, dt, ds = calc_lote(lote, ganar, perder, entrada, "VENTA", activo)
-            r = "Jefe M5 PEGADO: VENTA " + nombre + " " + str(lote) + " en M5 ZONA $" + str(round(entrada, 4)) + " TP " + str(round(tp, 4)) + " ganas $" + str(ganar) + " SL " + str(round(sl, 4)) + " pierdes $" + str(perder)
+            r = "Jefe M5 PEGADO: VENTA " + nombre + " " + str(lote) + " en M5 ZONA $" + str(round(tp, 4)) + " ganas $" + str(ganar) + " SL " + str(round(sl, 4)) + " pierdes $" + str(perder)
             return r
         return "VENTA " + nombre + " en ZONA $" + str(ZONAS[activo]["v"])
+    if "opera" in m or "robot" in m or "auto" in m:
+        return "🤖 ROBOT AUTO: " + OPS["u"] + " | Abiertas: " + str(len(OPS["abiertas"])) + " | Ganado: $" + str(OPS["ganado"]) + " Perdido: $" + str(OPS["perdido"])
     return "Te entendi jefe: " + msg + ". " + nombre + " $" + str(precio) + ". " + m5_dato.get("mensaje", "")
 
 def qr_url():
@@ -451,10 +524,20 @@ H.append(".robot{background:#1a1a1a;padding:8px;border-radius:12px;font-size:12p
 H.append(".luz{width:14px;height:14px;border-radius:50%;background:#FF00FF;margin:auto}")
 H.append(".barra{width:100%;height:22px;background:#111;border-radius:10px;overflow:hidden}")
 H.append(".relleno{height:100%;background:linear-gradient(90deg,#00FF88,#FFD700,#FF4444)}")
+H.append("canvas{width:100%;background:#000;border-radius:10px}")
+H.append("table{width:100%;font-size:12px;border-collapse:collapse}td,th{border:1px solid #333;padding:5px}")
 H.append("</style></head><body>")
 H.append("<header><h1>👑 RAUDY VIP M5 PEGADO ⚡</h1>")
 H.append("<p>JEFE: RAUDY ORO - MT5 + M5 + ZONA + QR</p>")
 H.append("<p id='vivo'>🟢 EN VIVO M5...</p></header>")
+# ===== NUEVO - GRAFICO + ROBOT OPERANDO SOLO =====
+H.append("<div class='box' style='border-color:#00FF88;background:#001100'><h2>📈 GRAFICO OPERACIONES - ROBOT M5</h2>")
+H.append("<canvas id='graf' width='360' height='220'></canvas>")
+H.append("<p id='robotEstado' style='font-weight:bold'>🤖 Robot esperando...</p>")
+H.append("<p id='robotOps'></p>")
+H.append("<button onclick='toggleAuto()' style='background:#00FF88'>🤖 PRENDER / APAGAR ROBOT AUTO</button>")
+H.append("<p id='autoEstado'></p></div>")
+H.append("<div class='box' style='border-color:#FF4444'><h2>📋 OPERACIONES DEL ROBOT</h2><div id='tablaOps' style='text-align:left'>Cargando operaciones...</div></div>")
 H.append("<div class='box m5box'><h2>📊 PEGADO A M5 - MT5 - CADA 5 MINUTOS</h2>")
 H.append("<p>Plataforma: MT5 | Timeframe: M5 | Simbolo: XAUUSD ORO</p>")
 H.append("<p id='m5Zona' style='font-weight:bold;font-size:16px'>Cargando M5...</p>")
@@ -532,6 +615,12 @@ H.append("let act=document.getElementById('selAct').value;")
 H.append("let r=await fetch('/api/lote?lote='+lote+'&ganar='+ganar+'&perder='+perder+'&entrada='+ent+'&activo='+act);")
 H.append("let d=await r.json();")
 H.append("document.getElementById('loteR').innerHTML=d.respuesta;hablar(d.respuesta)}")
+# ===== NUEVO JS - DIBUJA GRAFICO + MUESTRA OPERACIONES =====
+H.append("async function toggleAuto(){let r=await fetch('/api/robot_auto');let d=await r.json();document.getElementById('autoEstado').innerHTML='Robot AUTO: '+(d.auto?'🟢 PRENDIDO - opera solo':'🔴 APAGADO - solo mira');hablar('Robot '+(d.auto?'prendido':'apagado'))}")
+H.append("function dibujaGrafico(velas,ops){let c=document.getElementById('graf');if(!c||!velas||velas.length<2)return;let x=c.getContext('2d');x.clearRect(0,0,360,220);let precios=velas.map(v=>v.p);let mn=Math.min(...precios)-5;let mx=Math.max(...precios)+5;")
+H.append("x.strokeStyle='#FFD700';x.beginPath();velas.forEach((v,i)=>{let px=i/(velas.length-1)*340+10;let py=210-(v.p-mn)/(mx-mn)*190;if(i==0)x.moveTo(px,py);else x.lineTo(px,py)});x.stroke();")
+H.append("x.fillStyle='#00FF88';x.fillText('COMPRA ZONA 3910',10,210);x.fillStyle='#FF4444';x.fillText('VENTA ZONA 3970',10,20);")
+H.append("if(ops)ops.forEach(o=>{let py=210-(o.entrada-mn)/(mx-mn)*190;x.fillStyle=o.lado=='COMPRA'?'#00FF88':'#FF4444';x.beginPath();x.arc(340,py,7,0,7);x.fill();x.fillText(o.lado+' $'+o.entrada,200,py)});}")
 H.append("async function up(){try{")
 H.append("let r=await fetch('/api/satelite_usa?v='+Date.now());let d=await r.json();")
 H.append("document.getElementById('vivo').innerHTML='🟢 EN VIVO M5 '+d.hora+' - ORO $'+d.ORO+' BTC $'+d.BTC;")
@@ -540,6 +629,12 @@ H.append("document.getElementById('m5Zona').innerHTML=d.m5.mensaje;")
 H.append("document.getElementById('m5Dir').innerHTML=d.m5.direccion_m5+' | MT5 M5 | Señales M5: '+d.m5_senales;")
 H.append("document.getElementById('m5TP').innerHTML='TP M5 $'+d.m5.tp_m5+' SL M5 $'+d.m5.sl_m5+' - Accion: '+d.m5.accion;")
 H.append("document.getElementById('m5Velas').innerHTML='Velas M5: '+JSON.stringify(d.m5.velas_m5);")
+H.append("if(d.robot){document.getElementById('robotEstado').innerHTML=d.robot.mensaje;document.getElementById('robotOps').innerHTML='Abiertas: '+d.robot.abiertas.length+' | Cerradas: '+d.robot.cerradas.length+' | Ganado $'+d.robot.ganado+' | Perdido $'+d.robot.perdido+' | AUTO: '+(d.robot.auto?'🟢 ON':'🔴 OFF');")
+H.append("let html='<table><tr><th>Hora</th><th>Activo</th><th>Lado</th><th>Entrada</th><th>TP</th><th>SL</th><th>Resultado</th></tr>';")
+H.append("d.robot.abiertas.forEach(o=>{html+='<tr><td>'+o.hora+'</td><td>'+o.activo+'</td><td>'+o.lado+'</td><td>'+o.entrada+'</td><td>'+o.tp+'</td><td>'+o.sl+'</td><td>🟢 ABIERTA</td></tr>'});")
+H.append("d.robot.cerradas.slice(-5).forEach(o=>{html+='<tr><td>'+o.hora+'</td><td>'+o.activo+'</td><td>'+o.lado+'</td><td>'+o.entrada+'</td><td>'+o.tp+'</td><td>'+o.sl+'</td><td>'+(o.resultado||'')+'</td></tr>'});")
+H.append("html+='</table>';document.getElementById('tablaOps').innerHTML=html;")
+H.append("dibujaGrafico(d.grafico_velas,d.robot.abiertas);}")
 H.append("let z=d.zonas.ORO;")
 H.append("document.getElementById('zonaOro').innerHTML=z.mensaje;")
 H.append("document.getElementById('barraZona').style.width=z.posicion+'%';")
@@ -572,61 +667,4 @@ def api_m5():
     activo = request.args.get("activo", "ORO")
     if activo not in ZONAS:
         activo = "ORO"
-    m5 = m5_zona_analiza(activo, precios.get(activo, 4088))
-    return jsonify({"m5": m5, "config": M5_CONFIG})
-
-@app.route("/api/satelite_usa")
-def sat():
-    d = todos_precios()
-    oro = d["ORO"]
-    btc = d["BTC"]
-    zonas = zona_todos(d)
-    m5_dato = m5_zona_analiza("ORO", oro)
-    if oro <= 3910:
-        orden = "COMPRA"
-    elif oro >= 3970:
-        orden = "VENTA"
-    else:
-        orden = "ESPERA"
-    aprende(oro, orden)
-    m5_aprende(oro)
-    plat_aprende("CAPITAL", oro, oro, "Capital.com", "cap.json")
-    plat_aprende("T212", oro, oro, "Trading 212", "t212.json")
-    plat_aprende("BINANCE", btc, btc, "Binance", "bin.json")
-    plat_aprende("ETORO", oro, oro, "eToro", "eto.json")
-    plat_aprende("MT5", oro, oro, "MT5 M5", "mt5.json")
-    plat_aprende("XTB", oro, oro, "XTB", "xtb.json")
-    plat_aprende("COINBASE", d["BTC_COINBASE"], btc, "Coinbase", "coin.json")
-    plat_aprende("BYBIT", d["BTC_BYBIT"], btc, "Bybit", "bybit.json")
-    jefe = {"orden": "🟢 PERMISO M5" if orden != "ESPERA" else "🟡 ESPERA M5", "mensaje": "JEFE RAUDY ORO DICE M5: " + m5_dato["mensaje"]}
-    plats_out = {}
-    for k in PLATS:
-        plats_out[k] = {"mensaje": k + " - " + str(len(PLATS[k]["h"])) + " jugadas", "leccion": PLATS[k]["u"]}
-    return jsonify({**d, "hora": datetime.now().strftime("%H:%M:%S"), "zonas": zonas, "zona_oro": zonas["ORO"], "m5": m5_dato, "m5_senales": M5_ZONA["senales"], "m5_config": M5_CONFIG, "qr": {"link": LINK_BROKER, "nombre": NOMBRE_BROKER_QR, "qr_url": qr_url()}, "cerebro": {"mensaje": "100 cerebros M5 recuerdan " + str(MEM["c"] + MEM["v"] + MEM["e"]) + " jugadas", "leccion": MEM["l"]}, "cerebro_m5": {"mensaje": "M5 - " + str(len(M5["v"])) + " velas", "leccion": M5["u"], "velas": M5["v"][-5:]}, "plats": plats_out, "jefe": jefe, "cerebros": CEREBROS, "total_cerebros": 100})
-
-@app.route("/api/chat")
-def api_chat():
-    msg = request.args.get("msg", "")
-    precios = todos_precios()
-    zonas = zona_todos(precios)
-    activo = busca_activo(msg.lower())
-    m5_dato = m5_zona_analiza(activo, precios.get(activo, 4088))
-    r = chat_robot(msg, precios, zonas, m5_dato)
-    return jsonify({"respuesta": r})
-
-@app.route("/api/lote")
-def api_lote():
-    try:
-        lote = float(request.args.get("lote", 0.01))
-        ganar = float(request.args.get("ganar", 5))
-        perder = float(request.args.get("perder", 2))
-        ent = float(request.args.get("entrada", 3910))
-        act = request.args.get("activo", "ORO")
-        tp, sl, dt, ds = calc_lote(lote, ganar, perder, ent, "COMPRA", act)
-        r = "COMPRA M5 " + act + " " + str(lote) + " en " + str(ent) + " TP " + str(round(tp, 4)) + " ganas $" + str(ganar) + " SL " + str(round(sl, 4)) + " pierdes $" + str(perder) + ". M5 PEGADO jefe."
-        return jsonify({"respuesta": r, "tp": tp, "sl": sl})
-    except:
-        return jsonify({"respuesta": "Escribe lote 0.01 ganar 5 perder 2"})
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    m5 = m5_zona
