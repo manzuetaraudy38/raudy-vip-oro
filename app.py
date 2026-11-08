@@ -8,10 +8,10 @@ LINK_BROKER = "https://www.bybit.com/invite?ref=RAUDYORO"
 NOMBRE_BROKER_QR = "BYBIT - RAUDY ORO"
 M5_CONFIG = {"plataforma": "MT5", "timeframe": "M5", "simbolo": "XAUUSD", "activa": True, "jefe": "RAUDY ORO"}
 
-# ===== BYBIT - CONEXION ROBOT =====
+# ===== BYBIT - CONEXION ROBOT - CORREGIDO PARA REAL =====
 BYBIT_KEY = os.environ.get("BYBIT_API_KEY", "")
 BYBIT_SECRET = os.environ.get("BYBIT_API_SECRET", "")
-BYBIT_TESTNET = os.environ.get("BYBIT_TESTNET", "true") == "true"
+BYBIT_TESTNET = os.environ.get("BYBIT_TESTNET", "false") == "true"
 BYBIT_BASE = "https://api-testnet.bybit.com" if BYBIT_TESTNET else "https://api.bybit.com"
 # ORO en Bybit = PAXGUSDT, EUR/USD no hay en Spot, usamos EURUSDT, BTC = BTCUSDT
 MAP_BYBIT = {"ORO": "PAXGUSDT", "BTC": "BTCUSDT", "EURUSD": "EURUSDT"}
@@ -30,7 +30,10 @@ def bybit_orden_real(simbolo, lado, cantidad):
         body_str = json.dumps(body)
         headers = {"X-BAPI-API-KEY": BYBIT_KEY, "X-BAPI-TIMESTAMP": ts, "X-BAPI-RECV-WINDOW": "5000", "X-BAPI-SIGN": bybit_firma(ts, body_str), "Content-Type": "application/json"}
         r = requests.post(BYBIT_BASE + "/v5/order/create", json=body, headers=headers, timeout=10)
-        j = r.json()
+        try:
+            j = r.json()
+        except:
+            return {"ok": False, "msg": "Bybit devolvio respuesta no JSON: " + r.text[:300]}
         if j.get("retCode") == 0:
             return {"ok": True, "msg": "Orden Bybit OK " + simbolo + " " + lado, "data": j}
         else:
@@ -41,15 +44,27 @@ def bybit_orden_real(simbolo, lado, cantidad):
 def bybit_balance():
     if not BYBIT_KEY or not BYBIT_SECRET:
         return {"ok": False, "msg": "Sin llave - pon BYBIT_API_KEY en Render Environment"}
-    try:
-        ts = str(int(time.time()*1000))
-        params = "accountType=SPOT"
-        firma = hmac.new(BYBIT_SECRET.encode(), (ts + BYBIT_KEY + "5000" + params).encode(), hashlib.sha256).hexdigest()
-        headers = {"X-BAPI-API-KEY": BYBIT_KEY, "X-BAPI-TIMESTAMP": ts, "X-BAPI-RECV-WINDOW": "5000", "X-BAPI-SIGN": firma}
-        r = requests.get(BYBIT_BASE + "/v5/account/wallet-balance?" + params, headers=headers, timeout=10)
-        return {"ok": True, "data": r.json(), "modo": "TESTNET" if BYBIT_TESTNET else "REAL"}
-    except Exception as e:
-        return {"ok": False, "msg": str(e)}
+    # Probamos UNIFIED primero (cuenta real de Raudy), luego SPOT
+    for account_type in ["UNIFIED", "SPOT"]:
+        try:
+            ts = str(int(time.time()*1000))
+            params = "accountType=" + account_type
+            firma = hmac.new(BYBIT_SECRET.encode(), (ts + BYBIT_KEY + "5000" + params).encode(), hashlib.sha256).hexdigest()
+            headers = {"X-BAPI-API-KEY": BYBIT_KEY, "X-BAPI-TIMESTAMP": ts, "X-BAPI-RECV-WINDOW": "5000", "X-BAPI-SIGN": firma}
+            r = requests.get(BYBIT_BASE + "/v5/account/wallet-balance?" + params, headers=headers, timeout=10)
+            try:
+                j = r.json()
+            except:
+                continue
+            if j.get("retCode") == 0:
+                return {"ok": True, "data": j, "modo": "TESTNET" if BYBIT_TESTNET else "REAL", "accountType": account_type}
+            else:
+                ultimo_error = str(j.get("retMsg"))
+                continue
+        except Exception as e:
+            ultimo_error = str(e)
+            continue
+    return {"ok": False, "msg": "Bybit dice: " + str(ultimo_error)}
 
 _CACHE = {"tiempo": 0, "datos": None}
 def load(n, d):
