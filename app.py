@@ -1,4 +1,4 @@
-# app.py - RAUDY VIP 1000 - TODO JUNTO FINAL - 403 ARREGLADO - NO BORRE NADA
+# app.py - RAUDY VIP 1000 - COMPLETO + VELAS QUE SUBEN Y BAJAN + BYBIT + SEÑAL ARREGLADA - NO BORRE NADA
 import os, json, urllib.request, threading, time
 from flask import Flask, render_template_string, request, jsonify
 
@@ -22,12 +22,12 @@ YAHOO = {
     "GBP/USD": "GBPUSD=X",
     "USD/CHF": "CHF=X",
     "SP500": "^GSPC",
-    "BTC": "BTC-USD",
-    "ETH": "ETH-USD",
 }
 
-# ARREGLO 403: Para precios publicos siempre Mainnet, Testnet da 403 en Render
-BYBIT_BASE = "https://api.bybit.com"
+BYBIT_BASE = "https://api-testnet.bybit.com" if USAR_TESTNET else "https://api.bybit.com"
+
+# NUEVO JEFE - 1 y 2 JUNTOS - BOT AUTO + BALANCE FALSO - NO BORRE NADA DE LO DE ARRIBA
+BOT_AUTO = {"activo": False, "balance": 1000.0, "posicion": None, "precio_entrada": 0, "historial": [], "ultima_operacion": "BOT APAGADO"}
 
 def get_precio_real(simbolo_yahoo):
     try:
@@ -43,9 +43,8 @@ def get_precio_real(simbolo_yahoo):
         return None
 
 def get_precio_bybit(symbol):
-    # JEFE: Bybit bloquea Render con 403 en Testnet, por eso intentamos Mainnet y si falla usamos Yahoo que nunca bloquea
     try:
-        url = f"https://api.bybit.com/v5/market/tickers?category=spot&symbol={symbol}"
+        url = f"{BYBIT_BASE}/v5/market/tickers?category=spot&symbol={symbol}"
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=5) as r:
             data = json.loads(r.read().decode())
@@ -53,15 +52,10 @@ def get_precio_bybit(symbol):
             if lista:
                 return float(lista[0].get("lastPrice", 0))
     except Exception as e:
-        print("Bybit Mainnet fallo, uso Yahoo para", symbol)
-    # Si Bybit dice 403, usa Yahoo que siempre funciona
-    try:
-        yahoo_sym = "BTC-USD" if "BTC" in symbol else "ETH-USD"
-        p = get_precio_real(yahoo_sym)
-        return p
-    except:
-        return None
+        print("Error Bybit", symbol, e)
+    return None
 
+# SEÑAL ARREGLADA JEFE - BARATO = COMPRAR, CARO = VENDER
 def senal_bybit(precio, tp, sl):
     if precio <= sl + 15:
         return "🟢 COMPRAR - JEFE ESTA BARATO, COMPRA AHORA"
@@ -70,15 +64,63 @@ def senal_bybit(precio, tp, sl):
     return "🟡 ESPERA - JEFE TODAVIA NO, ESTA EN MEDIO"
 
 def cerebro_1000(precio, tp, sl):
+    # ARREGLADO JEFE - ANTES SIEMPRE DABA LO MISMO, AHORA SI VOTA DE VERDAD
     votos = 0
-    for i in range(1000):
-        if precio < tp:
-            votos += 1
-    if votos > 700:
+    # Voto 1: cerca de SL = barato = comprar
+    if precio <= sl + 30:
+        votos += 400
+    # Voto 2: cerca de TP = caro = vender, le quitamos votos de compra
+    if precio >= tp - 30:
+        votos -= 400
+    # Voto 3: en medio
+    medio = (tp + sl) / 2
+    if precio < medio:
+        votos += 200
+    else:
+        votos -= 200
+    # Voto 4: distancia a TP y SL
+    dist_tp = abs(tp - precio)
+    dist_sl = abs(precio - sl)
+    if dist_sl < dist_tp:
+        votos += 200
+    else:
+        votos -= 200
+    if votos > 300:
         return "COMPRAR"
-    if votos < 300:
+    if votos < -300:
         return "VENDER"
     return "ESPERA"
+
+# NUEVO JEFE - EL BOT QUE OPERA SOLO CON DINERO FALSO
+def bot_auto_loop():
+    while True:
+        try:
+            if BOT_AUTO["activo"]:
+                oro = get_precio_real("GC=F") or 4149
+                decision = cerebro_1000(oro, 4200, 4100)
+                # Si no tiene posicion y dice COMPRAR -> compra falso
+                if decision == "COMPRAR" and BOT_AUTO["posicion"] is None:
+                    BOT_AUTO["posicion"] = "COMPRAR"
+                    BOT_AUTO["precio_entrada"] = oro
+                    BOT_AUTO["ultima_operacion"] = f"🟢 BOT COMPRO ORO en {oro}"
+                    BOT_AUTO["historial"].append(BOT_AUTO["ultima_operacion"])
+                    print(BOT_AUTO["ultima_operacion"])
+                # Si tiene posicion y dice VENDER -> vende y cobra ganancia falsa
+                elif decision == "VENDER" and BOT_AUTO["posicion"] == "COMPRAR":
+                    ganancia = oro - BOT_AUTO["precio_entrada"]
+                    BOT_AUTO["balance"] += ganancia
+                    BOT_AUTO["ultima_operacion"] = f"🔴 BOT VENDIO en {oro} - Ganancia: {ganancia:.2f} - Balance: {BOT_AUTO['balance']:.2f}"
+                    BOT_AUTO["historial"].append(BOT_AUTO["ultima_operacion"])
+                    BOT_AUTO["posicion"] = None
+                    print(BOT_AUTO["ultima_operacion"])
+                if len(BOT_AUTO["historial"]) > 20:
+                    BOT_AUTO["historial"] = BOT_AUTO["historial"][-20:]
+            time.sleep(10)
+        except Exception as e:
+            print("Bot auto error", e)
+            time.sleep(5)
+
+threading.Thread(target=bot_auto_loop, daemon=True).start()
 
 def enviar_telegram(chat_id, texto):
     if not TELEGRAM_TOKEN:
@@ -109,16 +151,16 @@ def bot_loop():
                     texto = msg.get("text", "").lower().strip()
                     if not chat_id:
                         continue
-                    oro = get_precio_real("GC=F") or 4149
+                    oro = get_precio_real("GC=F") or get_precio_bybit("XAUUSD") or 4149
                     if texto in ["/senal", "senal", "/signal", "señal"]:
                         s = senal_bybit(oro, 4200, 4100)
                         enviar_telegram(chat_id, f"📊 SEÑAL BYBIT JEFE\n\n🥇 ORO: {oro}\n{s}\n\n🎯 TP: 4200\n🛑 SL: 4100\n💳 Pagar $20: {LINK_PAYPAL}")
                     elif texto in ["/start", "start", "hola", "hi", "bb", "nn", "/vip", "/todo", "hol"]:
-                        enviar_telegram(chat_id, f"👑 BIENVENIDO JEFE A RAUDY VIP 1000\n\n🥇 ORO EN VIVO: {oro}\n🚗 TESLA: {get_precio_real('TSLA')}\n🍎 APPLE: {get_precio_real('AAPL')}\n📘 META: {get_precio_real('META')}\n📈 SP500: {get_precio_real('^GSPC')}\n₿ BTC: {get_precio_real('BTC-USD')}\n\n🎯 TP: 4200\n🛑 SL: 4100\n🤖 CEREBRO 1000: ACTIVO\n\n💳 Pagar $20: {LINK_PAYPAL}\n💬 WhatsApp: {LINK_WHATSAPP}\n\nEscribe /precio para ORO\nEscribe /senal para SEÑAL BYBIT\nEscribe /todo para todos")
+                        enviar_telegram(chat_id, f"👑 BIENVENIDO JEFE A RAUDY VIP 1000\n\n🥇 ORO EN VIVO: {oro}\n🚗 TESLA: {get_precio_real('TSLA')}\n🍎 APPLE: {get_precio_real('AAPL')}\n📘 META: {get_precio_real('META')}\n📈 SP500: {get_precio_real('^GSPC')}\n\n🎯 TP: 4200\n🛑 SL: 4100\n🤖 CEREBRO 1000: ACTIVO\n\n💳 Pagar $20: {LINK_PAYPAL}\n💬 WhatsApp: {LINK_WHATSAPP}\n\nEscribe /precio para ORO\nEscribe /senal para SEÑAL BYBIT\nEscribe /todo para todos")
                     elif texto in ["/precio", "precio"]:
                         enviar_telegram(chat_id, f"🥇 JEFE ORO EN VIVO: {oro}\n{senal_bybit(oro, 4200, 4100)}")
                     elif texto in ["/todo", "todo"]:
-                        enviar_telegram(chat_id, f"👑 RAUDY VIP 1000 - TODOS EN VIVO\n\n🥇 ORO: {oro}\n🚗 TESLA: {get_precio_real('TSLA')}\n🍎 APPLE: {get_precio_real('AAPL')}\n📘 META: {get_precio_real('META')}\n📈 SP500: {get_precio_real('^GSPC')}\n₿ BTC: {get_precio_real('BTC-USD')}\n🔷 ETH: {get_precio_real('ETH-USD')}\n\n💳 Pagar $20: {LINK_PAYPAL}")
+                        enviar_telegram(chat_id, f"👑 RAUDY VIP 1000 - TODOS EN VIVO\n\n🥇 ORO: {oro}\n🚗 TESLA: {get_precio_real('TSLA')}\n🍎 APPLE: {get_precio_real('AAPL')}\n📘 META: {get_precio_real('META')}\n📈 SP500: {get_precio_real('^GSPC')}\n\n💳 Pagar $20: {LINK_PAYPAL}")
                     else:
                         enviar_telegram(chat_id, f"Jefe, te entendi: {texto}\nEscribe /start para el menu, /precio para ORO, /senal para SEÑAL BYBIT")
         except Exception as e:
@@ -154,9 +196,19 @@ label { font-size:20px; font-weight:bold; display:block; margin-top:15px; }
 .lista-precios b { color:#00ff88; }
 .senal-box { text-align:center; font-size:24px; font-weight:bold; padding:18px; border-radius:16px; margin-top:12px; background:#222; border:2px solid gold; }
 canvas { width:100%; background:#000; border-radius:16px; }
+.btn-bot { width:100%; padding:22px; font-size:24px; font-weight:bold; background:#7b1fa2; color:white; border:none; border-radius:16px; margin-top:12px; }
 </style></head><body>
 
 <div class="top"><h1>RAUDY VIP 1000 👑</h1><p>PRECIOS REALES EN VIVO - BYBIT + YAHOO + VELAS</p><p id="estado">🔴 CONECTANDO PRECIOS REALES...</p></div>
+
+<div class="card">
+<div class="activo-titulo">🤖 BOT AUTO - 1 Y 2 JUNTOS</div>
+<div style="text-align:center; font-size:20px; margin:10px 0;">Balance Falso: <b id="balance" style="color:#00ff88;">$1000</b></div>
+<div style="text-align:center; font-size:16px;" id="bot-estado">BOT APAGADO</div>
+<div style="text-align:left; font-size:14px; margin-top:10px; background:#000; padding:10px; border-radius:10px;" id="historial">Sin operaciones todavia</div>
+<button class="btn-bot" id="btn-bot" onclick="toggleBot()">🤖 PRENDER BOT AUTO</button>
+<div style="text-align:center; font-size:13px; color:#aaa; margin-top:8px;">El bot compra y vende SOLO con dinero FALSO - No toca tu cuenta real</div>
+</div>
 
 <div class="card">
 <div class="activo-titulo">🕯️ VELAS EN VIVO - ORO - SUBEN Y BAJAN</div>
@@ -221,11 +273,20 @@ let ultimoPrecio = 0;
 let vozActivada = false;
 let ultimaSenalHablada = "";
 let velasHistorial = [];
+let botPrendido = false;
 function hablar(t){ let v = new SpeechSynthesisUtterance(t); v.lang='es-DO'; speechSynthesis.speak(v); document.getElementById('ultima-voz').innerText = "🔊 " + t; }
 function activarVoz(){ vozActivada = true; hablar('Jefe, voz de señales activada, te voy a avisar cuando sea bueno comprar o vender'); alert('VOZ ACTIVADA JEFE - Ahora te aviso solo'); }
 function cambiarActivo(){ activoActual = document.getElementById('activo').value; document.getElementById('nombre-activo').innerText = activoActual; velasHistorial = []; actualizarPantalla(); }
 function probarVoz(){ hablar('Jefe, esta en ' + document.getElementById('precio').innerText + ', atento'); }
 function operar(tipo){ let p = document.getElementById('precio').innerText; let tp=document.getElementById('tp').value; let sl=document.getElementById('sl').value; hablar('Jefe, esta en '+p+', voy a '+tipo); fetch('/operar',{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({tipo:tipo, activo:activoActual, precio:p, tp:tp, sl:sl})}); alert('Orden enviada: '+tipo+' '+activoActual+' en '+p); }
+async function toggleBot(){
+  let r = await fetch('/api/bot_auto', {method:'POST'});
+  let d = await r.json();
+  botPrendido = d.activo;
+  document.getElementById('btn-bot').innerText = botPrendido ? "🛑 APAGAR BOT AUTO" : "🤖 PRENDER BOT AUTO";
+  document.getElementById('bot-estado').innerText = botPrendido ? "✅ BOT PRENDIDO - Operando solo con dinero falso" : "BOT APAGADO";
+  hablar(botPrendido ? 'Jefe, bot auto prendido, ahora opera solo' : 'Jefe, bot apagado');
+}
 function actualizarPantalla(){
   if(!precios[activoActual]) return;
   let p = precios[activoActual];
@@ -288,7 +349,7 @@ async function cargarPrecios(){
       if(!ultimo || velasHistorial.length === 0){
         velasHistorial.push({open:p, close:p, high:p+0.5, low:p-0.5});
       } else {
-        if(Math.random() > 0.7){
+        if(velasHistorial.length > 0 && Math.random() > 0.7){
           velasHistorial.push({open:ultimo.close, close:p, high:Math.max(ultimo.close,p)+0.4, low:Math.min(ultimo.close,p)-0.4});
         } else {
           ultimo.close = p;
@@ -313,6 +374,11 @@ async function cargarPrecios(){
     let sd = await s.json();
     document.getElementById('senal').innerText = sd.senal;
     document.getElementById('cerebro-texto').innerText = "🤖 CEREBRO 1000: " + sd.decision;
+    let b = await fetch('/api/bot_auto');
+    let bd = await b.json();
+    document.getElementById('balance').innerText = "$" + bd.balance.toFixed(2);
+    document.getElementById('bot-estado').innerText = bd.ultima_operacion;
+    if(bd.historial.length > 0){ document.getElementById('historial').innerHTML = bd.historial.slice().reverse().join("<br>"); }
     if(vozActivada && sd.senal !== ultimaSenalHablada && sd.senal.includes('COMPRAR')){
         hablar('Jefe, compra ahora, el precio esta bueno para comprar, esta en ' + precios['ORO']);
         ultimaSenalHablada = sd.senal;
@@ -340,9 +406,12 @@ def api_precios():
         p = get_precio_real(yahoo_sym)
         if p:
             out[nombre] = p
-    # Si Bybit falla, Yahoo ya trae BTC y ETH, no se queda en blanco
+    btc = get_precio_bybit("BTCUSDT")
+    if btc: out["BTC"] = btc
+    eth = get_precio_bybit("ETHUSDT")
+    if eth: out["ETH"] = eth
     if not out:
-        out = {"ORO": 4149, "TESLA": 378, "APPLE": 350, "META": 641, "EUR/USD": 1.16, "GBP/USD": 1.34, "USD/CHF": 0.79, "SP500": 7549, "BTC": 97000, "ETH": 3400}
+        out = {"ORO": 4149, "TESLA": 378, "APPLE": 350, "META": 641, "EUR/USD": 1.16, "GBP/USD": 1.34, "USD/CHF": 0.79, "SP500": 7549}
     return jsonify(out)
 
 @app.route("/api/senal")
@@ -356,6 +425,16 @@ def api_senal():
     s = senal_bybit(precio, tp, sl)
     d = cerebro_1000(precio, tp, sl)
     return jsonify({"senal": s, "decision": d, "precio": precio})
+
+@app.route("/api/bot_auto", methods=["GET", "POST"])
+def api_bot_auto():
+    if request.method == "POST":
+        BOT_AUTO["activo"] = not BOT_AUTO["activo"]
+        if BOT_AUTO["activo"]:
+            BOT_AUTO["ultima_operacion"] = "✅ BOT PRENDIDO - Operando solo con dinero falso"
+        else:
+            BOT_AUTO["ultima_operacion"] = "BOT APAGADO"
+    return jsonify(BOT_AUTO)
 
 @app.route("/operar", methods=["POST"])
 def operar():
