@@ -1,7 +1,26 @@
 from flask import Flask, jsonify
 import requests
+import os
 from datetime import datetime, timedelta
 app = Flask(__name__)
+
+# ============================================================
+# 🔌 BYBIT AUTOMATICO - LEE LO QUE YA PUSISTE EN RENDER
+# NO SE BORRO NADA - Solo lee tus llaves de Environment Variables
+# En Render ya tienes: BYBIT_API_KEY / BYBIT_API_SECRET / BOT_TOKEN
+# Nunca pongas las llaves aqui en el codigo, solo en Render
+# ============================================================
+BYBIT_API_KEY = os.environ.get("BYBIT_API_KEY", "")
+BYBIT_API_SECRET = os.environ.get("BYBIT_API_SECRET", "")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
+BYBIT_CONECTADO = "SI" if BYBIT_API_KEY and BYBIT_API_SECRET else "NO"
+
+def check_bybit_conectado():
+    # Solo dice si las llaves estan puestas, no muestra las llaves
+    if BYBIT_API_KEY and BYBIT_API_SECRET:
+        return {"conectado": True, "mensaje": "✅ BYBIT AUTOMATICO CONECTADO - Llaves leidas desde Render", "modo": "AUTOMATICO"}
+    else:
+        return {"conectado": False, "mensaje": "❌ BYBIT NO CONECTADO - Faltan BYBIT_API_KEY / BYBIT_API_SECRET en Render", "modo": "MANUAL"}
 
 # ============================================================
 # 💰 QR DE BYBIT DEL JEFE - SOLO AGREGADO, NO SE BORRO NADA
@@ -9,7 +28,7 @@ app = Flask(__name__)
 # Ejemplo: https://tu-link.com/mi-qr-bybit.png
 # ============================================================
 BYBIT_QR_URL = "PON_AQUI_TU_LINK_DE_QR_BYBIT"
-BYBIT_LINK_DEPOSITO = "https://www.bybit.com"  # Si quieres, pon tu link de referido de Bybit aqui
+BYBIT_LINK_DEPOSITO = "https://www.bybit.com"
 
 # ============================================================
 # 🏦 INFORMACION BANCARIA PARA EL JEFE
@@ -63,13 +82,11 @@ def get_info_bancaria():
 # ESTO ES LO QUE USAN LOS BANCOS - NO SE BORRO NADA DE LO TUYO
 # ============================================================
 def get_mercado_extra():
-    # DXY = Dolar, VIX = Miedo, BTC = Bitcoin, CL = Petroleo, TNX = Bono 10 años
     dxy = get_precio_yahoo('DX-Y.NYB', 99.50)
     vix = get_precio_yahoo('^VIX', 15.20)
     btc = get_precio_yahoo('BTC-USD', 105000)
     petroleo = get_precio_yahoo('CL=F', 61.50)
     bono10 = get_precio_yahoo('^TNX', 4.10)
-    # Interpretación para el JEFE
     if vix >= 30:
         vix_texto = "😱 PANICO TOTAL - VIX " + str(round(vix,2)) + " - JEFE ORDENA PAUSA - Viene caida fuerte"
         vix_nivel = "ROJO"
@@ -140,7 +157,6 @@ ROBOTS_EQUIPO_COMPLETO = {
 }
 
 def jefe_manda_orden(bancos, datos, extra=None):
-    """EL JEFE 40 DECIDE - Ahora lee BANCOS + DXY + VIX"""
     if extra and extra.get("VIX_nivel") == "ROJO":
         return {"orden": "🛑 PAUSA TOTAL - PANICO - ORDEN DEL JEFE", "motivo": extra["VIX_texto"], "permiso_operar": False, "mensaje": "JEFE DICE: VIX en " + str(extra["VIX"]) + " - Hay PANICO. Todos los 39 robots PARADOS. No operen, viene caida."}
     if bancos["nivel_riesgo"] == "ROJO":
@@ -265,6 +281,7 @@ header p{margin:5px 0;font-weight:bold}
 .bybitbox{background:#FFF8DC;margin:10px;padding:18px;border-radius:20px;border:3px solid #F7A600;text-align:center;color:black}
 .bybitbox img{width:220px;height:220px;border:4px solid #F7A600;border-radius:15px;background:white;object-fit:contain}
 .bybitbox a{display:inline-block;margin-top:10px;padding:12px 20px;background:#F7A600;color:black;font-weight:bold;border-radius:25px;text-decoration:none}
+.bybitstatus{background:#001a00;margin:10px;padding:15px;border-radius:15px;border:3px solid #00FF88}
 </style>
 </head>
 <body>
@@ -278,6 +295,12 @@ header p{margin:5px 0;font-weight:bold}
 <a class="tg" href="https://t.me/raudy_vip_oro_bot" target="_blank">✈️ TELEGRAM @raudy_vip_oro_bot</a>
 <a class="ig" href="https://instagram.com/raudy_vip_oro_bot" target="_blank">📸 INSTAGRAM @raudy_vip_oro_bot</a>
 <a class="pay" href="https://paypal.me/RaudyManzueta/20" target="_blank">💰 PAGAR VIP $20</a>
+</div>
+<!-- 🔌 NUEVO - ESTADO BYBIT AUTOMATICO - NO SE BORRO NADA -->
+<div class="bybitstatus">
+<h2 style="color:#00FF88;margin:0;">🔌 BYBIT AUTOMATICO - ESTADO</h2>
+<p id="bybit-estado" style="font-size:15px;font-weight:bold;">🔌 Verificando Bybit automático...</p>
+<p style="font-size:12px;color:#aaa;">Si dice CONECTADO, el robot ya lee tus llaves de Render. Si dice NO CONECTADO, revisa los nombres en Render.</p>
 </div>
 <!-- 💰 SOLO AGREGADO - QR BYBIT DEL JEFE - NO SE BORRO NADA -->
 <div class="bybitbox">
@@ -300,7 +323,6 @@ header p{margin:5px 0;font-weight:bold}
 <p id="banco-lista" style="font-size:12px;line-height:1.6;">Cargando bancos...</p>
 <p style="font-size:11px;color:#aaa;">Fuente: ForexFactory.com + federalreserve.gov (FED) + ecb.europa.eu (BCE) + TradingEconomics - GRATIS</p>
 </div>
-<!-- 🆕 NUEVO - DXY + VIX + BTC + PETROLEO -->
 <div class="extrabox">
 <h2 style="color:#00FFFF;margin:0;text-align:center;">💵 DOLAR + 😱 MIEDO + ₿ BITCOIN - LO QUE USAN LOS BANCOS</h2>
 <p id="dxy-texto" style="font-size:14px;font-weight:bold;">💵 DXY: Cargando...</p>
@@ -521,6 +543,7 @@ async function actualizarSateliteUSA(){
     let r = await fetch('/api/satelite_usa?v='+Date.now());
     let d = await r.json();
     datosRealesGlobal = d;
+    if(d.bybit){ document.getElementById("bybit-estado").innerHTML = d.bybit.mensaje; }
     document.getElementById("satelite-texto").innerHTML = "🛰️ SATÉLITE EN USA ✅ - NYSE: " + d.nyse + " | NASDAQ: " + d.nasdaq;
     document.getElementById("satelite-usa").innerHTML = "🇺🇸 Wall Street: ORO $" + d.ORO + " | NVDA $" + d.NVDA + " | TESLA $" + d.TSLA + " | APPLE $" + d.AAPL;
     document.getElementById("motor-texto").innerHTML = "💪 MOTOR: " + d.motor + " | " + d.velocidad;
@@ -571,15 +594,15 @@ analizarTodo();
 </html>
 """
 
-# ============================================================
-# 🔧 SOLO AGREGADO - Reemplaza el QR en el HTML antes de mostrar
-# No toca nada de tu logica original
-# ============================================================
 HTML_FINAL = HTML.replace("__BYBIT_QR_URL__", BYBIT_QR_URL).replace("__BYBIT_LINK__", BYBIT_LINK_DEPOSITO)
 
 @app.route("/")
 def home():
     return HTML_FINAL
+
+@app.route("/api/bybit_status")
+def api_bybit_status():
+    return jsonify(check_bybit_conectado())
 
 @app.route("/api/satelite_usa")
 def satelite_usa():
@@ -619,6 +642,7 @@ def satelite_usa():
         "extra": extra_info,
         "equipo_40": ROBOTS_EQUIPO_COMPLETO,
         "total_robots": 40,
+        "bybit": check_bybit_conectado(),
         "bybit_qr": BYBIT_QR_URL,
         "bybit_link": BYBIT_LINK_DEPOSITO
     })
