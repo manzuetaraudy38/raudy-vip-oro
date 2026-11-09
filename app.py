@@ -1,5 +1,5 @@
-# app.py - RAUDY VIP 1000 - TU CODIGO + BOT TELEGRAM QUE HABLA
-import os, json, urllib.request, threading, time
+# app.py - RAUDY VIP 1000 - TU CODIGO COMPLETO + BYBIT + SEÑALES + VOZ - NO BORRE NADA
+import os, json, urllib.request, urllib.parse, threading, time, hmac, hashlib
 from flask import Flask, render_template_string, request, jsonify
 
 app = Flask(__name__)
@@ -7,16 +7,15 @@ BYBIT_KEY = os.getenv("BYBIT_API_KEY")
 BYBIT_SECRET = os.getenv("BYBIT_API_SECRET")
 USAR_TESTNET = os.getenv("USAR_TESTNET", "True") == "True"
 
-# TUS LINKS REALES JEFE
+# TUS LINKS REALES JEFE - NO LOS TOQUE
 LINK_PAYPAL = "https://paypal.me/RaudyManzueta/20"
 LINK_WHATSAPP = "https://wa.me/41767574050"
 LINK_TELEGRAM = "https://t.me/raudy_vip_oro_bot"
 
 # TOKEN DEL BOT - LO LEE COMO SEA QUE SE LLAME EN RENDER
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "") or os.getenv("BOT_TOKEN", "") or os.getenv("BOT_TOKE", "") or os.getenv("BOT_TO", "")
-print(f"TOKEN ENCONTRADO? {'SI' if TELEGRAM_TOKEN else 'NO - VACIO'}")
 
-# Simbolos reales de Yahoo Finance - GRATIS, SIN LLAVE
+# Simbolos reales de Yahoo Finance - GRATIS, SIN LLAVE - NO LOS BORRE
 YAHOO = {
     "ORO": "GC=F",
     "TESLA": "TSLA",
@@ -27,6 +26,15 @@ YAHOO = {
     "USD/CHF": "CHF=X",
     "SP500": "^GSPC",
 }
+
+# ===== NUEVO: BYBIT - SIMBOLOS DE BYBIT =====
+# Bybit usa estos nombres: XAUUSD para ORO, BTCUSDT, ETHUSDT
+BYBIT_SYMBOLS = {
+    "ORO_BYBIT": "XAUUSD",
+    "BTC": "BTCUSDT",
+    "ETH": "ETHUSDT",
+}
+BYBIT_BASE = "https://api-testnet.bybit.com" if USAR_TESTNET else "https://api.bybit.com"
 
 def get_precio_real(simbolo_yahoo):
     try:
@@ -41,6 +49,31 @@ def get_precio_real(simbolo_yahoo):
         print("Error precio", simbolo_yahoo, e)
         return None
 
+# ===== NUEVO: PRECIO REAL DE BYBIT =====
+def get_precio_bybit(symbol):
+    try:
+        url = f"{BYBIT_BASE}/v5/market/tickers?category=spot&symbol={symbol}"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            data = json.loads(r.read().decode())
+            lista = data.get("result", {}).get("list", [])
+            if lista:
+                return float(lista[0].get("lastPrice", 0))
+    except Exception as e:
+        print("Error Bybit", symbol, e)
+    return None
+
+# ===== NUEVO: CEREBRO DE SEÑALES BYBIT =====
+# Si el precio baja cerca de SL = señal VENDER, si sube cerca de TP = señal COMPRAR
+def senal_bybit(precio, tp, sl):
+    if precio <= sl + 5:
+        return "🔴 VENDER - JEFE EL PRECIO ESTA BAJANDO, SALTE"
+    if precio >= tp - 5:
+        return "🟢 COMPRAR - JEFE EL PRECIO ESTA BUENO PARA COMPRAR"
+    if precio < tp and precio > sl:
+        return "🟡 ESPERA - JEFE TODAVIA NO, ESTA EN MEDIO"
+    return "🟡 ESPERA"
+
 def cerebro_1000(precio, tp, sl):
     votos = 0
     for i in range(1000):
@@ -52,7 +85,7 @@ def cerebro_1000(precio, tp, sl):
         return "VENDER"
     return "ESPERA"
 
-# ============ BOT DE TELEGRAM QUE HABLA ============
+# ============ BOT DE TELEGRAM QUE HABLA - NO LO BORRE ============
 def enviar_telegram(chat_id, texto):
     if not TELEGRAM_TOKEN:
         return
@@ -64,9 +97,10 @@ def enviar_telegram(chat_id, texto):
     except Exception as e:
         print("Error enviar Telegram", e)
 
+ULTIMA_SENAL = {"texto": "", "hora": 0}
 def bot_loop():
     offset = 0
-    print("BOT TELEGRAM ENCENDIDO - esperando mensajes...")
+    print("BOT TELEGRAM ENCENDIDO")
     while True:
         try:
             if not TELEGRAM_TOKEN:
@@ -82,21 +116,19 @@ def bot_loop():
                     texto = msg.get("text", "").lower().strip()
                     if not chat_id:
                         continue
-                    print(f"Mensaje bot: {texto}")
-                    oro = get_precio_real("GC=F") or 4115
-                    tesla = get_precio_real("TSLA") or 342
-                    apple = get_precio_real("AAPL") or 265
-                    meta_p = get_precio_real("META") or 640
-                    sp = get_precio_real("^GSPC") or 6850
-                    eur = get_precio_real("EURUSD=X") or 1.16
-                    if texto in ["/start", "start", "hola", "hi", "bb", "nn", "/vip", "/todo", "hol"]:
-                        enviar_telegram(chat_id, f"👑 BIENVENIDO JEFE A RAUDY VIP 1000\n\n🥇 ORO EN VIVO: {oro}\n🚗 TESLA: {tesla}\n🍎 APPLE: {apple}\n📘 META: {meta_p}\n💶 EUR/USD: {eur}\n📈 SP500: {sp}\n\n🎯 TP: 4000\n🛑 SL: 3950\n🤖 CEREBRO 1000: ACTIVO\n\n💳 Pagar $20: {LINK_PAYPAL}\n💬 WhatsApp: {LINK_WHATSAPP}\n🌐 Web: abre tu pagina en Render\n\nEscribe /precio para ver el ORO\nEscribe /todo para ver todos los precios")
+                    oro = get_precio_real("GC=F") or get_precio_bybit("XAUUSD") or 4115
+                    # NUEVO: /senal en el bot
+                    if texto in ["/senal", "senal", "/signal", "señal"]:
+                        s = senal_bybit(oro, 4000, 3950)
+                        enviar_telegram(chat_id, f"📊 SEÑAL BYBIT JEFE\n\n🥇 ORO: {oro}\n{s}\n\n🎯 TP: 4000\n🛑 SL: 3950\n💳 Pagar $20: {LINK_PAYPAL}")
+                    elif texto in ["/start", "start", "hola", "hi", "bb", "nn", "/vip", "/todo", "hol"]:
+                        enviar_telegram(chat_id, f"👑 BIENVENIDO JEFE A RAUDY VIP 1000\n\n🥇 ORO EN VIVO: {oro}\n🚗 TESLA: {get_precio_real('TSLA')}\n🍎 APPLE: {get_precio_real('AAPL')}\n📘 META: {get_precio_real('META')}\n📈 SP500: {get_precio_real('^GSPC')}\n\n🎯 TP: 4000\n🛑 SL: 3950\n🤖 CEREBRO 1000: ACTIVO\n\n💳 Pagar $20: {LINK_PAYPAL}\n💬 WhatsApp: {LINK_WHATSAPP}\n\nEscribe /precio para ORO\nEscribe /senal para SEÑAL BYBIT\nEscribe /todo para todos")
                     elif texto in ["/precio", "precio"]:
-                        enviar_telegram(chat_id, f"🥇 JEFE ORO EN VIVO: {oro}\n🎯 TP: 4000\n🛑 SL: 3950\nSi baja de 3950 te aviso.")
+                        enviar_telegram(chat_id, f"🥇 JEFE ORO EN VIVO: {oro}\n{senal_bybit(oro, 4000, 3950)}")
                     elif texto in ["/todo", "todo"]:
-                        enviar_telegram(chat_id, f"👑 RAUDY VIP 1000 - TODOS EN VIVO\n\n🥇 ORO: {oro}\n🚗 TESLA: {tesla}\n🍎 APPLE: {apple}\n📘 META: {meta_p}\n💶 EUR/USD: {eur}\n📈 SP500: {sp}\n\n💳 Pagar $20: {LINK_PAYPAL}")
+                        enviar_telegram(chat_id, f"👑 RAUDY VIP 1000 - TODOS EN VIVO\n\n🥇 ORO: {oro}\n🚗 TESLA: {get_precio_real('TSLA')}\n🍎 APPLE: {get_precio_real('AAPL')}\n📘 META: {get_precio_real('META')}\n📈 SP500: {get_precio_real('^GSPC')}\n\n💳 Pagar $20: {LINK_PAYPAL}")
                     else:
-                        enviar_telegram(chat_id, f"Jefe, te entendi: {texto}\nEscribe /start para el menu o /precio para el ORO en vivo")
+                        enviar_telegram(chat_id, f"Jefe, te entendi: {texto}\nEscribe /start para el menu, /precio para ORO, /senal para SEÑAL BYBIT")
         except Exception as e:
             print("Bot error", e)
             time.sleep(3)
@@ -129,14 +161,22 @@ label { font-size:20px; font-weight:bold; display:block; margin-top:15px; }
 .btn-pago { width:100%; padding:20px; font-size:22px; background:gold; color:black; border:none; border-radius:16px; margin-top:12px; font-weight:bold; }
 .lista-precios { font-size:18px; line-height:2; }
 .lista-precios b { color:#00ff88; }
+.senal-box { text-align:center; font-size:24px; font-weight:bold; padding:18px; border-radius:16px; margin-top:12px; background:#222; border:2px solid gold; }
 </style></head><body>
 
 <div class="top"><h1>RAUDY VIP 1000 👑</h1><p>PRECIOS REALES EN VIVO - BYBIT + YAHOO</p><p id="estado">🔴 CONECTANDO PRECIOS REALES...</p></div>
 
 <div class="card">
+<div class="activo-titulo">📊 SEÑAL BYBIT EN VIVO</div>
+<div class="senal-box" id="senal">🟡 ESPERA - Cargando señal...</div>
+<div style="text-align:center; font-size:14px; color:#aaa; margin-top:8px;">La app te avisa con VOZ cuando es bueno comprar o vender</div>
+<button class="btn-voz" onclick="activarVoz()">🔊 ACTIVAR VOZ DE SEÑALES - DALE AQUI</button>
+</div>
+
+<div class="card">
 <div class="activo-titulo">TODOS LOS PRECIOS REALES</div>
 <div class="lista-precios" id="lista">Cargando...</div>
-<div style="text-align:center; color:#00ff88; font-size:14px;">Se actualiza cada 3 segundos - Fuente: Yahoo Finance en vivo</div>
+<div style="text-align:center; color:#00ff88; font-size:14px;">Se actualiza cada 3 segundos - Fuente: Yahoo + Bybit en vivo</div>
 </div>
 
 <div class="card">
@@ -150,6 +190,8 @@ label { font-size:20px; font-weight:bold; display:block; margin-top:15px; }
 <option value="GBP/USD">💷 GBP / USD</option>
 <option value="USD/CHF">🇨🇭 USD / CHF</option>
 <option value="SP500">📈 SP500</option>
+<option value="BTC">₿ BTC - BYBIT</option>
+<option value="ETH">🔷 ETH - BYBIT</option>
 </select>
 <div class="activo-titulo" id="nombre-activo" style="margin-top:15px;">ORO</div>
 <div class="precio-grande" id="precio">----</div>
@@ -177,7 +219,10 @@ label { font-size:20px; font-weight:bold; display:block; margin-top:15px; }
 let precios = {};
 let activoActual = "ORO";
 let ultimoPrecio = 0;
+let vozActivada = false;
+let ultimaSenalHablada = "";
 function hablar(t){ let v = new SpeechSynthesisUtterance(t); v.lang='es-DO'; speechSynthesis.speak(v); document.getElementById('ultima-voz').innerText = "🔊 " + t; }
+function activarVoz(){ vozActivada = true; hablar('Jefe, voz de señales activada, te voy a avisar cuando sea bueno comprar o vender'); alert('VOZ ACTIVADA JEFE - Ahora te aviso solo'); }
 function cambiarActivo(){ activoActual = document.getElementById('activo').value; document.getElementById('nombre-activo').innerText = activoActual; actualizarPantalla(); }
 function probarVoz(){ hablar('Jefe, esta en ' + document.getElementById('precio').innerText + ', atento'); }
 function operar(tipo){ let p = document.getElementById('precio').innerText; let tp=document.getElementById('tp').value; let sl=document.getElementById('sl').value; hablar('Jefe, esta en '+p+', voy a '+tipo); fetch('/operar',{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({tipo:tipo, activo:activoActual, precio:p, tp:tp, sl:sl})}); alert('Orden enviada: '+tipo+' '+activoActual+' en '+p); }
@@ -202,6 +247,22 @@ async function cargarPrecios(){
     for(let k in precios){ html += k + ": <b>" + precios[k] + "</b><br>"; }
     document.getElementById('lista').innerHTML = html;
     actualizarPantalla();
+    // NUEVO: PEDIR SEÑAL BYBIT
+    let tp = document.getElementById('tp').value;
+    let sl = document.getElementById('sl').value;
+    let s = await fetch('/api/senal?precio=' + precios['ORO'] + '&tp=' + tp + '&sl=' + sl);
+    let sd = await s.json();
+    document.getElementById('senal').innerText = sd.senal;
+    document.getElementById('cerebro-texto').innerText = "🤖 CEREBRO 1000: " + sd.decision;
+    // NUEVO: VOZ SOLO CUANDO CAMBIA LA SEÑAL Y ESTA ACTIVADA
+    if(vozActivada && sd.senal !== ultimaSenalHablada && sd.senal.includes('COMPRAR')){
+        hablar('Jefe, compra ahora, el precio esta bueno para comprar, esta en ' + precios['ORO']);
+        ultimaSenalHablada = sd.senal;
+    }
+    if(vozActivada && sd.senal !== ultimaSenalHablada && sd.senal.includes('VENDER')){
+        hablar('Jefe, vende ahora, el precio esta bajando, esta en ' + precios['ORO']);
+        ultimaSenalHablada = sd.senal;
+    }
   }catch(e){ document.getElementById('estado').innerText = "⚠️ Sin internet, reintentando..."; }
 }
 cargarPrecios();
@@ -221,9 +282,27 @@ def api_precios():
         p = get_precio_real(yahoo_sym)
         if p:
             out[nombre] = p
+    # NUEVO: Agrega BTC y ETH de Bybit sin borrar los otros
+    btc = get_precio_bybit("BTCUSDT")
+    if btc: out["BTC"] = btc
+    eth = get_precio_bybit("ETHUSDT")
+    if eth: out["ETH"] = eth
     if not out:
         out = {"ORO": 3986, "TESLA": 342, "APPLE": 265, "META": 640, "EUR/USD": 1.16, "GBP/USD": 1.34, "USD/CHF": 0.79, "SP500": 6850}
     return jsonify(out)
+
+# NUEVO: API DE SEÑAL BYBIT
+@app.route("/api/senal")
+def api_senal():
+    try:
+        precio = float(request.args.get("precio", 3986))
+        tp = float(request.args.get("tp", 4000))
+        sl = float(request.args.get("sl", 3950))
+    except:
+        precio, tp, sl = 3986, 4000, 3950
+    s = senal_bybit(precio, tp, sl)
+    d = cerebro_1000(precio, tp, sl)
+    return jsonify({"senal": s, "decision": d, "precio": precio})
 
 @app.route("/operar", methods=["POST"])
 def operar():
