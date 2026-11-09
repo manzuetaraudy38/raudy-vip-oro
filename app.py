@@ -1,4 +1,4 @@
-# app.py - RAUDY VIP 1000 - PRECIOS REALES EN VIVO
+# app.py - RAUDY VIP 1000 - FINAL CON TUS LINKS REALES
 import os, json, urllib.request
 from flask import Flask, render_template_string, request, jsonify
 
@@ -7,7 +7,11 @@ BYBIT_KEY = os.getenv("BYBIT_API_KEY")
 BYBIT_SECRET = os.getenv("BYBIT_API_SECRET")
 USAR_TESTNET = os.getenv("USAR_TESTNET", "True") == "True"
 
-# Simbolos reales de Yahoo Finance - GRATIS, SIN LLAVE
+# TUS LINKS REALES JEFE
+LINK_PAYPAL = "https://paypal.me/RaudyManzueta/20"
+LINK_WHATSAPP = "https://wa.me/41767574050"
+LINK_TELEGRAM = "https://t.me/raudy_vip_oro_bot"
+
 YAHOO = {
     "ORO": "GC=F",
     "TESLA": "TSLA",
@@ -63,19 +67,19 @@ label { font-size:20px; font-weight:bold; display:block; margin-top:15px; }
 .btn-comprar { width:100%; padding:22px; font-size:26px; font-weight:bold; background:#00c853; color:white; border:none; border-radius:16px; margin-top:15px; }
 .btn-vender { width:100%; padding:22px; font-size:26px; font-weight:bold; background:#d50000; color:white; border:none; border-radius:16px; margin-top:12px; }
 .btn-voz { width:100%; padding:16px; font-size:20px; background:#ff9800; border:none; border-radius:14px; margin-top:12px; font-weight:bold; }
-.btn-tg { width:100%; padding:16px; font-size:18px; background:#0088cc; color:white; border:none; border-radius:14px; font-weight:bold; }
-.btn-wa { width:100%; padding:16px; font-size:18px; background:#25D366; color:white; border:none; border-radius:14px; font-weight:bold; margin-top:10px; }
-.btn-pago { width:100%; padding:20px; font-size:22px; background:gold; color:black; border:none; border-radius:16px; margin-top:12px; font-weight:bold; }
+.btn-tg { width:100%; padding:18px; font-size:20px; background:#0088cc; color:white; border:none; border-radius:14px; font-weight:bold; }
+.btn-wa { width:100%; padding:18px; font-size:20px; background:#25D366; color:white; border:none; border-radius:14px; font-weight:bold; margin-top:10px; }
+.btn-pago { width:100%; padding:22px; font-size:22px; background:gold; color:black; border:none; border-radius:16px; margin-top:12px; font-weight:bold; }
 .lista-precios { font-size:18px; line-height:2; }
 .lista-precios b { color:#00ff88; }
 </style></head><body>
 
-<div class="top"><h1>RAUDY VIP 1000 👑</h1><p>PRECIOS REALES EN VIVO - BYBIT + YAHOO</p><p id="estado">🔴 CONECTANDO PRECIOS REALES...</p></div>
+<div class="top"><h1>RAUDY VIP 1000 👑</h1><p>PRECIOS REALES EN VIVO</p><p id="estado">🔴 CONECTANDO PRECIOS REALES...</p></div>
 
 <div class="card">
 <div class="activo-titulo">TODOS LOS PRECIOS REALES</div>
 <div class="lista-precios" id="lista">Cargando...</div>
-<div style="text-align:center; color:#00ff88; font-size:14px;">Se actualiza cada 3 segundos - Fuente: Yahoo Finance en vivo</div>
+<div style="text-align:center; color:#00ff88; font-size:14px;">Se actualiza cada 3 segundos - En vivo</div>
 </div>
 
 <div class="card">
@@ -107,9 +111,10 @@ label { font-size:20px; font-weight:bold; display:block; margin-top:15px; }
 
 <div class="card">
 <div style="text-align:center; font-size:22px; font-weight:bold;">HABLAME JEFE</div>
-<a href="https://t.me/TU_TELEGRAM"><button class="btn-tg">TELEGRAM</button></a>
-<a href="https://wa.me/TU_WHATSAPP"><button class="btn-wa">WHATSAPP</button></a>
-<a href="https://payhip.com/TU_LINK_DE_PAGO"><button class="btn-pago">💳 PAGAR PARA USAR MI ROBOT - $29/mes</button></a>
+<a href="LINK_TELEGRAM_PLACEHOLDER"><button class="btn-tg">📩 TELEGRAM - @raudy_vip_oro_bot</button></a>
+<a href="LINK_WHATSAPP_PLACEHOLDER"><button class="btn-wa">💬 WHATSAPP - 076 757 40 50</button></a>
+<a href="LINK_PAYPAL_PLACEHOLDER"><button class="btn-pago">💳 PAGAR $20 PARA USAR MI ROBOT - PAYPAL</button></a>
+<p style="text-align:center; color:#aaa; font-size:14px;">Raudy Manzueta - VIP 1000</p>
 </div>
 
 <script>
@@ -124,7 +129,6 @@ function actualizarPantalla(){
   if(!precios[activoActual]) return;
   let p = precios[activoActual];
   document.getElementById('precio').innerText = p;
-  // Alarma de voz si sube o baja fuerte
   if(ultimoPrecio !== 0){
     let diff = p - ultimoPrecio;
     if(diff > 2 && activoActual === "ORO"){ hablar('Jefe, subio, esta en ' + p); }
@@ -149,6 +153,11 @@ setInterval(cargarPrecios, 3000);
 </script></body></html>
 """
 
+# Reemplazamos los placeholders con tus links reales
+HTML = HTML.replace("LINK_TELEGRAM_PLACEHOLDER", LINK_TELEGRAM)
+HTML = HTML.replace("LINK_WHATSAPP_PLACEHOLDER", LINK_WHATSAPP)
+HTML = HTML.replace("LINK_PAYPAL_PLACEHOLDER", LINK_PAYPAL)
+
 @app.route("/")
 def home():
     return render_template_string(HTML)
@@ -160,7 +169,6 @@ def api_precios():
         p = get_precio_real(yahoo_sym)
         if p:
             out[nombre] = p
-    # Si falla internet, manda ultimo precio de ejemplo para no dejar en blanco
     if not out:
         out = {"ORO": 3986, "TESLA": 342, "APPLE": 265, "META": 640, "EUR/USD": 1.16, "GBP/USD": 1.34, "USD/CHF": 0.79, "SP500": 6850}
     return jsonify(out)
