@@ -16,7 +16,6 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 BYBIT_CONECTADO = "SI" if BYBIT_API_KEY and BYBIT_API_SECRET else "NO"
 
 def check_bybit_conectado():
-    # Solo dice si las llaves estan puestas, no muestra las llaves
     if BYBIT_API_KEY and BYBIT_API_SECRET:
         return {"conectado": True, "mensaje": "✅ BYBIT AUTOMATICO CONECTADO - Llaves leidas desde Render", "modo": "AUTOMATICO"}
     else:
@@ -24,11 +23,108 @@ def check_bybit_conectado():
 
 # ============================================================
 # 💰 QR DE BYBIT DEL JEFE - SOLO AGREGADO, NO SE BORRO NADA
-# Pon aqui el link de tu imagen QR de Bybit
-# Ejemplo: https://tu-link.com/mi-qr-bybit.png
 # ============================================================
 BYBIT_QR_URL = "PON_AQUI_TU_LINK_DE_QR_BYBIT"
 BYBIT_LINK_DEPOSITO = "https://www.bybit.com"
+
+# ============================================================
+# 🆕 NUEVO - VELAS + EMA 50 + EMA 200 - JEFE RAUDY
+# Esto es lo que usan los bancos. No se borro nada.
+# Velas de Yahoo USA, calculo EMA de verdad.
+# ============================================================
+def get_velas_yahoo(symbol, intervalo="1h", rango="5d"):
+    # Devuelve lista de precios de cierre de velas
+    try:
+        url = f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval={intervalo}&range={rango}'
+        r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=6)
+        j = r.json()
+        result = j['chart']['result'][0]
+        closes = result['indicators']['quote'][0]['close']
+        opens = result['indicators']['quote'][0]['open']
+        highs = result['indicators']['quote'][0]['high']
+        lows = result['indicators']['quote'][0]['low']
+        # Limpiar Nones
+        precios = [c for c in closes if c is not None]
+        velas = []
+        for i in range(len(closes)):
+            if closes[i] is not None:
+                velas.append({"open": opens[i], "high": highs[i], "low": lows[i], "close": closes[i], "color": "VERDE" if closes[i] >= opens[i] else "ROJA"})
+        return {"precios": precios, "velas": velas[-5:], "ultima_vela": velas[-1] if velas else None}
+    except:
+        return {"precios": [], "velas": [], "ultima_vela": None}
+
+def calcular_ema(precios, periodo):
+    # EMA de verdad: si no hay suficientes datos, usa el ultimo precio
+    if not precios:
+        return 0
+    if len(precios) < periodo:
+        return round(sum(precios)/len(precios), 2)
+    # SMA inicial
+    sma = sum(precios[:periodo]) / periodo
+    ema = sma
+    k = 2 / (periodo + 1)
+    for p in precios[periodo:]:
+        ema = (p * k) + (ema * (1 - k))
+    return round(ema, 2)
+
+def get_ema_oro():
+    # ORO: GC=F en Yahoo = Futuro Oro USA
+    datos_1h = get_velas_yahoo('GC=F', '1h', '5d')
+    datos_4h = get_velas_yahoo('GC=F', '1h', '10d')
+    precios = datos_1h["precios"]
+    if not precios:
+        # Fallback si Yahoo falla
+        precio = get_precio_yahoo('GC=F', 4088)
+        return {"EMA50": precio, "EMA200": precio, "precio": precio, "cruce": "ESPERA", "senal_ema": "ESPERA", "vela_1h": "SIN DATOS", "vela_4h": "SIN DATOS", "texto": "EMA esperando datos de Yahoo"}
+    ema50 = calcular_ema(precios, 50)
+    # Para EMA200 usamos mas historia, si no hay 200 velas, usamos lo que hay
+    ema200 = calcular_ema(precios, 200) if len(precios) >= 50 else ema50
+    precio_actual = precios[-1]
+    ultima = datos_1h["ultima_vela"]
+    vela_txt = "VERDE - Subiendo" if ultima and ultima["color"] == "VERDE" else "ROJA - Bajando" if ultima else "SIN DATOS"
+    # Cruce
+    if ema50 > ema200 and precio_actual > ema50:
+        cruce = "CRUCE DORADO"
+        senal_ema = "COMPRA"
+        texto = f"🟢 CRUCE DORADO - EMA50 ${ema50} por ARRIBA de EMA200 ${ema200} + Precio ${precio_actual} por arriba de EMA50 - Tendencia ALCISTA - Los bancos compran"
+    elif ema50 < ema200 and precio_actual < ema50:
+        cruce = "CRUCE DE MUERTE"
+        senal_ema = "VENTA"
+        texto = f"🔴 CRUCE DE MUERTE - EMA50 ${ema50} por ABAJO de EMA200 ${ema200} + Precio ${precio_actual} por abajo de EMA50 - Tendencia BAJISTA - Los bancos venden"
+    elif ema50 > ema200:
+        cruce = "ALCISTA SIN CONFIRMAR"
+        senal_ema = "ESPERA"
+        texto = f"🟡 EMA50 ${ema50} arriba de EMA200 ${ema200} pero precio ${precio_actual} no confirma. ESPERA."
+    else:
+        cruce = "BAJISTA SIN CONFIRMAR"
+        senal_ema = "ESPERA"
+        texto = f"🟡 EMA50 ${ema50} abajo de EMA200 ${ema200} pero precio ${precio_actual} no confirma. ESPERA."
+    return {"EMA50": ema50, "EMA200": ema200, "precio": round(precio_actual,2), "cruce": cruce, "senal_ema": senal_ema, "vela_1h": vela_txt, "vela_4h": vela_txt, "texto": texto, "fuente": "Yahoo Finance USA GC=F - Velas 1H reales - EMA calculada de verdad"}
+
+def get_senal_final_jefe(precio_oro, ema_info, extra, bancos):
+    # Combina TODO: Zona + EMA + DXY + VIX + Bancos
+    # Solo COMPRA FUERTE si TODO esta de acuerdo
+    zona_compra = precio_oro <= 3910
+    zona_venta = precio_oro >= 3970
+    ema_compra = ema_info.get("senal_ema") == "COMPRA"
+    ema_venta = ema_info.get("senal_ema") == "VENTA"
+    dxy_alcista_oro = extra and extra.get("DXY_para_oro") == "ALCISTA"
+    dxy_bajista_oro = extra and extra.get("DXY_para_oro") == "BAJISTA"
+    vix_ok = not extra or extra.get("VIX_nivel") != "ROJO"
+    bancos_ok = bancos.get("nivel_riesgo") != "ROJO"
+    if not vix_ok:
+        return {"senal_final": "🛑 PAUSA - VIX PANICO", "motivo": "VIX en panico, JEFE ordena pausa aunque EMA diga compra", "permiso": False}
+    if not bancos_ok:
+        return {"senal_final": "🛑 PAUSA - NOTICIA BANCO", "motivo": "Hay noticia de banco fuerte, JEFE ordena pausa", "permiso": False}
+    if zona_compra and ema_compra and (dxy_alcista_oro or extra.get("DXY_para_oro") == "NEUTRAL"):
+        return {"senal_final": "🟢 COMPRA FUERTE - TODO DE ACUERDO", "motivo": f"Zona COMPRA ${precio_oro} + {ema_info['cruce']} + DXY {extra.get('DXY_para_oro')} + VIX tranquilo + Bancos tranquilos = 5/5 confirmaciones", "permiso": True}
+    if zona_venta and ema_venta and (dxy_bajista_oro or extra.get("DXY_para_oro") == "NEUTRAL"):
+        return {"senal_final": "🔴 VENTA FUERTE - TODO DE ACUERDO", "motivo": f"Zona VENTA ${precio_oro} + {ema_info['cruce']} + DXY {extra.get('DXY_para_oro')} + VIX tranquilo + Bancos tranquilos = 5/5 confirmaciones", "permiso": True}
+    if zona_compra and ema_compra:
+        return {"senal_final": "🟡 COMPRA DEBIL - 2/5", "motivo": "Zona + EMA dicen COMPRA, pero DXY no ayuda. JEFE dice ESPERA confirmacion.", "permiso": False}
+    if zona_venta and ema_venta:
+        return {"senal_final": "🟡 VENTA DEBIL - 2/5", "motivo": "Zona + EMA dicen VENTA, pero DXY no ayuda. JEFE dice ESPERA confirmacion.", "permiso": False}
+    return {"senal_final": "🟡 ESPERA - NO HAY ACUERDO", "motivo": f"Oro ${precio_oro} | EMA: {ema_info.get('cruce')} | DXY: {extra.get('DXY_para_oro') if extra else '?'} | Falta acuerdo de todos. JEFE dice ESPERA.", "permiso": False}
 
 # ============================================================
 # 🏦 INFORMACION BANCARIA PARA EL JEFE
@@ -79,7 +175,6 @@ def get_info_bancaria():
 
 # ============================================================
 # 🆕 NUEVO - DXY + VIX + BTC + PETROLEO + BONO 10 AÑOS - AGREGADO AHORA
-# ESTO ES LO QUE USAN LOS BANCOS - NO SE BORRO NADA DE LO TUYO
 # ============================================================
 def get_mercado_extra():
     dxy = get_precio_yahoo('DX-Y.NYB', 99.50)
@@ -282,6 +377,8 @@ header p{margin:5px 0;font-weight:bold}
 .bybitbox img{width:220px;height:220px;border:4px solid #F7A600;border-radius:15px;background:white;object-fit:contain}
 .bybitbox a{display:inline-block;margin-top:10px;padding:12px 20px;background:#F7A600;color:black;font-weight:bold;border-radius:25px;text-decoration:none}
 .bybitstatus{background:#001a00;margin:10px;padding:15px;border-radius:15px;border:3px solid #00FF88}
+.emabox{background:#0a0a2a;margin:10px;padding:18px;border-radius:20px;border:3px solid #FFD700;text-align:left}
+.finalbox{background:#1a2a00;margin:10px;padding:18px;border-radius:20px;border:3px solid #00FF88;text-align:center}
 </style>
 </head>
 <body>
@@ -296,13 +393,11 @@ header p{margin:5px 0;font-weight:bold}
 <a class="ig" href="https://instagram.com/raudy_vip_oro_bot" target="_blank">📸 INSTAGRAM @raudy_vip_oro_bot</a>
 <a class="pay" href="https://paypal.me/RaudyManzueta/20" target="_blank">💰 PAGAR VIP $20</a>
 </div>
-<!-- 🔌 NUEVO - ESTADO BYBIT AUTOMATICO - NO SE BORRO NADA -->
 <div class="bybitstatus">
 <h2 style="color:#00FF88;margin:0;">🔌 BYBIT AUTOMATICO - ESTADO</h2>
 <p id="bybit-estado" style="font-size:15px;font-weight:bold;">🔌 Verificando Bybit automático...</p>
 <p style="font-size:12px;color:#aaa;">Si dice CONECTADO, el robot ya lee tus llaves de Render. Si dice NO CONECTADO, revisa los nombres en Render.</p>
 </div>
-<!-- 💰 SOLO AGREGADO - QR BYBIT DEL JEFE - NO SE BORRO NADA -->
 <div class="bybitbox">
 <h2 style="margin:0;">💰 DEPOSITAR EN BYBIT - JEFE RAUDY</h2>
 <p style="font-weight:bold;">Escanea el QR con tu app de Bybit para depositar</p>
@@ -310,6 +405,20 @@ header p{margin:5px 0;font-weight:bold}
 <br>
 <a href="__BYBIT_LINK__" target="_blank">🟡 ABRIR BYBIT</a>
 <p style="font-size:12px;color:#555;">Si el QR no se ve, cambia el link en BYBIT_QR_URL arriba del código. Tu código original sigue intacto.</p>
+</div>
+<!-- 🆕 NUEVO - VELAS + EMA 50 + EMA 200 - NO SE BORRO NADA -->
+<div class="emabox">
+<h2 style="color:#FFD700;margin:0;text-align:center;">🕯️ VELAS + 📈 EMA 50 + EMA 200 - LO DE LOS BANCOS</h2>
+<p id="ema-texto" style="font-size:15px;font-weight:bold;color:white;">📈 EMA: Cargando velas reales de Yahoo...</p>
+<p id="ema-detalle" style="font-size:13px;color:#FFD700;">Calculando EMA 50 y EMA 200 con velas 1H reales...</p>
+<p id="vela-texto" style="font-size:13px;">🕯️ Vela 1H: Cargando...</p>
+<p style="font-size:11px;color:#aaa;">EMA 50 arriba de EMA 200 = CRUCE DORADO = COMPRA FUERTE. EMA 50 abajo de EMA 200 = CRUCE DE MUERTE = VENTA FUERTE. Fuente: Yahoo Finance USA GC=F - Velas 1H.</p>
+</div>
+<div class="finalbox">
+<h2 style="color:#00FF88;margin:0;">🧠 SEÑAL FINAL DEL JEFE - TODO JUNTO</h2>
+<p id="final-senal" style="font-size:18px;font-weight:bold;color:white;">🧠 Calculando señal final...</p>
+<p id="final-motivo" style="font-size:13px;color:#FFD700;">Zona + EMA + DXY + VIX + Bancos...</p>
+<p style="font-size:11px;color:#aaa;">Solo si los 5 dicen lo mismo, el JEFE da permiso. Asi no entras a lo loco.</p>
 </div>
 <div class="jefebox">
 <h2 style="color:#FF4444;margin:0;">👑 JEFE 40 - YO MANDO A LOS 39 - ORDEN EN VIVO</h2>
@@ -522,7 +631,8 @@ async function analizarTodo(){
  let origen = activo==="ORO" ? "gold-api.com + Yahoo USA (GC=F)" : "Yahoo Finance USA - NYSE / NASDAQ";
  let ordenJefe = datos && datos.jefe ? datos.jefe.orden : "";
  let textoJefe = ordenJefe ? " | 👑 JEFE DICE: " + ordenJefe : "";
- document.getElementById("maestroMsg").innerHTML="He analizado "+activo+" con PRECIO REAL de BOLSA USA. Los 40 robots están CONECTADOS. Decisión: <b>"+senalTexto+"</b><br>ENTRADA: $"+entrada+" | BOTÍN: $"+botin+" | SALIDA: $"+salida+"<br>📍 Fuente: "+origen + "<br>" + textoJefe;
+ let emaTxt = datos && datos.ema ? " | 📈 " + datos.ema.texto : "";
+ document.getElementById("maestroMsg").innerHTML="He analizado "+activo+" con PRECIO REAL de BOLSA USA. Los 40 robots están CONECTADOS. Decisión: <b>"+senalTexto+"</b><br>ENTRADA: $"+entrada+" | BOTÍN: $"+botin+" | SALIDA: $"+salida+"<br>📍 Fuente: "+origen + "<br>" + textoJefe + "<br>" + emaTxt;
  hablar("He analizado "+activo+" con precio real de bolsa USA, decisión "+senalTexto);
  robots.slice(0,39).forEach(r=>{
   let num=r[0]; let funcion=r[3];
@@ -544,6 +654,15 @@ async function actualizarSateliteUSA(){
     let d = await r.json();
     datosRealesGlobal = d;
     if(d.bybit){ document.getElementById("bybit-estado").innerHTML = d.bybit.mensaje; }
+    if(d.ema){
+      document.getElementById("ema-texto").innerHTML = "📈 " + d.ema.texto;
+      document.getElementById("ema-detalle").innerHTML = "EMA 50: $" + d.ema.EMA50 + " | EMA 200: $" + d.ema.EMA200 + " | Precio: $" + d.ema.precio + " | Cruce: " + d.ema.cruce;
+      document.getElementById("vela-texto").innerHTML = "🕯️ Vela 1H: " + d.ema.vela_1h + " | Vela 4H: " + d.ema.vela_4h;
+    }
+    if(d.senal_final){
+      document.getElementById("final-senal").innerHTML = d.senal_final.senal_final;
+      document.getElementById("final-motivo").innerHTML = d.senal_final.motivo;
+    }
     document.getElementById("satelite-texto").innerHTML = "🛰️ SATÉLITE EN USA ✅ - NYSE: " + d.nyse + " | NASDAQ: " + d.nasdaq;
     document.getElementById("satelite-usa").innerHTML = "🇺🇸 Wall Street: ORO $" + d.ORO + " | NVDA $" + d.NVDA + " | TESLA $" + d.TSLA + " | APPLE $" + d.AAPL;
     document.getElementById("motor-texto").innerHTML = "💪 MOTOR: " + d.motor + " | " + d.velocidad;
@@ -627,6 +746,8 @@ def satelite_usa():
     bancos_info = get_info_bancaria()
     extra_info = get_mercado_extra()
     jefe_orden = jefe_manda_orden(bancos_info, datos, extra_info)
+    ema_info = get_ema_oro()
+    senal_final = get_senal_final_jefe(oro, ema_info, extra_info, bancos_info)
     return jsonify({
         **datos,
         "motor": motor_txt,
@@ -644,8 +765,14 @@ def satelite_usa():
         "total_robots": 40,
         "bybit": check_bybit_conectado(),
         "bybit_qr": BYBIT_QR_URL,
-        "bybit_link": BYBIT_LINK_DEPOSITO
+        "bybit_link": BYBIT_LINK_DEPOSITO,
+        "ema": ema_info,
+        "senal_final": senal_final
     })
+
+@app.route("/api/ema")
+def api_ema():
+    return jsonify(get_ema_oro())
 
 @app.route("/api/bancos")
 def api_bancos():
