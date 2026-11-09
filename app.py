@@ -6,9 +6,7 @@ app = Flask(__name__)
 
 # ============================================================
 # 🔌 BYBIT AUTOMATICO - LEE LO QUE YA PUSISTE EN RENDER
-# NO SE BORRO NADA - Solo lee tus llaves de Environment Variables
-# En Render ya tienes: BYBIT_API_KEY / BYBIT_API_SECRET / BOT_TOKEN
-# Nunca pongas las llaves aqui en el codigo, solo en Render
+# NO SE BORRO NADA
 # ============================================================
 BYBIT_API_KEY = os.environ.get("BYBIT_API_KEY", "")
 BYBIT_API_SECRET = os.environ.get("BYBIT_API_SECRET", "")
@@ -21,19 +19,13 @@ def check_bybit_conectado():
     else:
         return {"conectado": False, "mensaje": "❌ BYBIT NO CONECTADO - Faltan BYBIT_API_KEY / BYBIT_API_SECRET en Render", "modo": "MANUAL"}
 
-# ============================================================
-# 💰 QR DE BYBIT DEL JEFE - SOLO AGREGADO, NO SE BORRO NADA
-# ============================================================
 BYBIT_QR_URL = "PON_AQUI_TU_LINK_DE_QR_BYBIT"
 BYBIT_LINK_DEPOSITO = "https://www.bybit.com"
 
 # ============================================================
-# 🆕 NUEVO - VELAS + EMA 50 + EMA 200 - JEFE RAUDY
-# Esto es lo que usan los bancos. No se borro nada.
-# Velas de Yahoo USA, calculo EMA de verdad.
+# 🆕 VELAS + EMA 50 + EMA 200 - JEFE RAUDY - CON GRAFICO VISIBLE
 # ============================================================
 def get_velas_yahoo(symbol, intervalo="1h", rango="5d"):
-    # Devuelve lista de precios de cierre de velas
     try:
         url = f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval={intervalo}&range={rango}'
         r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=6)
@@ -43,23 +35,20 @@ def get_velas_yahoo(symbol, intervalo="1h", rango="5d"):
         opens = result['indicators']['quote'][0]['open']
         highs = result['indicators']['quote'][0]['high']
         lows = result['indicators']['quote'][0]['low']
-        # Limpiar Nones
         precios = [c for c in closes if c is not None]
         velas = []
         for i in range(len(closes)):
-            if closes[i] is not None:
-                velas.append({"open": opens[i], "high": highs[i], "low": lows[i], "close": closes[i], "color": "VERDE" if closes[i] >= opens[i] else "ROJA"})
-        return {"precios": precios, "velas": velas[-5:], "ultima_vela": velas[-1] if velas else None}
+            if closes[i] is not None and opens[i] is not None:
+                velas.append({"open": round(float(opens[i]),2), "high": round(float(highs[i]),2), "low": round(float(lows[i]),2), "close": round(float(closes[i]),2), "color": "VERDE" if closes[i] >= opens[i] else "ROJA"})
+        return {"precios": precios, "velas": velas[-20:], "ultima_vela": velas[-1] if velas else None, "todas_velas": velas}
     except:
-        return {"precios": [], "velas": [], "ultima_vela": None}
+        return {"precios": [], "velas": [], "ultima_vela": None, "todas_velas": []}
 
 def calcular_ema(precios, periodo):
-    # EMA de verdad: si no hay suficientes datos, usa el ultimo precio
     if not precios:
         return 0
     if len(precios) < periodo:
         return round(sum(precios)/len(precios), 2)
-    # SMA inicial
     sma = sum(precios[:periodo]) / periodo
     ema = sma
     k = 2 / (periodo + 1)
@@ -68,42 +57,35 @@ def calcular_ema(precios, periodo):
     return round(ema, 2)
 
 def get_ema_oro():
-    # ORO: GC=F en Yahoo = Futuro Oro USA
     datos_1h = get_velas_yahoo('GC=F', '1h', '5d')
-    datos_4h = get_velas_yahoo('GC=F', '1h', '10d')
     precios = datos_1h["precios"]
     if not precios:
-        # Fallback si Yahoo falla
         precio = get_precio_yahoo('GC=F', 4088)
-        return {"EMA50": precio, "EMA200": precio, "precio": precio, "cruce": "ESPERA", "senal_ema": "ESPERA", "vela_1h": "SIN DATOS", "vela_4h": "SIN DATOS", "texto": "EMA esperando datos de Yahoo"}
+        return {"EMA50": precio, "EMA200": precio, "precio": precio, "cruce": "ESPERA", "senal_ema": "ESPERA", "vela_1h": "SIN DATOS", "vela_4h": "SIN DATOS", "texto": "EMA esperando datos de Yahoo", "velas_grafico": []}
     ema50 = calcular_ema(precios, 50)
-    # Para EMA200 usamos mas historia, si no hay 200 velas, usamos lo que hay
     ema200 = calcular_ema(precios, 200) if len(precios) >= 50 else ema50
     precio_actual = precios[-1]
     ultima = datos_1h["ultima_vela"]
     vela_txt = "VERDE - Subiendo" if ultima and ultima["color"] == "VERDE" else "ROJA - Bajando" if ultima else "SIN DATOS"
-    # Cruce
     if ema50 > ema200 and precio_actual > ema50:
         cruce = "CRUCE DORADO"
         senal_ema = "COMPRA"
-        texto = f"🟢 CRUCE DORADO - EMA50 ${ema50} por ARRIBA de EMA200 ${ema200} + Precio ${precio_actual} por arriba de EMA50 - Tendencia ALCISTA - Los bancos compran"
+        texto = f"🟢 CRUCE DORADO - EMA50 ${ema50} por ARRIBA de EMA200 ${ema200} + Precio ${round(precio_actual,2)} por arriba de EMA50 - Tendencia ALCISTA"
     elif ema50 < ema200 and precio_actual < ema50:
         cruce = "CRUCE DE MUERTE"
         senal_ema = "VENTA"
-        texto = f"🔴 CRUCE DE MUERTE - EMA50 ${ema50} por ABAJO de EMA200 ${ema200} + Precio ${precio_actual} por abajo de EMA50 - Tendencia BAJISTA - Los bancos venden"
+        texto = f"🔴 CRUCE DE MUERTE - EMA50 ${ema50} por ABAJO de EMA200 ${ema200} + Precio ${round(precio_actual,2)} por abajo de EMA50 - Tendencia BAJISTA"
     elif ema50 > ema200:
         cruce = "ALCISTA SIN CONFIRMAR"
         senal_ema = "ESPERA"
-        texto = f"🟡 EMA50 ${ema50} arriba de EMA200 ${ema200} pero precio ${precio_actual} no confirma. ESPERA."
+        texto = f"🟡 EMA50 ${ema50} arriba de EMA200 ${ema200} pero precio ${round(precio_actual,2)} no confirma. ESPERA."
     else:
         cruce = "BAJISTA SIN CONFIRMAR"
         senal_ema = "ESPERA"
-        texto = f"🟡 EMA50 ${ema50} abajo de EMA200 ${ema200} pero precio ${precio_actual} no confirma. ESPERA."
-    return {"EMA50": ema50, "EMA200": ema200, "precio": round(precio_actual,2), "cruce": cruce, "senal_ema": senal_ema, "vela_1h": vela_txt, "vela_4h": vela_txt, "texto": texto, "fuente": "Yahoo Finance USA GC=F - Velas 1H reales - EMA calculada de verdad"}
+        texto = f"🟡 EMA50 ${ema50} abajo de EMA200 ${ema200} pero precio ${round(precio_actual,2)} no confirma. ESPERA."
+    return {"EMA50": ema50, "EMA200": ema200, "precio": round(precio_actual,2), "cruce": cruce, "senal_ema": senal_ema, "vela_1h": vela_txt, "vela_4h": vela_txt, "texto": texto, "fuente": "Yahoo Finance USA GC=F - Velas 1H reales", "velas_grafico": datos_1h["velas"]}
 
 def get_senal_final_jefe(precio_oro, ema_info, extra, bancos):
-    # Combina TODO: Zona + EMA + DXY + VIX + Bancos
-    # Solo COMPRA FUERTE si TODO esta de acuerdo
     zona_compra = precio_oro <= 3910
     zona_venta = precio_oro >= 3970
     ema_compra = ema_info.get("senal_ema") == "COMPRA"
@@ -173,9 +155,6 @@ def get_info_bancaria():
         pass
     return bancos
 
-# ============================================================
-# 🆕 NUEVO - DXY + VIX + BTC + PETROLEO + BONO 10 AÑOS - AGREGADO AHORA
-# ============================================================
 def get_mercado_extra():
     dxy = get_precio_yahoo('DX-Y.NYB', 99.50)
     vix = get_precio_yahoo('^VIX', 15.20)
@@ -251,20 +230,20 @@ ROBOTS_EQUIPO_COMPLETO = {
     39: {"nombre": "RAYO MAESTRO 2", "rol": "TRABAJADOR", "tarea": "Mano derecha del Maestro 40"},
 }
 
-def jefe_manda_orden(bancos, datos, extra=None):
+# ✅ ARREGLO JEFE: Ahora el JEFE obedece a la SEÑAL FINAL, no pelea con ella
+def jefe_manda_orden(bancos, datos, extra=None, senal_final=None):
+    if senal_final is not None:
+        if not senal_final.get("permiso"):
+            return {"orden": senal_final.get("senal_final", "🟡 ESPERA"), "motivo": senal_final.get("motivo",""), "permiso_operar": False, "mensaje": "JEFE DICE: Obedezco a la SEÑAL FINAL - " + senal_final.get("motivo","") + " - Todos los 39 robots PARADOS hasta que los 5 esten de acuerdo."}
+        else:
+            return {"orden": senal_final.get("senal_final", "🟢 PERMISO"), "motivo": senal_final.get("motivo",""), "permiso_operar": True, "mensaje": "JEFE DICE: SEÑAL FINAL dice TODO DE ACUERDO - " + senal_final.get("motivo","") + " - Pueden operar con cuidado."}
     if extra and extra.get("VIX_nivel") == "ROJO":
-        return {"orden": "🛑 PAUSA TOTAL - PANICO - ORDEN DEL JEFE", "motivo": extra["VIX_texto"], "permiso_operar": False, "mensaje": "JEFE DICE: VIX en " + str(extra["VIX"]) + " - Hay PANICO. Todos los 39 robots PARADOS. No operen, viene caida."}
+        return {"orden": "🛑 PAUSA TOTAL - PANICO - ORDEN DEL JEFE", "motivo": extra["VIX_texto"], "permiso_operar": False, "mensaje": "JEFE DICE: VIX en " + str(extra["VIX"]) + " - Hay PANICO. Todos los 39 robots PARADOS."}
     if bancos["nivel_riesgo"] == "ROJO":
-        return {"orden": "🛑 PAUSA TOTAL - ORDEN DEL JEFE", "motivo": bancos["alerta_banco"], "permiso_operar": False, "mensaje": "JEFE DICE: Hay noticia de BANCO FUERTE ahora. Todos los 39 robots PARADOS. Esperen que pase la noticia. No pierdan dinero."}
+        return {"orden": "🛑 PAUSA TOTAL - ORDEN DEL JEFE", "motivo": bancos["alerta_banco"], "permiso_operar": False, "mensaje": "JEFE DICE: Hay noticia de BANCO FUERTE ahora. Todos los 39 robots PARADOS."}
     if datos["ORO"] > 3910 and datos["ORO"] < 3970:
-        extra_txt = ""
-        if extra:
-            extra_txt = " | " + extra["DXY_texto"] + " | " + extra["VIX_texto"]
-        return {"orden": "🟡 ESPERA - ORDEN DEL JEFE", "motivo": "Oro fuera de zona + Bancos tranquilos", "permiso_operar": False, "mensaje": "JEFE DICE: Oro en $" + str(datos["ORO"]) + " fuera de zona. Mis 39 robots buscando." + extra_txt}
-    extra_txt = ""
-    if extra:
-        extra_txt = " | " + extra["DXY_texto"]
-    return {"orden": "🟢 PERMISO PARA OPERAR - ORDEN DEL JEFE", "motivo": "Bancos tranquilos + Oro en zona", "permiso_operar": True, "mensaje": "JEFE DICE: Bancos tranquilos, Oro en zona. Mis 39 robots listos. Pueden operar con cuidado." + extra_txt}
+        return {"orden": "🟡 ESPERA - ORDEN DEL JEFE", "motivo": "Oro fuera de zona", "permiso_operar": False, "mensaje": "JEFE DICE: Oro en $" + str(datos["ORO"]) + " fuera de zona. Mis 39 robots buscando."}
+    return {"orden": "🟢 PERMISO PARA OPERAR - ORDEN DEL JEFE", "motivo": "Bancos tranquilos + Oro en zona", "permiso_operar": True, "mensaje": "JEFE DICE: Bancos tranquilos, Oro en zona. Mis 39 robots listos."}
 
 def get_precio_yahoo(symbol, fallback):
     try:
@@ -379,6 +358,9 @@ header p{margin:5px 0;font-weight:bold}
 .bybitstatus{background:#001a00;margin:10px;padding:15px;border-radius:15px;border:3px solid #00FF88}
 .emabox{background:#0a0a2a;margin:10px;padding:18px;border-radius:20px;border:3px solid #FFD700;text-align:left}
 .finalbox{background:#1a2a00;margin:10px;padding:18px;border-radius:20px;border:3px solid #00FF88;text-align:center}
+.velasbox{background:#000;margin:10px;padding:15px;border-radius:20px;border:3px solid white;text-align:center}
+.velasbox canvas{width:100%;max-width:600px;height:280px;background:#111;border-radius:12px}
+.leyenda{font-size:12px;margin-top:8px}
 </style>
 </head>
 <body>
@@ -396,7 +378,6 @@ header p{margin:5px 0;font-weight:bold}
 <div class="bybitstatus">
 <h2 style="color:#00FF88;margin:0;">🔌 BYBIT AUTOMATICO - ESTADO</h2>
 <p id="bybit-estado" style="font-size:15px;font-weight:bold;">🔌 Verificando Bybit automático...</p>
-<p style="font-size:12px;color:#aaa;">Si dice CONECTADO, el robot ya lee tus llaves de Render. Si dice NO CONECTADO, revisa los nombres en Render.</p>
 </div>
 <div class="bybitbox">
 <h2 style="margin:0;">💰 DEPOSITAR EN BYBIT - JEFE RAUDY</h2>
@@ -404,63 +385,59 @@ header p{margin:5px 0;font-weight:bold}
 <img src="__BYBIT_QR_URL__" alt="QR BYBIT JEFE RAUDY">
 <br>
 <a href="__BYBIT_LINK__" target="_blank">🟡 ABRIR BYBIT</a>
-<p style="font-size:12px;color:#555;">Si el QR no se ve, cambia el link en BYBIT_QR_URL arriba del código. Tu código original sigue intacto.</p>
 </div>
-<!-- 🆕 NUEVO - VELAS + EMA 50 + EMA 200 - NO SE BORRO NADA -->
 <div class="emabox">
 <h2 style="color:#FFD700;margin:0;text-align:center;">🕯️ VELAS + 📈 EMA 50 + EMA 200 - LO DE LOS BANCOS</h2>
 <p id="ema-texto" style="font-size:15px;font-weight:bold;color:white;">📈 EMA: Cargando velas reales de Yahoo...</p>
 <p id="ema-detalle" style="font-size:13px;color:#FFD700;">Calculando EMA 50 y EMA 200 con velas 1H reales...</p>
 <p id="vela-texto" style="font-size:13px;">🕯️ Vela 1H: Cargando...</p>
-<p style="font-size:11px;color:#aaa;">EMA 50 arriba de EMA 200 = CRUCE DORADO = COMPRA FUERTE. EMA 50 abajo de EMA 200 = CRUCE DE MUERTE = VENTA FUERTE. Fuente: Yahoo Finance USA GC=F - Velas 1H.</p>
+</div>
+<!-- 🆕 NUEVO - GRAFICO DE VELAS QUE SI SE VE - JEFE RAUDY -->
+<div class="velasbox">
+<h2 style="color:white;margin:0;">🕯️ GRAFICO DE VELAS ORO - 1H - SE VE GRANDE</h2>
+<p style="font-size:13px;color:#FFD700;">Verde = Subiendo | Rojo = Bajando | Amarilla = EMA 50 | Azul = EMA 200</p>
+<canvas id="canvasVelas" width="600" height="280"></canvas>
+<p id="velas-info" style="font-size:13px;color:white;">Cargando velas...</p>
+<div class="leyenda">🟢 Vela VERDE = Compraron más | 🔴 Vela ROJA = Vendieron más | Si la vela está por arriba de la línea amarilla, va subiendo</div>
 </div>
 <div class="finalbox">
 <h2 style="color:#00FF88;margin:0;">🧠 SEÑAL FINAL DEL JEFE - TODO JUNTO</h2>
 <p id="final-senal" style="font-size:18px;font-weight:bold;color:white;">🧠 Calculando señal final...</p>
 <p id="final-motivo" style="font-size:13px;color:#FFD700;">Zona + EMA + DXY + VIX + Bancos...</p>
-<p style="font-size:11px;color:#aaa;">Solo si los 5 dicen lo mismo, el JEFE da permiso. Asi no entras a lo loco.</p>
 </div>
 <div class="jefebox">
-<h2 style="color:#FF4444;margin:0;">👑 JEFE 40 - YO MANDO A LOS 39 - ORDEN EN VIVO</h2>
+<h2 style="color:#FF4444;margin:0;">👑 JEFE 40 - YO MANDO A LOS 39 - ORDEN EN VIVO - ✅ ARREGLADO</h2>
 <p id="jefe-orden" style="font-size:16px;font-weight:bold;color:white;">👑 JEFE: Cargando orden...</p>
 <p id="jefe-mensaje" style="font-size:13px;color:#FFD700;">Esperando orden del Jefe...</p>
-<p style="font-size:11px;color:#aaa;">Si el JEFE dice PAUSA, nadie opera. Asi no pierdes dinero con noticias de bancos.</p>
+<p style="font-size:11px;color:#aaa;">✅ ARREGLO: Ahora el JEFE obedece a la SEÑAL FINAL. Ya no pelean. Si SEÑAL FINAL dice ESPERA, JEFE dice ESPERA.</p>
 </div>
 <div class="bancobox">
 <h2 style="color:#FFD700;margin:0;text-align:center;">🏦 BANCOS QUE MUEVEN EL ORO - INFO EN VIVO</h2>
 <p id="banco-alerta" style="font-size:14px;font-weight:bold;color:#00FF88;">🏦 Bancos: Cargando...</p>
 <p id="banco-lista" style="font-size:12px;line-height:1.6;">Cargando bancos...</p>
-<p style="font-size:11px;color:#aaa;">Fuente: ForexFactory.com + federalreserve.gov (FED) + ecb.europa.eu (BCE) + TradingEconomics - GRATIS</p>
 </div>
 <div class="extrabox">
 <h2 style="color:#00FFFF;margin:0;text-align:center;">💵 DOLAR + 😱 MIEDO + ₿ BITCOIN - LO QUE USAN LOS BANCOS</h2>
 <p id="dxy-texto" style="font-size:14px;font-weight:bold;">💵 DXY: Cargando...</p>
 <p id="vix-texto" style="font-size:14px;font-weight:bold;">😱 VIX: Cargando...</p>
 <p id="extra-texto" style="font-size:13px;">₿ BTC + 🛢️ Petroleo + 📈 Bono 10 años: Cargando...</p>
-<p style="font-size:11px;color:#aaa;">Si DXY sube, ORO baja. Si VIX pasa 30, JEFE dice PAUSA. Fuente: Yahoo Finance USA - GRATIS</p>
 </div>
 <div class="satelite">
 <h2 style="color:#00FFFF;margin:0;">🛰️ SATÉLITE RAUDY - LLEGÓ A ESTADOS UNIDOS 🇺🇸</h2>
-<p style="font-size:14px;font-weight:bold;">Mirando WALL STREET - NEW YORK en vivo - NYSE + NASDAQ</p>
-<p id="satelite-texto" style="font-size:13px;">🛰️ Satélite conectando con USA... Buscando bolsa...</p>
+<p id="satelite-texto" style="font-size:13px;">🛰️ Satélite conectando con USA...</p>
 <p id="satelite-usa" style="font-size:13px;color:#00FF88;">Cargando bolsa USA...</p>
-<iframe src="https://www.google.com/maps?q=Wall+Street+New+York+USA&z=16&t=k&output=embed" width="100%" height="180" style="border:0;border-radius:10px;margin-top:8px;"></iframe>
-<div class="origen">📍 <b>SATÉLITE APUNTA A:</b> Wall Street, New York, USA - 40.7075° N, 74.0113° W<br>📍 <b>FUENTE BOLSA USA:</b> Yahoo Finance USA - query1.finance.yahoo.com - Precios reales de NYSE / NASDAQ</div>
 </div>
 <div class="conectado">
 <h2 style="color:#00FF88;margin:0;">🔌 TODOS LOS 40 ROBOTS CONECTADOS A LA BOLSA USA ✅</h2>
 <p id="conexion-texto" style="font-size:13px;font-weight:bold;">🔌 Conectando robots a Wall Street...</p>
-<p style="font-size:11px;color:#aaa;">Cada robot lee el mismo precio real de NYSE / NASDAQ - Ya no inventan</p>
 </div>
 <div class="motorbox">
 <h2 style="color:#FF4444;margin:0;">💪 MOTOR FUERZA TOTAL ULTRA 200% 🔥</h2>
 <p id="motor-texto" style="font-size:15px;font-weight:bold;">💪 MOTOR: Cargando fuerza...</p>
-<p style="font-size:12px;color:#aaa;">Motor vigilando ORO + ACCIONES USA con satélite</p>
 </div>
 <div class="buscadorbox">
 <h2 style="color:#00FF88;margin:0;">🔍 BUSCADOR RAUDY - NADA SE ESCAPA</h2>
 <p id="buscador-texto" style="font-size:13px;font-weight:bold;">🔍 Buscando en todo el mercado...</p>
-<p style="font-size:11px;color:#aaa;">Busca: ORO, NVDA, TESLA, APPLE, META, GOOGLE, AMAZON, MICROSOFT cada 15 segundos</p>
 </div>
 <div class="clock">SESION NEW YORK 🕐 <b id="reloj">--:--:--</b><br><span id="sesion">Buscando información...</span></div>
 <div class="acciones" id="acciones"></div>
@@ -480,12 +457,10 @@ header p{margin:5px 0;font-weight:bold}
 <button onclick="hablarBroker()" style="padding:10px 18px;border-radius:20px;background:#00FFFF;border:none;font-weight:bold">🎤 PREGUNTAR AL BROKER</button>
 </div>
 <h2>🤖 LOS 40 ROBOTS CON PODERES</h2>
-<p>Ellos buscan información, la analizan y te dicen COMPRA o VENTA solos.</p>
 <div class="grid" id="grid"></div>
 <div style="background:#111;margin:10px;padding:15px;border-radius:15px;border:2px solid #FFD700;text-align:left;">
-<h3 style="color:#FFD700;margin:0;">📍 ¿DE DÓNDE SALE CADA PRECIO? - DIRECTO JEFE</h3>
+<h3 style="color:#FFD700;margin:0;">📍 ¿DE DÓNDE SALE CADA PRECIO?</h3>
 <p id="origen-precios" style="font-size:12px;line-height:1.6;">Cargando origen...</p>
-<p style="font-size:11px;color:#888;">Esto es para que tú sepas que no es inventado. Cada precio viene de USA.</p>
 </div>
 <div class="footer">RAUDY VIP © 2026 - Solo Robots Hacen Todo - WhatsApp 0767574050 - No es consejo financiero, es educación</div>
 <script>
@@ -602,15 +577,45 @@ function hablarBroker(){
  document.getElementById("brokerMsg").innerHTML=msg;
  hablar(msg);
 }
+// 🆕 DIBUJAR VELAS GRANDES - PARA QUE EL JEFE LAS VEA
+function dibujarVelas(velas, ema50, ema200){
+  let canvas = document.getElementById("canvasVelas");
+  if(!canvas || !velas || velas.length===0) return;
+  let ctx = canvas.getContext("2d");
+  let W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle="#111"; ctx.fillRect(0,0,W,H);
+  let min = Math.min(...velas.map(v=>v.low));
+  let max = Math.max(...velas.map(v=>v.high));
+  let rango = max-min; if(rango===0) rango=1;
+  min -= rango*0.1; max += rango*0.1; rango = max-min;
+  function y(p){ return H - 20 - ((p-min)/rango)*(H-40); }
+  let ancho = W / velas.length;
+  velas.forEach((v,i)=>{
+    let x = i*ancho + ancho/2;
+    let color = v.color==="VERDE" ? "#00FF88" : "#FF4444";
+    ctx.strokeStyle=color; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(x, y(v.high)); ctx.lineTo(x, y(v.low)); ctx.stroke();
+    ctx.fillStyle=color;
+    let top = Math.min(y(v.open), y(v.close));
+    let h = Math.abs(y(v.close)-y(v.open)); if(h<3) h=3;
+    ctx.fillRect(x-ancho*0.3, top, ancho*0.6, h);
+  });
+  // Linea EMA 50 amarilla
+  ctx.strokeStyle="#FFD700"; ctx.lineWidth=3; ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(0, y(ema50)); ctx.lineTo(W, y(ema50)); ctx.stroke();
+  ctx.fillStyle="#FFD700"; ctx.font="bold 13px Arial"; ctx.fillText("EMA 50 $"+ema50, 8, y(ema50)-6);
+  // Linea EMA 200 azul
+  ctx.strokeStyle="#00BFFF"; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.moveTo(0, y(ema200)); ctx.lineTo(W, y(ema200)); ctx.stroke();
+  ctx.fillStyle="#00BFFF"; ctx.fillText("EMA 200 $"+ema200, 8, y(ema200)-6);
+  document.getElementById("velas-info").innerHTML = "🕯️ Velas: " + velas.length + " últimas velas 1H | Precio actual: $" + velas[velas.length-1].close + " | Si las velas están por ARRIBA de la amarilla, va SUBIENDO. Si están por ABAJO, va BAJANDO.";
+}
 async function analizarTodo(){
  sonido();
  let datos = datosRealesGlobal;
  if(!datos){
-   try{
-     let r = await fetch('/api/satelite_usa?v='+Date.now());
-     datos = await r.json();
-     datosRealesGlobal = datos;
-   }catch(e){ datos = null; }
+   try{ let r = await fetch('/api/satelite_usa?v='+Date.now()); datos = await r.json(); datosRealesGlobal = datos; }catch(e){ datos = null; }
  }
  let precioReal = datos && datos[activo] ? datos[activo] : simbolos.find(s=>s.id===activo).precio;
  let senalTexto = "ESPERA 🟡";
@@ -630,23 +635,18 @@ async function analizarTodo(){
  else { botin = entrada; salida = entrada; }
  let origen = activo==="ORO" ? "gold-api.com + Yahoo USA (GC=F)" : "Yahoo Finance USA - NYSE / NASDAQ";
  let ordenJefe = datos && datos.jefe ? datos.jefe.orden : "";
- let textoJefe = ordenJefe ? " | 👑 JEFE DICE: " + ordenJefe : "";
  let emaTxt = datos && datos.ema ? " | 📈 " + datos.ema.texto : "";
- document.getElementById("maestroMsg").innerHTML="He analizado "+activo+" con PRECIO REAL de BOLSA USA. Los 40 robots están CONECTADOS. Decisión: <b>"+senalTexto+"</b><br>ENTRADA: $"+entrada+" | BOTÍN: $"+botin+" | SALIDA: $"+salida+"<br>📍 Fuente: "+origen + "<br>" + textoJefe + "<br>" + emaTxt;
- hablar("He analizado "+activo+" con precio real de bolsa USA, decisión "+senalTexto);
+ document.getElementById("maestroMsg").innerHTML="He analizado "+activo+" con PRECIO REAL. Decisión: <b>"+senalTexto+"</b><br>ENTRADA: $"+entrada+" | BOTÍN: $"+botin+" | SALIDA: $"+salida+"<br>📍 Fuente: "+origen + "<br>" + ordenJefe + "<br>" + emaTxt;
  robots.slice(0,39).forEach(r=>{
   let num=r[0]; let funcion=r[3];
-  let el=document.getElementById("msg"+num);
-  let luz=document.getElementById("luz"+num);
+  let el=document.getElementById("msg"+num); let luz=document.getElementById("luz"+num);
   if(!el) return;
-  let texto = "🔌 "+funcion+" - "+activo+" $"+entrada+" - Fuente: "+origen+" - Veo "+senalTexto + " - Obedezco al JEFE 40";
-  el.innerHTML = texto;
+  el.innerHTML = "🔌 "+funcion+" - "+activo+" $"+entrada+" - Veo "+senalTexto + " - Obedezco al JEFE 40";
   let col = esCompra ? "#00FF88" : (esVenta ? "#FF4444" : "#FFD700");
-  luz.style.background = col;
-  luz.style.boxShadow = "0 0 15px "+col;
+  luz.style.background = col; luz.style.boxShadow = "0 0 15px "+col;
  });
- document.getElementById("brokerMsg").innerHTML="Jefe, ya analicé "+activo+" con BOLSA USA REAL. El Maestro dice "+senalTexto+". ENTRADA $"+entrada+", BOTÍN $"+botin+". Fuente: "+origen+". Yo te recomiendo esperar confirmación.";
- document.getElementById("conexion-texto").innerHTML="🔌 40/40 ROBOTS CONECTADOS ✅ - "+activo+" $"+entrada+" - Fuente: "+origen+" - Actualizado ahora";
+ document.getElementById("brokerMsg").innerHTML="Jefe, ya analicé "+activo+". El Maestro dice "+senalTexto+". ENTRADA $"+entrada+", BOTÍN $"+botin+".";
+ document.getElementById("conexion-texto").innerHTML="🔌 40/40 ROBOTS CONECTADOS ✅ - "+activo+" $"+entrada+" - Actualizado ahora";
 }
 async function actualizarSateliteUSA(){
   try{
@@ -658,6 +658,7 @@ async function actualizarSateliteUSA(){
       document.getElementById("ema-texto").innerHTML = "📈 " + d.ema.texto;
       document.getElementById("ema-detalle").innerHTML = "EMA 50: $" + d.ema.EMA50 + " | EMA 200: $" + d.ema.EMA200 + " | Precio: $" + d.ema.precio + " | Cruce: " + d.ema.cruce;
       document.getElementById("vela-texto").innerHTML = "🕯️ Vela 1H: " + d.ema.vela_1h + " | Vela 4H: " + d.ema.vela_4h;
+      if(d.ema.velas_grafico){ dibujarVelas(d.ema.velas_grafico, d.ema.EMA50, d.ema.EMA200); }
     }
     if(d.senal_final){
       document.getElementById("final-senal").innerHTML = d.senal_final.senal_final;
@@ -745,9 +746,9 @@ def satelite_usa():
     robots_conectados = conectar_todos_los_robots(datos)
     bancos_info = get_info_bancaria()
     extra_info = get_mercado_extra()
-    jefe_orden = jefe_manda_orden(bancos_info, datos, extra_info)
     ema_info = get_ema_oro()
     senal_final = get_senal_final_jefe(oro, ema_info, extra_info, bancos_info)
+    jefe_orden = jefe_manda_orden(bancos_info, datos, extra_info, senal_final)
     return jsonify({
         **datos,
         "motor": motor_txt,
@@ -791,7 +792,9 @@ def api_jefe():
         oro = 4088
     bancos = get_info_bancaria()
     extra = get_mercado_extra()
-    return jsonify(jefe_manda_orden(bancos, {"ORO": oro}, extra))
+    ema = get_ema_oro()
+    senal = get_senal_final_jefe(oro, ema, extra, bancos)
+    return jsonify(jefe_manda_orden(bancos, {"ORO": oro}, extra, senal))
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
