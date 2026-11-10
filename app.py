@@ -1,5 +1,5 @@
 # ============================================
-# RAUDY VIP PRO V2 - TODO JUNTO
+# RAUDY VIP PRO V2 - TODO JUNTO FINAL
 # 8 CUALIDADES + ARREGLO RENDER + TELEGRAM
 # SOLO DEMO - DINERO FALSO
 # ============================================
@@ -8,11 +8,11 @@ import os
 import time
 import random
 import requests
+import threading
 from flask import Flask
 
 # ============================================
 # 1. ARREGLO PARA RENDER - MINI PAGINA WEB
-# Esto es lo que Render estaba buscando y no encontraba
 # ============================================
 app = Flask(__name__)
 
@@ -23,7 +23,7 @@ def home():
 # ============================================
 # 2. CONFIGURACIÓN - CUIDA TU DINERO
 # ============================================
-# En Render, en Environment, pon estas 2 variables:
+# En Render > Environment pon:
 # TELEGRAM_TOKEN = tu token de BotFather
 # TELEGRAM_CHAT_ID = tu ID de Telegram
 
@@ -54,10 +54,8 @@ def mandar_telegram(mensaje):
 # 4. CEREBRO FRÍO - SIN MIEDO NI CODICIA
 # ============================================
 def analizar_mercado():
-    """
-    CUALIDAD #1 y #3: Frío y Disciplinado
-    Solo entra si la señal es MUY clara.
-    """
+    # CUALIDAD #1 y #3: Frío y Disciplinado
+    # Solo entra si la señal es MUY clara
     señal = random.choice(["COMPRA", "VENTA", "ESPERAR", "ESPERAR", "ESPERAR"])
     fuerza = random.randint(1, 10)
 
@@ -74,7 +72,7 @@ def analizar_mercado():
 # 5. GESTIÓN DE RIESGO
 # ============================================
 def calcular_riesgo():
-    """CUALIDAD #2: Nunca arriesga todo"""
+    # CUALIDAD #2: Nunca arriesga todo
     return dinero_actual * RIESGO_POR_OPERACION
 
 # ============================================
@@ -120,7 +118,7 @@ Dinero actual: ${dinero_actual:.2f}
 # 7. TRABAJA 24 HORAS SIN CANSARSE
 # ============================================
 def bot_trabajando():
-    """CUALIDAD #5: Trabaja 24 horas"""
+    # CUALIDAD #5: Trabaja 24 horas
     print(f"🤖 RAUDY VIP PRO V2 ENCENDIDO")
     print(f"Dinero DEMO: ${DINERO_INICIAL}")
     mandar_telegram("🤖 RAUDY VIP PRO V2 ENCENDIDO 👑\nYa estoy trabajando para ti, jefe. Solo DEMO.")
@@ -135,14 +133,13 @@ def bot_trabajando():
         time.sleep(60)
 
 # ============================================
-# 8. ENCENDER TODO JUNTO
+# 8. PRENDER TODO JUNTO - ARREGLO FINAL
+# Esto hace que el bot prenda aunque sea con GUNICORN
 # ============================================
-if __name__ == "__main__":
-    # Esto prende el bot en segundo plano
-    import threading
-    hilo_bot = threading.Thread(target=bot_trabajando, daemon=True)
-    hilo_bot.start()
+# Ya no está dentro del if __main__, ahora prende siempre
+hilo_bot = threading.Thread(target=bot_trabajando, daemon=True)
+hilo_bot.start()
 
-    # Esto prende la mini página web para Render
+if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
