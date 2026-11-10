@@ -8,6 +8,8 @@ BOT["ganadas"] = 0
 BOT["perdidas"] = 0
 BOT["hist"] = []
 BOT["ult"] = "BOT APAGADO"
+BOT["pos"] = None
+BOT["entrada"] = 0
 HIST = []
 TP_GAN = 20.0
 SL_PER = 10.0
@@ -191,7 +193,47 @@ def backtest():
         "mensaje": "Gana 20 pierde 10"
     }
 
-HTML = """<html><head>
+def bot_motor():
+    while True:
+        try:
+            if BOT["activo"]:
+                oro = precio("GC=F") or 4078
+                dec = cerebro(oro, HIST)
+                if dec == "COMPRAR":
+                    if BOT["pos"] is None:
+                        BOT["pos"] = "COMPRAR"
+                        BOT["entrada"] = oro
+                        BOT["ult"] = "BOT COMPRO en " + str(oro)
+                if BOT["pos"] == "COMPRAR":
+                    oro2 = precio("GC=F") or BOT["entrada"]
+                    gan = oro2 - BOT["entrada"]
+                    cerrar = False
+                    motivo = ""
+                    if gan >= 20:
+                        cerrar = True
+                        motivo = "TP Gane 20"
+                    if gan <= -10:
+                        cerrar = True
+                        motivo = "SL Perdi 10"
+                    if cerrar:
+                        if gan > 20:
+                            gan = 20
+                        if gan < -10:
+                            gan = -10
+                        BOT["balance"] += gan
+                        if gan >= 0:
+                            BOT["ganadas"] += 1
+                        else:
+                            BOT["perdidas"] += 1
+                        BOT["ult"] = motivo + " Balance " + str(BOT["balance"])
+                        BOT["pos"] = None
+            time.sleep(10)
+        except:
+            time.sleep(5)
+threading.Thread(target=bot_motor, daemon=True).start()
+
+HTML = """
+<html><head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>RAUDY VIP 1000</title>
 <style>
@@ -254,10 +296,10 @@ function hablar(t){let v=new SpeechSynthesisUtterance(t);v.lang='es-DO';speechSy
 function activarVoz(){voz=true;hablar('Jefe voz activada');alert('VOZ ACTIVADA');}
 function cambiar(){act=document.getElementById('activo').value;actualizar();}
 function operar(t){hablar('Jefe voy a '+t);alert('Orden '+t+' '+act);}
-async function toggleBot(){let r=await fetch('/api/bot_auto',{method:'POST'});let d=await r.json();document.getElementById('btn-bot').innerText=d.activo?'APAGAR BOT':'PRENDER BOT';document.getElementById('bot-est').innerText=d.ult;hablar(d.activo?'Bot prendido':'Bot apagado');}
+async function toggleBot(){let r=await fetch('/api/bot_auto',{method:'POST'});let d=await r.json();document.getElementById('btn-bot').innerText=d.activo?'APAGAR BOT AUTO':'PRENDER BOT AUTO';document.getElementById('bot-est').innerText=d.ult;hablar(d.activo?'Bot prendido':'Bot apagado');}
 async function hacerBack(){document.getElementById('back-res').innerText='Probando con datos reales...';let r=await fetch('/api/backtest');let d=await r.json();document.getElementById('back-res').innerHTML='Modo '+d.modo+'<br>Final $'+d.balance_final+'<br>Ganadas '+d.ganadas+' Perdidas '+d.perdidas+' Win '+d.winrate+'%';hablar('Backtest listo '+d.balance_final+' dolares');}
 function actualizar(){if(precios[act]){document.getElementById('precio').innerText=precios[act];}}
-async function cargar(){try{let r=await fetch('/api/precios');precios=await r.json();document.getElementById('estado').innerText='EN VIVO '+new Date().toLocaleTimeString();let h='';for(let k in precios){h+=k+': '+precios[k]+'<br>';}document.getElementById('lista').innerHTML=h;actualizar();let s=await fetch('/api/senal');let sd=await s.json();document.getElementById('cerebro').innerText='CEREBRO: '+sd.decision;document.getElementById('senal').innerText='SENAL: '+sd.decision;document.getElementById('rsi').innerText=sd.rsi;document.getElementById('macd').innerText=sd.macd;document.getElementById('boll').innerText=sd.bollinger;document.getElementById('doble').innerText=sd.doble;let b=await fetch('/api/bot_auto');let bd=await b.json();document.getElementById('balance').innerText='$'+bd.balance;document.getElementById('bot-est').innerText=bd.ult;document.getElementById('perf').innerText='Ganadas: '+bd.ganadas+' | Perdidas: '+bd.perdidas;}catch(e){document.getElementById('estado').innerText='Sin internet...';}}
+async function cargar(){try{let r=await fetch('/api/precios');precios=await r.json();document.getElementById('estado').innerText='EN VIVO '+new Date().toLocaleTimeString();let h='';for(let k in precios){h+=k+': '+precios[k]+'<br>';}document.getElementById('lista').innerHTML=h;actualizar();let s=await fetch('/api/senal');let sd=await s.json();document.getElementById('cerebro').innerText='CEREBRO: '+sd.decision;document.getElementById('senal').innerText='SENAL: '+sd.decision;document.getElementById('rsi').innerText=sd.rsi;document.getElementById('macd').innerText=sd.macd;document.getElementById('boll').innerText=sd.bollinger;document.getElementById('doble').innerText=sd.doble;let b=await fetch('/api/bot_auto');let bd=await b.json();document.getElementById('balance').innerText='$'+bd.balance;document.getElementById('bot-est').innerText=bd.ult;document.getElementById('perf').innerText='Ganadas: '+bd.ganadas+' | Perdidas: '+bd.perdidas;document.getElementById('btn-bot').innerText=bd.activo?'APAGAR BOT AUTO':'PRENDER BOT AUTO';}catch(e){document.getElementById('estado').innerText='Sin internet...';}}
 cargar();setInterval(cargar,3000);
 </script></body></html>
 """
@@ -308,6 +350,7 @@ def api_bot():
             BOT["ult"] = "BOT PRENDIDO - Dinero falso"
         else:
             BOT["ult"] = "BOT APAGADO"
+            BOT["pos"] = None
     return jsonify(BOT)
 
 @app.route("/api/backtest")
