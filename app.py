@@ -1,144 +1,112 @@
-# ============================================
-# RAUDY VIP PRO V2 - TODO JUNTO FINAL
-# 8 CUALIDADES + ARREGLO RENDER + TELEGRAM
-# SOLO DEMO - DINERO FALSO
-# ============================================
+# RAUDY VIP PRO V2 - ROBOT COMPLETO FINAL
+# Panel bonito + Bot + Telegram + 8 Cualidades
+# SOLO DEMO
 
 import os
 import time
 import random
-import requests
 import threading
+import requests
 from flask import Flask
+from datetime import datetime
 
-# ============================================
-# 1. ARREGLO PARA RENDER - MINI PAGINA WEB
-# ============================================
 app = Flask(__name__)
 
-@app.route('/')
-def home():
-    return "RAUDY VIP PRO V2 ESTA VIVO 👑 - Trabajando 24 horas"
+# ===== CONFIGURACIÓN =====
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
-# ============================================
-# 2. CONFIGURACIÓN - CUIDA TU DINERO
-# ============================================
-# En Render > Environment pon:
-# TELEGRAM_TOKEN = tu token de BotFather
-# TELEGRAM_CHAT_ID = tu ID de Telegram
-
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "PON_AQUI_TU_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "PON_AQUI_TU_CHAT_ID")
-
-DINERO_INICIAL = 100.0
-RIESGO_POR_OPERACION = 0.01  # CUALIDAD #2: Solo 1% - Si tienes $100, arriesga $1
-MAX_OPERACIONES_POR_DIA = 3  # CUALIDAD #8: No opera a lo loco
-STOP_LOSS_PORCIENTO = 0.02  # CUALIDAD #7: Freno de emergencia
-
-dinero_actual = DINERO_INICIAL
+dinero_actual = 100.0
+dinero_inicial = 100.0
 operaciones_hoy = 0
+ultima_señal = "Esperando primera señal..."
+historial = []
+bot_encendido = False
 
-# ============================================
-# 3. MANDAR MENSAJE A TELEGRAM
-# ============================================
 def mandar_telegram(mensaje):
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        print("Falta TOKEN o CHAT_ID en Render > Environment")
+        return
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        data = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje}
-        requests.post(url, data=data, timeout=10)
-        print("Mensaje mandado a Telegram ✅")
+        requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "text": mensaje}, timeout=10)
     except Exception as e:
-        print(f"No se pudo mandar a Telegram: {e}")
+        print(f"Error Telegram: {e}")
 
-# ============================================
-# 4. CEREBRO FRÍO - SIN MIEDO NI CODICIA
-# ============================================
-def analizar_mercado():
-    # CUALIDAD #1 y #3: Frío y Disciplinado
-    # Solo entra si la señal es MUY clara
+def analizar():
+    # Cerebro frío: solo opera si es fuerte
     señal = random.choice(["COMPRA", "VENTA", "ESPERAR", "ESPERAR", "ESPERAR"])
     fuerza = random.randint(1, 10)
-
-    # REGLA DE DISCIPLINA: Solo opera si fuerza es 8 o más
-    if señal == "ESPERAR":
-        return None, 0
-    if fuerza < 8:
-        print(f"Señal débil ({fuerza}/10). Mejor NO operar.")
-        return None, 0
-
+    if señal == "ESPERAR" or fuerza < 8:
+        return None, fuerza
     return señal, fuerza
 
-# ============================================
-# 5. GESTIÓN DE RIESGO
-# ============================================
-def calcular_riesgo():
-    # CUALIDAD #2: Nunca arriesga todo
-    return dinero_actual * RIESGO_POR_OPERACION
-
-# ============================================
-# 6. EJECUTAR OPERACIÓN CON FRENO
-# ============================================
-def ejecutar_operacion(señal, fuerza):
-    global dinero_actual, operaciones_hoy
-
-    # CUALIDAD #8: Max 3 por día
-    if operaciones_hoy >= MAX_OPERACIONES_POR_DIA:
-        print("Ya hicimos 3 hoy. Paramos.")
-        return
-
-    riesgo = calcular_riesgo()
-
-    mensaje = f"""
-🟢 SEÑAL RAUDY VIP PRO V2
-Par: EUR/USD
-Acción: {señal}
-Fuerza: {fuerza}/10
-Riesgo: Solo ${riesgo:.2f}
-Stop Loss: Puesto - Freno ACTIVADO
-Dinero actual: ${dinero_actual:.2f}
-"""
-    print(mensaje)
-    mandar_telegram(mensaje)
-
-    # Simulamos resultado DEMO
-    gano = random.choice([True, False])
-    if gano:
-        ganancia = riesgo * 2
-        dinero_actual += ganancia
-        resultado = f"✅ GANÓ +${ganancia:.2f} | Dinero ahora: ${dinero_actual:.2f}"
-    else:
-        dinero_actual -= riesgo
-        resultado = f"❌ PERDIÓ -${riesgo:.2f} por Stop Loss | Dinero ahora: ${dinero_actual:.2f}\nTranquilo, perdimos poquito porque teníamos freno."
-
-    print(resultado)
-    mandar_telegram(resultado)
-    operaciones_hoy += 1
-
-# ============================================
-# 7. TRABAJA 24 HORAS SIN CANSARSE
-# ============================================
 def bot_trabajando():
-    # CUALIDAD #5: Trabaja 24 horas
-    print(f"🤖 RAUDY VIP PRO V2 ENCENDIDO")
-    print(f"Dinero DEMO: ${DINERO_INICIAL}")
-    mandar_telegram("🤖 RAUDY VIP PRO V2 ENCENDIDO 👑\nYa estoy trabajando para ti, jefe. Solo DEMO.")
-
+    global dinero_actual, operaciones_hoy, ultima_señal, bot_encendido
+    bot_encendido = True
+    print("BOT ENCENDIDO")
+    mandar_telegram("🤖 RAUDY VIP PRO V2 ENCENDIDO 👑\nYa estoy trabajando, jefe. Solo DEMO.")
     while True:
-        señal, fuerza = analizar_mercado()
-        if señal:
-            ejecutar_operacion(señal, fuerza)
-        else:
-            print("Sin oportunidad clara... esperando 1 minuto.")
-        # CUALIDAD #4: Rápido, revisa cada 60 segundos
-        time.sleep(60)
+        try:
+            señal, fuerza = analizar()
+            if señal and operaciones_hoy < 3:
+                riesgo = dinero_actual * 0.01  # Solo 1% - Cuida tu dinero
+                ultima_señal = f"{señal} - Fuerza {fuerza}/10 - {datetime.now().strftime('%H:%M:%S')}"
+                gano = random.choice([True, False])
+                if gano:
+                    ganancia = riesgo * 2
+                    dinero_actual += ganancia
+                    resultado = f"✅ GANÓ +${ganancia:.2f}"
+                else:
+                    dinero_actual -= riesgo
+                    resultado = f"❌ PERDIÓ -${riesgo:.2f} con Stop Loss"
 
-# ============================================
-# 8. PRENDER TODO JUNTO - ARREGLO FINAL
-# Esto hace que el bot prenda aunque sea con GUNICORN
-# ============================================
-# Ya no está dentro del if __main__, ahora prende siempre
-hilo_bot = threading.Thread(target=bot_trabajando, daemon=True)
-hilo_bot.start()
+                operaciones_hoy += 1
+                texto = f"🟢 SEÑAL RAUDY VIP PRO V2\nPar: EUR/USD\nAcción: {señal}\nFuerza: {fuerza}/10\nRiesgo: ${riesgo:.2f}\n{resultado}\nDinero: ${dinero_actual:.2f}"
+                historial.insert(0, texto)
+                mandar_telegram(texto)
+                print(texto)
+            else:
+                print("Sin oportunidad clara, esperando...")
+            time.sleep(60)
+        except Exception as e:
+            print(f"Error bot: {e}")
+            time.sleep(10)
+
+# ===== PANEL BONITO - YA NO MAS PAGINA EN BLANCO =====
+@app.route('/')
+def panel():
+    ganancia = dinero_actual - dinero_inicial
+    color = "green" if ganancia >= 0 else "red"
+    historial_html = "<br><br>".join(historial[:5]) if historial else "Todavía no hay operaciones. El bot está analizando..."
+    
+    return f"""
+    <html>
+    <head><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="refresh" content="30"></head>
+    <body style="font-family:Arial; background:#111; color:white; padding:20px; text-align:center;">
+        <h1>👑 RAUDY VIP PRO V2</h1>
+        <h3 style="color:#FFD700;">ESTA VIVO - Trabajando 24 horas</h3>
+        <div style="background:#222; padding:20px; border-radius:15px; margin:10px;">
+            <h2>💰 Dinero DEMO: ${dinero_actual:.2f}</h2>
+            <h3 style="color:{color};">Ganancia: ${ganancia:.2f}</h3>
+            <p>Operaciones hoy: {operaciones_hoy} / 3</p>
+            <p>Última señal: {ultima_señal}</p>
+            <p>Estado: {'🟢 ENCENDIDO' if bot_encendido else '🟡 PRENDIENDO...'}</p>
+            <p>Riesgo por operación: Solo 1% | Stop Loss: ACTIVADO</p>
+        </div>
+        <div style="background:#222; padding:20px; border-radius:15px; text-align:left;">
+            <h3>📊 Historial:</h3>
+            <p>{historial_html}</p>
+        </div>
+        <p style="color:gray; margin-top:20px;">Si ves esto, tu robot SÍ sirve. Se actualiza solo cada 30 segundos.</p>
+    </body>
+    </html>
+    """
+
+# Prender el bot UNA sola vez, aunque sea con gunicorn
+if not bot_encendido:
+    t = threading.Thread(target=bot_trabajando, daemon=True)
+    t.start()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
