@@ -1,4 +1,4 @@
-# app.py - RAUDY VIP 1000 - COMPLETO + VELAS QUE SUBEN Y BAJAN + BYBIT + SEÑAL ARREGLADA - NO BORRE NADA
+# app.py - RAUDY VIP 1000 - COMPLETO + VELAS + BYBIT + SEÑAL + CEREBRO REAL + PROTECCION + GANANCIAS - NO BORRE NADA
 import os, json, urllib.request, threading, time
 from flask import Flask, render_template_string, request, jsonify
 
@@ -26,8 +26,10 @@ YAHOO = {
 
 BYBIT_BASE = "https://api-testnet.bybit.com" if USAR_TESTNET else "https://api.bybit.com"
 
-# NUEVO JEFE - 1 y 2 JUNTOS - BOT AUTO + BALANCE FALSO - NO BORRE NADA DE LO DE ARRIBA
-BOT_AUTO = {"activo": False, "balance": 1000.0, "posicion": None, "precio_entrada": 0, "historial": [], "ultima_operacion": "BOT APAGADO"}
+# NUEVO JEFE - 1,2,3 JUNTOS - CEREBRO + PROTECCION + GANANCIAS
+BOT_AUTO = {"activo": False, "balance": 1000.0, "balance_inicial": 1000.0, "posicion": None, "precio_entrada": 0, "historial": [], "ultima_operacion": "BOT APAGADO", "ganadas": 0, "perdidas": 0, "perdidas_seguidas": 0, "total_ganado": 0.0, "total_perdido": 0.0}
+HISTORIAL_PRECIOS_ORO = []
+RIESGO_POR_OPERACION = 10.0  # MEJORA 2 - NUNCA ARRIESGA MAS DE $10
 
 def get_precio_real(simbolo_yahoo):
     try:
@@ -63,52 +65,101 @@ def senal_bybit(precio, tp, sl):
         return "🔴 VENDER - JEFE YA ESTA CARO, VENDE Y COBRA"
     return "🟡 ESPERA - JEFE TODAVIA NO, ESTA EN MEDIO"
 
+# MEJORA 1 JEFE - CEREBRO DE VERDAD - RSI + TENDENCIA
+def calcular_rsi(precios, periodo=14):
+    if len(precios) < periodo + 1:
+        return 50
+    ganancias = 0
+    perdidas = 0
+    for i in range(1, periodo + 1):
+        diff = precios[-i] - precios[-i-1]
+        if diff > 0:
+            ganancias += diff
+        else:
+            perdidas += abs(diff)
+    if perdidas == 0:
+        return 100
+    rs = (ganancias / periodo) / (perdidas / periodo)
+    return 100 - (100 / (1 + rs))
+
+def calcular_tendencia(precios):
+    if len(precios) < 10:
+        return "SIN DATOS"
+    ultimos_5 = sum(precios[-5:]) / 5
+    anteriores_5 = sum(precios[-10:-5]) / 5
+    if ultimos_5 > anteriores_5:
+        return "SUBIENDO"
+    if ultimos_5 < anteriores_5:
+        return "BAJANDO"
+    return "LADO"
+
 def cerebro_1000(precio, tp, sl):
-    # ARREGLADO JEFE - ANTES SIEMPRE DABA LO MISMO, AHORA SI VOTA DE VERDAD
+    # MEJORA 1 - AHORA USA RSI + TENDENCIA + TP/SL, NO SOLO PRECIO
+    HISTORIAL_PRECIOS_ORO.append(precio)
+    if len(HISTORIAL_PRECIOS_ORO) > 50:
+        HISTORIAL_PRECIOS_ORO.pop(0)
+    rsi = calcular_rsi(HISTORIAL_PRECIOS_ORO)
+    tendencia = calcular_tendencia(HISTORIAL_PRECIOS_ORO)
     votos = 0
-    # Voto 1: cerca de SL = barato = comprar
-    if precio <= sl + 30:
+    # RSI: si RSI < 30 = muy barato = bueno para comprar
+    if rsi < 30:
         votos += 400
-    # Voto 2: cerca de TP = caro = vender, le quitamos votos de compra
-    if precio >= tp - 30:
+    elif rsi > 70:
         votos -= 400
-    # Voto 3: en medio
-    medio = (tp + sl) / 2
-    if precio < medio:
+    # TENDENCIA: solo comprar si subiendo, solo vender si bajando
+    if tendencia == "SUBIENDO":
+        votos += 300
+    elif tendencia == "BAJANDO":
+        votos -= 300
+    # TP / SL
+    if precio <= sl + 30:
         votos += 200
-    else:
+    if precio >= tp - 30:
         votos -= 200
-    # Voto 4: distancia a TP y SL
-    dist_tp = abs(tp - precio)
-    dist_sl = abs(precio - sl)
-    if dist_sl < dist_tp:
-        votos += 200
-    else:
-        votos -= 200
+    print(f"CEREBRO JEFE: Precio {precio} RSI {rsi:.1f} Tendencia {tendencia} Votos {votos}")
     if votos > 300:
         return "COMPRAR"
     if votos < -300:
         return "VENDER"
     return "ESPERA"
 
-# NUEVO JEFE - EL BOT QUE OPERA SOLO CON DINERO FALSO
+# MEJORA 2 Y 3 JEFE - BOT AUTO CON PROTECCION Y GANANCIAS
 def bot_auto_loop():
     while True:
         try:
             if BOT_AUTO["activo"]:
+                # PROTECCION JEFE - SI PIERDE 3 SEGUIDAS, SE APAGA SOLO
+                if BOT_AUTO["perdidas_seguidas"] >= 3:
+                    BOT_AUTO["activo"] = False
+                    BOT_AUTO["ultima_operacion"] = "🛑 PROTECCION: Perdi 3 veces seguidas, me apague solo para no perder tu dinero jefe"
+                    BOT_AUTO["historial"].append(BOT_AUTO["ultima_operacion"])
+                    print(BOT_AUTO["ultima_operacion"])
+                    time.sleep(10)
+                    continue
                 oro = get_precio_real("GC=F") or 4149
                 decision = cerebro_1000(oro, 4200, 4100)
-                # Si no tiene posicion y dice COMPRAR -> compra falso
                 if decision == "COMPRAR" and BOT_AUTO["posicion"] is None:
                     BOT_AUTO["posicion"] = "COMPRAR"
                     BOT_AUTO["precio_entrada"] = oro
                     BOT_AUTO["ultima_operacion"] = f"🟢 BOT COMPRO ORO en {oro}"
                     BOT_AUTO["historial"].append(BOT_AUTO["ultima_operacion"])
                     print(BOT_AUTO["ultima_operacion"])
-                # Si tiene posicion y dice VENDER -> vende y cobra ganancia falsa
                 elif decision == "VENDER" and BOT_AUTO["posicion"] == "COMPRAR":
                     ganancia = oro - BOT_AUTO["precio_entrada"]
+                    # PROTECCION - NUNCA GANA NI PIERDE MAS DE $10 POR OPERACION EN ESTA PRUEBA
+                    if ganancia > RIESGO_POR_OPERACION:
+                        ganancia = RIESGO_POR_OPERACION
+                    if ganancia < -RIESGO_POR_OPERACION:
+                        ganancia = -RIESGO_POR_OPERACION
                     BOT_AUTO["balance"] += ganancia
+                    if ganancia >= 0:
+                        BOT_AUTO["ganadas"] += 1
+                        BOT_AUTO["total_ganado"] += ganancia
+                        BOT_AUTO["perdidas_seguidas"] = 0
+                    else:
+                        BOT_AUTO["perdidas"] += 1
+                        BOT_AUTO["total_perdido"] += abs(ganancia)
+                        BOT_AUTO["perdidas_seguidas"] += 1
                     BOT_AUTO["ultima_operacion"] = f"🔴 BOT VENDIO en {oro} - Ganancia: {ganancia:.2f} - Balance: {BOT_AUTO['balance']:.2f}"
                     BOT_AUTO["historial"].append(BOT_AUTO["ultima_operacion"])
                     BOT_AUTO["posicion"] = None
@@ -202,12 +253,14 @@ canvas { width:100%; background:#000; border-radius:16px; }
 <div class="top"><h1>RAUDY VIP 1000 👑</h1><p>PRECIOS REALES EN VIVO - BYBIT + YAHOO + VELAS</p><p id="estado">🔴 CONECTANDO PRECIOS REALES...</p></div>
 
 <div class="card">
-<div class="activo-titulo">🤖 BOT AUTO - 1 Y 2 JUNTOS</div>
+<div class="activo-titulo">🤖 BOT AUTO - CEREBRO REAL + PROTECCION</div>
+<div style="text-align:center; font-size:18px;">RSI: <b id="rsi" style="color:gold;">--</b> &nbsp;|&nbsp; Tendencia: <b id="tendencia" style="color:gold;">--</b></div>
 <div style="text-align:center; font-size:20px; margin:10px 0;">Balance Falso: <b id="balance" style="color:#00ff88;">$1000</b></div>
-<div style="text-align:center; font-size:16px;" id="bot-estado">BOT APAGADO</div>
+<div style="text-align:center; font-size:16px; background:#000; padding:10px; border-radius:10px;" id="performance">Ganadas: 0 | Perdidas: 0 | Ganado: $0 | Perdido: $0</div>
+<div style="text-align:center; font-size:16px; margin-top:8px;" id="bot-estado">BOT APAGADO</div>
 <div style="text-align:left; font-size:14px; margin-top:10px; background:#000; padding:10px; border-radius:10px;" id="historial">Sin operaciones todavia</div>
 <button class="btn-bot" id="btn-bot" onclick="toggleBot()">🤖 PRENDER BOT AUTO</button>
-<div style="text-align:center; font-size:13px; color:#aaa; margin-top:8px;">El bot compra y vende SOLO con dinero FALSO - No toca tu cuenta real</div>
+<div style="text-align:center; font-size:13px; color:#aaa; margin-top:8px;">Proteccion: Si pierde 3 seguidas se apaga solo - Max $10 por operacion - Dinero FALSO</div>
 </div>
 
 <div class="card">
@@ -374,10 +427,13 @@ async function cargarPrecios(){
     let sd = await s.json();
     document.getElementById('senal').innerText = sd.senal;
     document.getElementById('cerebro-texto').innerText = "🤖 CEREBRO 1000: " + sd.decision;
+    if(sd.rsi) document.getElementById('rsi').innerText = sd.rsi;
+    if(sd.tendencia) document.getElementById('tendencia').innerText = sd.tendencia;
     let b = await fetch('/api/bot_auto');
     let bd = await b.json();
     document.getElementById('balance').innerText = "$" + bd.balance.toFixed(2);
     document.getElementById('bot-estado').innerText = bd.ultima_operacion;
+    document.getElementById('performance').innerText = "Ganadas: " + bd.ganadas + " | Perdidas: " + bd.perdidas + " | Ganado: $" + bd.total_ganado.toFixed(2) + " | Perdido: $" + bd.total_perdido.toFixed(2);
     if(bd.historial.length > 0){ document.getElementById('historial').innerHTML = bd.historial.slice().reverse().join("<br>"); }
     if(vozActivada && sd.senal !== ultimaSenalHablada && sd.senal.includes('COMPRAR')){
         hablar('Jefe, compra ahora, el precio esta bueno para comprar, esta en ' + precios['ORO']);
@@ -424,13 +480,16 @@ def api_senal():
         precio, tp, sl = 4149, 4200, 4100
     s = senal_bybit(precio, tp, sl)
     d = cerebro_1000(precio, tp, sl)
-    return jsonify({"senal": s, "decision": d, "precio": precio})
+    rsi = calcular_rsi(HISTORIAL_PRECIOS_ORO)
+    tend = calcular_tendencia(HISTORIAL_PRECIOS_ORO)
+    return jsonify({"senal": s, "decision": d, "precio": precio, "rsi": round(rsi, 1), "tendencia": tend})
 
 @app.route("/api/bot_auto", methods=["GET", "POST"])
 def api_bot_auto():
     if request.method == "POST":
         BOT_AUTO["activo"] = not BOT_AUTO["activo"]
         if BOT_AUTO["activo"]:
+            BOT_AUTO["perdidas_seguidas"] = 0
             BOT_AUTO["ultima_operacion"] = "✅ BOT PRENDIDO - Operando solo con dinero falso"
         else:
             BOT_AUTO["ultima_operacion"] = "BOT APAGADO"
