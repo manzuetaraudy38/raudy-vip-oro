@@ -1,117 +1,223 @@
-# app.py - RAUDY VIP 1000 - CALIDAD TOTAL ARREGLADO - COPIA TODO HASTA EL FINAL
-import os, json, urllib.request, threading, time, random, math
+import os, json, urllib.request
+import threading, time, random, math
 from datetime import datetime
-from flask import Flask, render_template_string, request, jsonify
-
+from flask import Flask, request, jsonify
 app = Flask(__name__)
-BYBIT_KEY = os.getenv("BYBIT_API_KEY")
-BYBIT_SECRET = os.getenv("BYBIT_API_SECRET")
-USAR_TESTNET = os.getenv("USAR_TESTNET", "True") == "True"
-LINK_PAYPAL = "https://paypal.me/RaudyManzueta/20"
-LINK_WHATSAPP = "https://wa.me/41767574050"
-LINK_TELEGRAM = "https://t.me/raudy_vip_oro_bot"
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "") or os.getenv("BOT_TOKEN", "") or os.getenv("BOT_TOKE", "") or os.getenv("BOT_TO", "")
-CHAT_ID_JEFE = os.getenv("CHAT_ID_JEFE", "")
-YAHOO = {"ORO": "GC=F", "TESLA": "TSLA", "APPLE": "AAPL", "META": "META", "EUR/USD": "EURUSD=X", "GBP/USD": "GBPUSD=X", "USD/CHF": "CHF=X", "SP500": "^GSPC"}
-BYBIT_BASE = "https://api-testnet.bybit.com" if USAR_TESTNET else "https://api.bybit.com"
-BOT_AUTO = {"activo": False, "balance": 1000.0, "balance_inicial": 1000.0, "posicion": None, "precio_entrada": 0, "tp_objetivo": 0, "sl_objetivo": 0, "activo_actual": "ORO", "historial": [], "ultima_operacion": "BOT APAGADO", "ganadas": 0, "perdidas": 0, "perdidas_seguidas": 0, "total_ganado": 0.0, "total_perdido": 0.0, "trailing_sl": 0, "operaciones_manana": 0, "ganadas_manana": 0, "operaciones_noche": 0, "ganadas_noche": 0, "peor_balance": 1000.0, "mejor_balance": 1000.0}
-HISTORIAL_PRECIOS_ORO = []
-HISTORIAL_PRECIOS = {"ORO": [], "BTC": [], "EUR/USD": []}
-RIESGO_POR_OPERACION = 10.0
-GANANCIA_OBJETIVO = 20.0
+BOT = {"activo": False, "balance": 1000.0}
+HIST = []
+TP_GAN = 20.0
+SL_PER = 10.0
 
-def get_precio_real(simbolo_yahoo):
+def precio(sym):
     try:
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{simbolo_yahoo}?interval=1m&range=1d"
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        u = "https://query1.finance.yahoo.com"
+        u += "/v8/finance/chart/" + sym
+        u += "?interval=1m&range=1d"
+        req = urllib.request.Request(
+            u, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=5) as r:
-            data = json.loads(r.read().decode())
-            meta = data["chart"]["result"][0]["meta"]
-            precio = meta.get("regularMarketPrice")
-            return float(precio) if precio else None
-    except Exception as e:
-        print("Error precio", simbolo_yahoo, e)
+            d = json.loads(r.read().decode())
+            m = d["chart"]["result"][0]["meta"]
+            return float(m.get("regularMarketPrice"))
+    except:
         return None
 
-def get_precio_bybit(symbol):
+def precios_pasado():
     try:
-        url = f"{BYBIT_BASE}/v5/market/tickers?category=spot&symbol={symbol}"
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=5) as r:
-            data = json.loads(r.read().decode())
-            lista = data.get("result", {}).get("list", [])
-            if lista:
-                return float(lista[0].get("lastPrice", 0))
-    except Exception as e:
-        print("Error Bybit", symbol, e)
-    return None
-
-def get_precios_reales_pasado(simbolo="GC=F", intervalo="1h", rango="1mo"):
-    try:
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{simbolo}?interval={intervalo}&range={rango}"
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        u = "https://query1.finance.yahoo.com"
+        u += "/v8/finance/chart/GC=F"
+        u += "?interval=1h&range=1mo"
+        req = urllib.request.Request(
+            u, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=8) as r:
-            data = json.loads(r.read().decode())
-            result = data["chart"]["result"][0]
-            closes = result["indicators"]["quote"][0]["close"]
-            precios = [float(x) for x in closes if x is not None]
-            return precios
-    except Exception as e:
-        print("Error precios reales pasado", e)
+            d = json.loads(r.read().decode())
+            res = d["chart"]["result"][0]
+            cl = res["indicators"]["quote"][0]["close"]
+            return [float(x) for x in cl if x is not None]
+    except:
         return []
 
-def senal_bybit(precio, tp, sl):
-    if precio <= sl + 15:
-        return "COMPRAR - JEFE ESTA BARATO"
-    if precio >= tp - 15:
-        return "VENDER - JEFE YA ESTA CARO"
-    return "ESPERA - JEFE TODAVIA NO"
-
-def calcular_rsi(precios, periodo=14):
-    if len(precios) < periodo + 1:
+def rsi(pr, n=14):
+    if len(pr) < n + 1:
         return 50
-    ganancias = 0
-    perdidas = 0
-    for i in range(1, periodo + 1):
-        diff = precios[-i] - precios[-i-1]
+    g = 0
+    p = 0
+    for i in range(1, n + 1):
+        diff = pr[-i] - pr[-i-1]
         if diff > 0:
-            ganancias += diff
+            g += diff
         else:
-            perdidas += abs(diff)
-    if perdidas == 0:
+            p += abs(diff)
+    if p == 0:
         return 100
-    rs = (ganancias / periodo) / (perdidas / periodo)
+    rs = (g / n) / (p / n)
     return 100 - (100 / (1 + rs))
 
-def calcular_tendencia(precios):
-    if len(precios) < 10:
-        return "SIN DATOS"
-    ultimos_5 = sum(precios[-5:]) / 5
-    anteriores_5 = sum(precios[-10:-5]) / 5
-    if ultimos_5 > anteriores_5:
+def ema(pr, n):
+    if len(pr) < n:
+        return sum(pr) / len(pr)
+    k = 2 / (n + 1)
+    e = sum(pr[:n]) / n
+    for x in pr[n:]:
+        e = x * k + e * (1 - k)
+    return e
+
+def macd(pr):
+    if len(pr) < 26:
+        return 0
+    m = ema(pr, 12) - ema(pr, 26)
+    return m
+
+def boll(pr):
+    if len(pr) < 20:
+        return "MEDIO"
+    ult = pr[-20:]
+    med = sum(ult) / len(ult)
+    var = sum((x - med) ** 2 for x in ult) / len(ult)
+    dv = math.sqrt(var)
+    sup = med + 2 * dv
+    inf = med - 2 * dv
+    act = pr[-1]
+    if act <= inf + dv * 0.2:
+        return "BARATO"
+    if act >= sup - dv * 0.2:
+        return "CARO"
+    if act < med:
+        return "BARATO"
+    return "CARO"
+
+def tendencia(pr):
+    if len(pr) < 10:
+        return "LADO"
+    a = sum(pr[-5:]) / 5
+    b = sum(pr[-10:-5]) / 5
+    if a > b:
         return "SUBIENDO"
-    if ultimos_5 < anteriores_5:
+    if a < b:
         return "BAJANDO"
     return "LADO"
 
-def calcular_ema(precios, periodo):
-    if len(precios) < periodo:
-        return sum(precios) / len(precios) if precios else 0
-    k = 2 / (periodo + 1)
-    ema = sum(precios[:periodo]) / periodo
-    for p in precios[periodo:]:
-        ema = p * k + ema * (1 - k)
-    return ema
+def doble(pr):
+    if len(pr) < 30:
+        return False
+    largo = tendencia(pr[-30:])
+    corto = tendencia(pr[-10:])
+    if largo == "SUBIENDO":
+        return True
+    return False
 
-def calcular_macd(precios):
-    if len(precios) < 26:
-        return {"macd": 0, "senal": 0, "histograma": 0, "texto": "SIN DATOS"}
-    ema12 = calcular_ema(precios, 12)
-    ema26 = calcular_ema(precios, 26)
-    macd_linea = ema12 - ema26
-    senal = macd_linea * 0.9
-    hist = macd_linea - senal
-    if hist > 0:
-        texto = "FUERZA SUBIENDO"
-    elif hist < 0:
-        texto = "FUERZA
+def cerebro(precio, lista):
+    lista.append(precio)
+    if len(lista) > 60:
+        lista.pop(0)
+    v = 0
+    r = rsi(lista)
+    t = tendencia(lista)
+    mc = macd(lista)
+    b = boll(lista)
+    d = doble(lista)
+    if r < 30:
+        v += 200
+    if r > 70:
+        v -= 200
+    if t == "SUBIENDO":
+        v += 150
+    if t == "BAJANDO":
+        v -= 150
+    if mc > 0:
+        v += 200
+    if mc < 0:
+        v -= 200
+    if b == "BARATO":
+        v += 250
+    if b == "CARO":
+        v -= 250
+    if d:
+        v += 300
+    if v >= 400:
+        return "COMPRAR"
+    if v <= -400:
+        return "VENDER"
+    return "ESPERA"
+
+def backtest():
+    pr = precios_pasado()
+    if len(pr) < 50:
+        pr = []
+        p = 4150
+        for i in range(200):
+            p += random.uniform(-12, 12)
+            pr.append(p)
+        modo = "SIMULADO"
+    else:
+        modo = "REAL"
+    bal = 1000
+    g = 0
+    pe = 0
+    for i in range(30, len(pr) - 5):
+        lista = pr[max(0, i-30):i]
+        votos = 0
+        if rsi(lista) < 45:
+            votos += 1
+        if macd(lista) > 0:
+            votos += 1
+        if boll(lista) == "BARATO":
+            votos += 1
+        if doble(lista):
+            votos += 1
+        if votos >= 3:
+            ent = pr[i]
+            sal = pr[min(len(pr)-1, i+5)]
+            gan = sal - ent
+            if gan > 0 and gan > TP_GAN:
+                gan = TP_GAN
+            if gan < 0 and gan < -SL_PER:
+                gan = -SL_PER
+            bal += gan
+            if gan >= 0:
+                g += 1
+            else:
+                pe += 1
+    tot = g + pe
+    wr = (g / tot * 100) if tot > 0 else 0
+    return {
+        "modo": modo,
+        "balance_final": round(bal, 2),
+        "ganadas": g,
+        "perdidas": pe,
+        "winrate": round(wr, 1),
+        "mensaje": "Gana 20 pierde 10"
+    }
+
+@app.route("/")
+def home():
+    oro = precio("GC=F") or 4149
+    dec = cerebro(oro, HIST)
+    return f"""
+    <h1>RAUDY VIP 1000 - LIVE</h1>
+    <p>ORO: {oro}</p>
+    <p>CEREBRO: {dec}</p>
+    <p>Balance: {BOT['balance']}</p>
+    <p><a href='/api/backtest'>BACKTEST REAL</a></p>
+    <p><a href='/api/precios'>PRECIOS</a></p>
+    <p>Calidad: RSI + MACD + Bollinger + Doble Tiempo + 1:2</p>
+    """
+
+@app.route("/api/precios")
+def api_precios():
+    oro = precio("GC=F") or 4149
+    tes = precio("TSLA") or 378
+    return jsonify({"ORO": oro, "TESLA": tes})
+
+@app.route("/api/backtest")
+def api_back():
+    return jsonify(backtest())
+
+@app.route("/api/senal")
+def api_senal():
+    oro = precio("GC=F") or 4149
+    dec = cerebro(oro, HIST)
+    return jsonify({"precio": oro, "decision": dec})
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
