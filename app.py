@@ -1,8 +1,11 @@
-import os, json, urllib.request
+import os, json, urllib.request, urllib.parse
 import threading, time, random, math
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from flask import Flask, request, jsonify
 app = Flask(__name__)
+TELE_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
+TELE_CHAT = os.environ.get("TELEGRAM_CHAT_ID", "")
+BROKER_KEY = os.environ.get("BROKER_KEY", "")
 BOT = {"activo": False, "balance": 1000.0}
 BOT["ganadas"] = 0
 BOT["perdidas"] = 0
@@ -10,17 +13,35 @@ BOT["hist"] = []
 BOT["ult"] = "BOT APAGADO"
 BOT["pos"] = None
 BOT["entrada"] = 0
+BOT["perdidas_dia"] = 0
+BOT["dia"] = ""
+BOT["operaciones_dia"] = 0
+BOT["modo"] = "PRACTICA - Dinero falso"
 HIST = []
 TP_GAN = 20.0
 SL_PER = 10.0
+MAX_PERDIDAS_DIA = 3
+MAX_PERDIDA_DIA_DINERO = 30.0
+ULTIMO_ID = [0]
+
+def telegram(msg, chat_id=None):
+    try:
+        if not TELE_TOKEN:
+            return
+        cid = chat_id or TELE_CHAT
+        if not cid:
+            return
+        txt = urllib.parse.quote(msg)
+        u = "https://api.telegram.org/bot" + TELE_TOKEN + "/sendMessage?chat_id=" + str(cid) + "&text=" + txt
+        req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0"})
+        urllib.request.urlopen(req, timeout=5).read()
+    except:
+        pass
 
 def precio(sym):
     try:
-        u = "https://query1.finance.yahoo.com"
-        u += "/v8/finance/chart/" + sym
-        u += "?interval=1m&range=1d"
-        req = urllib.request.Request(
-            u, headers={"User-Agent": "Mozilla/5.0"})
+        u = "https://query1.finance.yahoo.com/v8/finance/chart/" + sym + "?interval=1m&range=1d"
+        req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=5) as r:
             d = json.loads(r.read().decode())
             m = d["chart"]["result"][0]["meta"]
@@ -30,11 +51,8 @@ def precio(sym):
 
 def precios_pasado():
     try:
-        u = "https://query1.finance.yahoo.com"
-        u += "/v8/finance/chart/GC=F"
-        u += "?interval=1h&range=1mo"
-        req = urllib.request.Request(
-            u, headers={"User-Agent": "Mozilla/5.0"})
+        u = "https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1h&range=1mo"
+        req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=8) as r:
             d = json.loads(r.read().decode())
             res = d["chart"]["result"][0]
@@ -110,8 +128,27 @@ def doble(pr):
         return True
     return False
 
-def cerebro(precio, lista):
-    lista.append(precio)
+def noticias_peligrosas():
+    ahora = datetime.now(timezone.utc) + timedelta(hours=1)
+    h = ahora.hour
+    m = ahora.minute
+    dia_semana = ahora.weekday()
+    if dia_semana >= 5:
+        return True
+    if h == 14 and m >= 25:
+        return True
+    if h == 15 and m <= 5:
+        return True
+    if h == 15 and m >= 55:
+        return True
+    if h == 16 and m <= 10:
+        return True
+    if h == 8 and m >= 25 and m <= 45:
+        return True
+    return False
+
+def cerebro(precio_oro, lista):
+    lista.append(precio_oro)
     if len(lista) > 60:
         lista.pop(0)
     v = 0
@@ -184,58 +221,120 @@ def backtest():
                 pe += 1
     tot = g + pe
     wr = (g / tot * 100) if tot > 0 else 0
-    return {
-        "modo": modo,
-        "balance_final": round(bal, 2),
-        "ganadas": g,
-        "perdidas": pe,
-        "winrate": round(wr, 1),
-        "mensaje": "Gana 20 pierde 10"
-    }
+    return {"modo": modo, "balance_final": round(bal, 2), "ganadas": g, "perdidas": pe, "winrate": round(wr, 1), "mensaje": "Gana 20 pierde 10"}
+
+def enviar_orden_real(tipo, precio_oro):
+    if not BROKER_KEY:
+        return False
+    try:
+        telegram("BROKER REAL: Intentaria " + tipo + " en " + str(precio_oro))
+        return True
+    except:
+        return False
 
 def bot_motor():
     while True:
         try:
+            hoy = datetime.now().strftime("%Y-%m-%d")
+            if BOT["dia"] != hoy:
+                BOT["dia"] = hoy
+                BOT["perdidas_dia"] = 0
+                BOT["operaciones_dia"] = 0
             if BOT["activo"]:
                 oro = precio("GC=F") or 4078
                 dec = cerebro(oro, HIST)
-                if dec == "COMPRAR":
-                    if BOT["pos"] is None:
-                        BOT["pos"] = "COMPRAR"
-                        BOT["entrada"] = oro
-                        BOT["ult"] = "BOT COMPRO en " + str(oro)
-                if BOT["pos"] == "COMPRAR":
-                    oro2 = precio("GC=F") or BOT["entrada"]
-                    gan = oro2 - BOT["entrada"]
-                    cerrar = False
-                    motivo = ""
-                    if gan >= 20:
-                        cerrar = True
-                        motivo = "TP Gane 20"
-                    if gan <= -10:
-                        cerrar = True
-                        motivo = "SL Perdi 10"
-                    if cerrar:
-                        if gan > 20:
-                            gan = 20
-                        if gan < -10:
-                            gan = -10
-                        BOT["balance"] += gan
-                        if gan >= 0:
-                            BOT["ganadas"] += 1
-                        else:
-                            BOT["perdidas"] += 1
-                        BOT["ult"] = motivo + " Balance " + str(BOT["balance"])
-                        BOT["pos"] = None
+                if BOT["perdidas_dia"] >= MAX_PERDIDAS_DIA:
+                    BOT["activo"] = False
+                    BOT["ult"] = "FRENO: 3 perdidas hoy, me apago"
+                    telegram("FRENO JEFE: Perdi 3 veces hoy, me apague para protegerte. Balance " + str(BOT["balance"]))
+                    time.sleep(10)
+                    continue
+                es_noticia = noticias_peligrosas()
+                if es_noticia and BOT["pos"] is None:
+                    BOT["ult"] = "PAUSA NOTICIAS - Espero"
+                else:
+                    if dec == "COMPRAR":
+                        if BOT["pos"] is None:
+                            BOT["pos"] = "COMPRAR"
+                            BOT["entrada"] = oro
+                            BOT["operaciones_dia"] += 1
+                            BOT["ult"] = "BOT COMPRO en " + str(oro)
+                            telegram("JEFE COMPRE ORO en " + str(oro) + " Balance " + str(BOT["balance"]))
+                            if BROKER_KEY:
+                                enviar_orden_real("COMPRAR", oro)
+                                BOT["modo"] = "REAL - Dinero real"
+                    if BOT["pos"] == "COMPRAR":
+                        oro2 = precio("GC=F") or BOT["entrada"]
+                        gan = oro2 - BOT["entrada"]
+                        cerrar = False
+                        motivo = ""
+                        sl_dinamico = -10
+                        if gan >= 10:
+                            sl_dinamico = 5
+                        if gan >= 20:
+                            cerrar = True
+                            motivo = "TP Gane 20"
+                        if gan <= sl_dinamico:
+                            cerrar = True
+                            if sl_dinamico == 5:
+                                motivo = "TRAILING Asegure 5"
+                            else:
+                                motivo = "SL Perdi 10"
+                        if cerrar:
+                            if gan > 20:
+                                gan = 20
+                            if gan < -10:
+                                gan = -10
+                            BOT["balance"] += gan
+                            if gan >= 0:
+                                BOT["ganadas"] += 1
+                            else:
+                                BOT["perdidas"] += 1
+                                BOT["perdidas_dia"] += 1
+                            BOT["ult"] = motivo + " Balance " + str(BOT["balance"])
+                            telegram("JEFE " + motivo + " en " + str(oro2) + " Balance " + str(BOT["balance"]) + " Ganadas " + str(BOT["ganadas"]) + " Perdidas " + str(BOT["perdidas"]))
+                            BOT["pos"] = None
             time.sleep(10)
         except:
             time.sleep(5)
+
+# OREJAS - ESCUCHA TELEGRAM Y RESPONDE
+def telegram_escuchar():
+    while True:
+        try:
+            if not TELE_TOKEN:
+                time.sleep(10)
+                continue
+            u = "https://api.telegram.org/bot" + TELE_TOKEN + "/getUpdates?offset=" + str(ULTIMO_ID[0]+1) + "&timeout=10"
+            req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=15) as r:
+                d = json.loads(r.read().decode())
+                for up in d.get("result", []):
+                    ULTIMO_ID[0] = up["update_id"]
+                    msg = up.get("message", {})
+                    texto = msg.get("text", "").lower()
+                    chat = str(msg.get("chat", {}).get("id", ""))
+                    if not chat:
+                        continue
+                    oro = precio("GC=F") or 4065
+                    if "/start" in texto:
+                        telegram("Hola JEFE Soy VIP ORO Raudy Escribe /precio para ORO, /senal para SENAL, /todo para todo", chat)
+                    elif "/precio" in texto or "/todo" in texto:
+                        telegram("JEFE ORO AHORA: " + str(oro) + " Balance: " + str(BOT["balance"]) + " Bot: " + ("PRENDIDO" if BOT["activo"] else "APAGADO") + " Ganadas: " + str(BOT["ganadas"]) + " Perdidas: " + str(BOT["perdidas"]), chat)
+                    elif "/senal" in texto:
+                        dec = cerebro(oro, HIST)
+                        telegram("JEFE SENAL: " + dec + " ORO: " + str(oro) + " RSI: " + str(round(rsi(HIST),1)) + " MACD: " + ("SUBIENDO" if macd(HIST) > 0 else "BAJANDO") + " Bollinger: " + boll(HIST) + " Doble: " + ("CONFIRMADO" if doble(HIST) else "ESPERA"), chat)
+                    elif texto.strip() != "":
+                        telegram("JEFE escribe /precio para ver el oro, /senal para la senal", chat)
+        except:
+            time.sleep(5)
+threading.Thread(target=telegram_escuchar, daemon=True).start()
 threading.Thread(target=bot_motor, daemon=True).start()
 
 HTML = """
 <html><head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>RAUDY VIP 1000</title>
+<title>RAUDY VIP PRO</title>
 <style>
 body{margin:0;font-family:Arial;background:#0a0a0a;color:#fff;padding:12px}
 .top{background:gold;color:#000;padding:16px;border-radius:16px;text-align:center}
@@ -252,15 +351,16 @@ body{margin:0;font-family:Arial;background:#0a0a0a;color:#fff;padding:12px}
 .oro{background:gold;color:#000}
 input,select{width:100%;padding:14px;font-size:20px;border-radius:12px;border:none;margin-top:8px}
 </style></head><body>
-<div class="top"><h1>RAUDY VIP 1000</h1><p>CALIDAD TOTAL - EN VIVO</p><p id="estado">CONECTANDO...</p></div>
+<div class="top"><h1>RAUDY VIP PRO</h1><p>PROFESIONAL - EN VIVO</p><p id="estado">CONECTANDO...</p></div>
 <div class="card">
-<h2 style="text-align:center">BOT AUTO - CALIDAD TOTAL</h2>
+<h2 style="text-align:center">BOT AUTO - PROFESIONAL</h2>
 <p class="cen">RSI: <b id="rsi" style="color:gold">--</b> | MACD: <b id="macd" style="color:#00bcd4">--</b></p>
 <p class="cen">Bollinger: <b id="boll" style="color:#ff9800">--</b> | Doble: <b id="doble" style="color:#00ff88">--</b></p>
 <p class="cen">Balance: <b id="balance" style="color:#00ff88">$1000</b></p>
 <p class="cen" id="bot-est">BOT APAGADO</p>
 <p class="cen" id="perf">Ganadas: 0 | Perdidas: 0</p>
-<p class="cen" style="background:#000;padding:8px;border-radius:10px">RIESGO 1:2 - Gano $20 | Pierdo $10</p>
+<p class="cen" id="pro-info" style="background:#000;padding:8px;border-radius:10px">PRO: Telegram | Freno 3 perdidas | Sin noticias | Trailing | Broker listo</p>
+<p class="cen" style="background:#000;padding:8px;border-radius:10px">RIESGO 1:2 - Gano $20 | Pierdo $10 | Trailing asegura $5</p>
 <button class="btn morado" id="btn-bot" onclick="toggleBot()">PRENDER BOT AUTO</button>
 <button class="btn azul" onclick="hacerBack()">BACKTEST REAL</button>
 <p class="cen" id="back-res" style="background:#000;padding:10px;border-radius:10px">Sin backtest todavia</p>
@@ -315,14 +415,7 @@ def api_precios():
     apl = precio("AAPL") or 350
     met = precio("META") or 641
     eur = precio("EURUSD=X") or 1.16
-    return jsonify({
-        "ORO": oro,
-        "TESLA": tes,
-        "APPLE": apl,
-        "META": met,
-        "EUR/USD": eur,
-        "BTC": 90000
-    })
+    return jsonify({"ORO": oro, "TESLA": tes, "APPLE": apl, "META": met, "EUR/USD": eur, "BTC": 90000})
 
 @app.route("/api/senal")
 def api_senal():
@@ -333,14 +426,7 @@ def api_senal():
     bb = boll(HIST)
     dd = doble(HIST)
     txt = "CONFIRMADO" if dd else "ESPERA"
-    return jsonify({
-        "precio": oro,
-        "decision": dec,
-        "rsi": round(rr, 1),
-        "macd": "SUBIENDO" if mc > 0 else "BAJANDO",
-        "bollinger": bb,
-        "doble": txt
-    })
+    return jsonify({"precio": oro, "decision": dec, "rsi": round(rr, 1), "macd": "SUBIENDO" if mc > 0 else "BAJANDO", "bollinger": bb, "doble": txt, "noticias": noticias_peligrosas()})
 
 @app.route("/api/bot_auto", methods=["GET", "POST"])
 def api_bot():
@@ -348,6 +434,7 @@ def api_bot():
         BOT["activo"] = not BOT["activo"]
         if BOT["activo"]:
             BOT["ult"] = "BOT PRENDIDO - Dinero falso"
+            telegram("JEFE Bot prendido - Modo practica")
         else:
             BOT["ult"] = "BOT APAGADO"
             BOT["pos"] = None
