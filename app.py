@@ -1,241 +1,448 @@
-# ======================================================
-# RAUDY VIP PRO - AUTOMÁTICO COMPLETO
-# DIVISAS + ACCIONES + ORO + BTC + SP500 + AMAZON
-# 100% AUTOMÁTICO - ÉL OPERA SOLO - SOLO DEMO
-# ======================================================
-import os, time, threading, requests
-from flask import Flask
-from datetime import datetime
-
+import os, json, urllib.request, urllib.parse
+import threading, time, random, math
+from datetime import datetime, timezone, timedelta
+from flask import Flask, request, jsonify
 app = Flask(__name__)
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "767574050")
+TELE_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
+TELE_CHAT = os.environ.get("TELEGRAM_CHAT_ID", "")
+BROKER_KEY = os.environ.get("BROKER_KEY", "")
+BOT = {"activo": False, "balance": 1000.0}
+BOT["ganadas"] = 0
+BOT["perdidas"] = 0
+BOT["hist"] = []
+BOT["ult"] = "BOT APAGADO"
+BOT["pos"] = None
+BOT["entrada"] = 0
+BOT["perdidas_dia"] = 0
+BOT["dia"] = ""
+BOT["operaciones_dia"] = 0
+BOT["modo"] = "PRACTICA - Dinero falso"
+HIST = []
+TP_GAN = 20.0
+SL_PER = 10.0
+MAX_PERDIDAS_DIA = 3
+MAX_PERDIDA_DIA_DINERO = 30.0
+ULTIMO_ID = [0]
 
-MI_PAYPAL = "https://paypal.me/RaudyManzueta/20"
-MI_TELEGRAM_BOT = "https://t.me/raudy_vip_oro_bot"
-
-dinero_demo = 100.0
-dinero_inicial = 100.0
-operaciones_hoy = 0
-posicion_abierta = None
-ultima_señal = "Robot automático completo prendiendo..."
-ultima_voz = "Jefe, ya tengo divisas, acciones, Tesla, Meta, SP500 y Amazon..."
-historial = []
-bot_encendido = False
-
-# ============ TODOS TUS ACTIVOS - JEFE ============
-# DIVISAS = Forex, ACCIONES = Empresas, INDICE = SP500, CRIPTO = BTC, ORO = Oro
-ACTIVOS = {
-    # --- ORO Y CRIPTO ---
-    "ORO": {"precio": 4032.04, "tipo": "ORO", "yahoo": "GC=F", "tv": "OANDA:XAUUSD"},
-    "BTC": {"precio": 97000.00, "tipo": "CRIPTO", "yahoo": "BTC-USD", "tv": "BINANCE:BTCUSDT"},
-    # --- DIVISAS - FOREX ---
-    "EUR/USD": {"precio": 1.0850, "tipo": "DIVISA", "yahoo": "EURUSD=X", "tv": "OANDA:EURUSD"},
-    "GBP/USD": {"precio": 1.2700, "tipo": "DIVISA", "yahoo": "GBPUSD=X", "tv": "OANDA:GBPUSD"},
-    "USD/JPY": {"precio": 155.00, "tipo": "DIVISA", "yahoo": "USDJPY=X", "tv": "OANDA:USDJPY"},
-    "USD/CHF": {"precio": 0.8800, "tipo": "DIVISA", "yahoo": "USDCHF=X", "tv": "OANDA:USDCHF"},
-    "AUD/USD": {"precio": 0.6500, "tipo": "DIVISA", "yahoo": "AUDUSD=X", "tv": "OANDA:AUDUSD"},
-    "USD/CAD": {"precio": 1.3600, "tipo": "DIVISA", "yahoo": "USDCAD=X", "tv": "OANDA:USDCAD"},
-    # --- ACCIONES - EMPRESAS GRANDES ---
-    "TESLA": {"precio": 250.00, "tipo": "ACCION", "yahoo": "TSLA", "tv": "NASDAQ:TSLA"},
-    "META": {"precio": 580.00, "tipo": "ACCION", "yahoo": "META", "tv": "NASDAQ:META"},
-    "APPLE": {"precio": 220.00, "tipo": "ACCION", "yahoo": "AAPL", "tv": "NASDAQ:AAPL"},
-    "AMAZON": {"precio": 200.00, "tipo": "ACCION", "yahoo": "AMZN", "tv": "NASDAQ:AMZN"},
-    "NVIDIA": {"precio": 135.00, "tipo": "ACCION", "yahoo": "NVDA", "tv": "NASDAQ:NVDA"},
-    # --- INDICE SP500 ---
-    "SP500": {"precio": 5900.00, "tipo": "INDICE", "yahoo": "^GSPC", "tv": "OANDA:SPX500USD"},
-}
-
-def mandar_telegram(m):
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID: return
+def telegram(msg, chat_id=None):
     try:
-        requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage", data={"chat_id": TELEGRAM_CHAT_ID, "text": m}, timeout=10)
-    except: pass
-
-# ============ PRECIOS REALES DE YAHOO - FUNCIONA EN RENDER ============
-def get_precio_yahoo(ticker):
-    try:
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range=1d&interval=15m"
-        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=8).json()
-        result = r['chart']['result'][0]
-        precio = result['meta']['regularMarketPrice']
-        cierres = [c for c in result['indicators']['quote'][0]['close'] if c is not None]
-        return float(precio), cierres
+        if not TELE_TOKEN:
+            return
+        cid = chat_id or TELE_CHAT
+        if not cid:
+            return
+        txt = urllib.parse.quote(msg)
+        u = "https://api.telegram.org/bot" + TELE_TOKEN + "/sendMessage?chat_id=" + str(cid) + "&text=" + txt
+        req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0"})
+        urllib.request.urlopen(req, timeout=5).read()
     except:
-        return None, []
+        pass
 
-def get_velas_btc():
+def precio(sym):
     try:
-        url = "https://api.binance.us/api/v3/klines?symbol=BTCUSDT&interval=15m&limit=100"
-        r = requests.get(url, timeout=10).json()
-        return [float(x[4]) for x in r]
+        u = "https://query1.finance.yahoo.com/v8/finance/chart/" + sym + "?interval=1m&range=1d"
+        req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            d = json.loads(r.read().decode())
+            m = d["chart"]["result"][0]["meta"]
+            return float(m.get("regularMarketPrice"))
+    except:
+        return None
+
+def precios_pasado():
+    try:
+        u = "https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1h&range=1mo"
+        req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            d = json.loads(r.read().decode())
+            res = d["chart"]["result"][0]
+            cl = res["indicators"]["quote"][0]["close"]
+            return [float(x) for x in cl if x is not None]
     except:
         return []
 
-def calcular_rsi(cierres, periodo=14):
-    if len(cierres) < periodo + 1: return 50
-    ganancias = []; perdidas = []
-    for i in range(1, len(cierres)):
-        cambio = cierres[i] - cierres[i-1]
-        if cambio > 0: ganancias.append(cambio); perdidas.append(0)
-        else: ganancias.append(0); perdidas.append(-cambio)
-    avg_gan = sum(ganancias[-periodo:]) / periodo
-    avg_per = sum(perdidas[-periodo:]) / periodo
-    if avg_per == 0: return 100
-    rs = avg_gan / avg_per
-    return round(100 - (100 / (1 + rs)), 2)
+def rsi(pr, n=14):
+    if len(pr) < n + 1:
+        return 50
+    g = 0
+    p = 0
+    for i in range(1, n + 1):
+        diff = pr[-i] - pr[-i-1]
+        if diff > 0:
+            g += diff
+        else:
+            p += abs(diff)
+    if p == 0:
+        return 100
+    rs = (g / n) / (p / n)
+    return 100 - (100 / (1 + rs))
 
-def calcular_ema(cierres, periodo):
-    if len(cierres) < periodo: return cierres[-1] if cierres else 0
-    k = 2 / (periodo + 1)
-    ema = sum(cierres[:periodo]) / periodo
-    for p in cierres[periodo:]:
-        ema = (p * k) + (ema * (1 - k))
-    return round(ema, 2)
+def ema(pr, n):
+    if len(pr) < n:
+        return sum(pr) / len(pr)
+    k = 2 / (n + 1)
+    e = sum(pr[:n]) / n
+    for x in pr[n:]:
+        e = x * k + e * (1 - k)
+    return e
 
-def calcular_macd(cierres):
-    if len(cierres) < 26: return 0
-    return round(calcular_ema(cierres, 12) - calcular_ema(cierres, 26), 4)
+def macd(pr):
+    if len(pr) < 26:
+        return 0
+    return ema(pr, 12) - ema(pr, 26)
 
-# ============ ROBOT 100% AUTOMÁTICO - CON 14 ACTIVOS ============
-def bot_automatico():
-    global dinero_demo, operaciones_hoy, posicion_abierta, ultima_señal, ultima_voz, bot_encendido
-    bot_encendido = True
-    mandar_telegram("🤖 RAUDY VIP PRO AUTOMÁTICO COMPLETO ENCENDIDO 👑\nDivisas + Acciones + Tesla + Meta + SP500 + Amazon + Oro + BTC. Yo opero SOLO. Solo DEMO.")
+def boll(pr):
+    if len(pr) < 20:
+        return "MEDIO"
+    ult = pr[-20:]
+    med = sum(ult) / len(ult)
+    var = sum((x - med) ** 2 for x in ult) / len(ult)
+    dv = math.sqrt(var)
+    sup = med + 2 * dv
+    inf = med - 2 * dv
+    act = pr[-1]
+    if act <= inf + dv * 0.2:
+        return "BARATO"
+    if act >= sup - dv * 0.2:
+        return "CARO"
+    if act < med:
+        return "BARATO"
+    return "CARO"
 
+def tendencia(pr):
+    if len(pr) < 10:
+        return "LADO"
+    a = sum(pr[-5:]) / 5
+    b = sum(pr[-10:-5]) / 5
+    if a > b:
+        return "SUBIENDO"
+    if a < b:
+        return "BAJANDO"
+    return "LADO"
+
+def doble(pr):
+    if len(pr) < 30:
+        return False
+    largo = tendencia(pr[-30:])
+    if largo == "SUBIENDO":
+        return True
+    return False
+
+def noticias_peligrosas():
+    ahora = datetime.now(timezone.utc) + timedelta(hours=1)
+    h = ahora.hour
+    m = ahora.minute
+    dia_semana = ahora.weekday()
+    if dia_semana >= 5:
+        return True
+    if h == 14 and m >= 25:
+        return True
+    if h == 15 and m <= 5:
+        return True
+    if h == 15 and m >= 55:
+        return True
+    if h == 16 and m <= 10:
+        return True
+    if h == 8 and m >= 25 and m <= 45:
+        return True
+    return False
+
+def cerebro(precio_oro, lista):
+    lista.append(precio_oro)
+    if len(lista) > 60:
+        lista.pop(0)
+    v = 0
+    r = rsi(lista)
+    t = tendencia(lista)
+    mc = macd(lista)
+    b = boll(lista)
+    d = doble(lista)
+    if r < 30:
+        v += 200
+    if r > 70:
+        v -= 200
+    if t == "SUBIENDO":
+        v += 150
+    if t == "BAJANDO":
+        v -= 150
+    if mc > 0:
+        v += 200
+    if mc < 0:
+        v -= 200
+    if b == "BARATO":
+        v += 250
+    if b == "CARO":
+        v -= 250
+    if d:
+        v += 300
+    if v >= 400:
+        return "COMPRAR"
+    if v <= -400:
+        return "VENDER"
+    return "ESPERA"
+
+def backtest():
+    pr = precios_pasado()
+    if len(pr) < 50:
+        pr = []
+        p = 4150
+        for i in range(200):
+            p += random.uniform(-12, 12)
+            pr.append(p)
+        modo = "SIMULADO"
+    else:
+        modo = "REAL"
+    bal = 1000
+    g = 0
+    pe = 0
+    for i in range(30, len(pr) - 5):
+        lista = pr[max(0, i-30):i]
+        votos = 0
+        if rsi(lista) < 45:
+            votos += 1
+        if macd(lista) > 0:
+            votos += 1
+        if boll(lista) == "BARATO":
+            votos += 1
+        if doble(lista):
+            votos += 1
+        if votos >= 3:
+            ent = pr[i]
+            sal = pr[min(len(pr)-1, i+5)]
+            gan = sal - ent
+            if gan > 0 and gan > TP_GAN:
+                gan = TP_GAN
+            if gan < 0 and gan < -SL_PER:
+                gan = -SL_PER
+            bal += gan
+            if gan >= 0:
+                g += 1
+            else:
+                pe += 1
+    tot = g + pe
+    wr = (g / tot * 100) if tot > 0 else 0
+    return {"modo": modo, "balance_final": round(bal, 2), "ganadas": g, "perdidas": pe, "winrate": round(wr, 1), "mensaje": "Gana 20 pierde 10"}
+
+def enviar_orden_real(tipo, precio_oro):
+    if not BROKER_KEY:
+        return False
+    try:
+        telegram("BROKER REAL: Intentaria " + tipo + " en " + str(precio_oro))
+        return True
+    except:
+        return False
+
+def bot_motor():
     while True:
         try:
-            ganancia = dinero_demo - dinero_inicial
-            if ganancia >= 20 or ganancia <= -10:
-                ultima_voz = "Jefe, ya llegué a mi meta del día. Me apago solo."
-                time.sleep(3600); continue
-            if operaciones_hoy >= 3:
-                time.sleep(3600); continue
-
-            # SI YA TIENE POSICIÓN, LA CUIDA SOLO
-            if posicion_abierta:
-                nombre = posicion_abierta["activo"]
-                ticker = ACTIVOS[nombre]["yahoo"]
-                precio_actual, _ = get_precio_yahoo(ticker)
-                if precio_actual is None:
-                    precio_actual = posicion_abierta["entrada"]
-                entrada = posicion_abierta["entrada"]; stop = posicion_abierta["stop"]; tp = posicion_abierta["tp"]; tipo = posicion_abierta["tipo"]
-                if (tipo == "COMPRA" and precio_actual >= tp) or (tipo == "VENTA" and precio_actual <= tp):
-                    g = abs(tp - entrada)
-                    # En DEMO ganamos 1% simulado para no romper el dinero
-                    gan = dinero_demo * 0.02
-                    dinero_demo += gan; operaciones_hoy += 1
-                    texto = f"✅ AUTOMÁTICO CERRÓ CON GANANCIA\n{nombre} {tipo}\nEntró ${entrada:.2f} Salió ${tp:.2f}\nGanó +${gan:.2f}\nDinero: ${dinero_demo:.2f}"
-                    historial.insert(0, texto); mandar_telegram(texto); posicion_abierta = None
-                elif (tipo == "COMPRA" and precio_actual <= stop) or (tipo == "VENTA" and precio_actual >= stop):
-                    perdida = dinero_demo * 0.01
-                    dinero_demo -= perdida; operaciones_hoy += 1
-                    texto = f"🛑 AUTOMÁTICO CERRÓ CON STOP LOSS\n{nombre} {tipo}\nProtegiendo tu dinero en ${stop:.2f}\nPerdió -${perdida:.2f}\nDinero: ${dinero_demo:.2f}"
-                    historial.insert(0, texto); mandar_telegram(texto); posicion_abierta = None
-                time.sleep(30); continue
-
-            # SI NO TIENE POSICIÓN, BUSCA EN TODOS LOS 14 ACTIVOS
-            for nombre, info in ACTIVOS.items():
-                precio, cierres = get_precio_yahoo(info["yahoo"])
-                if precio is None:
-                    if nombre == "BTC":
-                        cierres = get_velas_btc()
-                        if cierres: precio = cierres[-1]
-                        else: continue
-                    else: continue
-                ACTIVOS[nombre]["precio"] = precio
-                if len(cierres) < 30: continue
-                rsi = calcular_rsi(cierres)
-                macd = calcular_macd(cierres)
-                ema50 = calcular_ema(cierres, 50)
-                ema200 = calcular_ema(cierres, 50)
-
-                votos_compra = 0; votos_venta = 0
-                if rsi < 30: votos_compra += 1
-                elif rsi > 70: votos_venta += 1
-                if macd > 0: votos_compra += 1
-                elif macd < 0: votos_venta += 1
-                if ema50 > ema200: votos_compra += 1
-                else: votos_venta += 1
-
-                if votos_compra >= 3:
-                    entrada = precio; stop = precio * 0.995; tp = precio * 1.01
-                    posicion_abierta = {"activo": nombre, "tipo": "COMPRA", "entrada": entrada, "stop": stop, "tp": tp}
-                    ultima_señal = f"AUTOMÁTICO COMPRÓ {nombre} ({info['tipo']}) SOLO - ${entrada:.2f} - RSI {rsi}"
-                    ultima_voz = f"Jefe, yo solo compré {nombre}. Es una {info['tipo']}. Yo lo cuido."
-                    texto = f"🤖 AUTOMÁTICO COMPRÓ SOLO\nActivo: {nombre} ({info['tipo']})\nEntró SOLO: ${entrada:.2f}\nStop: ${stop:.2f} | TP: ${tp:.2f}\nRSI REAL: {rsi} | MACD: {macd}"
-                    historial.insert(0, texto); mandar_telegram(texto); break
-                elif votos_venta >= 3:
-                    entrada = precio; stop = precio * 1.005; tp = precio * 0.99
-                    posicion_abierta = {"activo": nombre, "tipo": "VENTA", "entrada": entrada, "stop": stop, "tp": tp}
-                    ultima_señal = f"AUTOMÁTICO VENDIÓ {nombre} ({info['tipo']}) SOLO - ${entrada:.2f} - RSI {rsi}"
-                    ultima_voz = f"Jefe, yo solo vendí {nombre}. Yo lo cuido."
-                    texto = f"🤖 AUTOMÁTICO VENDIÓ SOLO\nActivo: {nombre} ({info['tipo']})\nEntró SOLO: ${entrada:.2f}\nStop: ${stop:.2f} | TP: ${tp:.2f}\nRSI REAL: {rsi} | MACD: {macd}"
-                    historial.insert(0, texto); mandar_telegram(texto); break
+            hoy = datetime.now().strftime("%Y-%m-%d")
+            if BOT["dia"] != hoy:
+                BOT["dia"] = hoy
+                BOT["perdidas_dia"] = 0
+                BOT["operaciones_dia"] = 0
+            if BOT["activo"]:
+                oro = precio("GC=F") or 4078
+                dec = cerebro(oro, HIST)
+                if BOT["perdidas_dia"] >= MAX_PERDIDAS_DIA:
+                    BOT["activo"] = False
+                    BOT["ult"] = "FRENO: 3 perdidas hoy, me apago"
+                    telegram("FRENO JEFE: Perdi 3 veces hoy, me apague para protegerte. Balance " + str(BOT["balance"]))
+                    time.sleep(10)
+                    continue
+                es_noticia = noticias_peligrosas()
+                if es_noticia and BOT["pos"] is None:
+                    BOT["ult"] = "PAUSA NOTICIAS - Espero"
                 else:
-                    ultima_señal = f"AUTOMÁTICO ANALIZANDO {nombre} ({info['tipo']}) - Precio REAL ${precio:.2f} - RSI {rsi} - Esperando..."
-            time.sleep(60)
-        except Exception as e:
-            print(e); time.sleep(15)
+                    if dec == "COMPRAR":
+                        if BOT["pos"] is None:
+                            BOT["pos"] = "COMPRAR"
+                            BOT["entrada"] = oro
+                            BOT["operaciones_dia"] += 1
+                            BOT["ult"] = "BOT COMPRO en " + str(oro)
+                            telegram("JEFE COMPRE ORO en " + str(oro) + " Balance " + str(BOT["balance"]))
+                            if BROKER_KEY:
+                                enviar_orden_real("COMPRAR", oro)
+                                BOT["modo"] = "REAL - Dinero real"
+                    if BOT["pos"] == "COMPRAR":
+                        oro2 = precio("GC=F") or BOT["entrada"]
+                        gan = oro2 - BOT["entrada"]
+                        cerrar = False
+                        motivo = ""
+                        sl_dinamico = -10
+                        if gan >= 10:
+                            sl_dinamico = 5
+                        if gan >= 20:
+                            cerrar = True
+                            motivo = "TP Gane 20"
+                        if gan <= sl_dinamico:
+                            cerrar = True
+                            if sl_dinamico == 5:
+                                motivo = "TRAILING Asegure 5"
+                            else:
+                                motivo = "SL Perdi 10"
+                        if cerrar:
+                            if gan > 20:
+                                gan = 20
+                            if gan < -10:
+                                gan = -10
+                            BOT["balance"] += gan
+                            if gan >= 0:
+                                BOT["ganadas"] += 1
+                            else:
+                                BOT["perdidas"] += 1
+                                BOT["perdidas_dia"] += 1
+                            BOT["ult"] = motivo + " Balance " + str(BOT["balance"])
+                            telegram("JEFE " + motivo + " en " + str(oro2) + " Balance " + str(BOT["balance"]) + " Ganadas " + str(BOT["ganadas"]) + " Perdidas " + str(BOT["perdidas"]))
+                            BOT["pos"] = None
+            time.sleep(10)
+        except:
+            time.sleep(5)
 
-@app.route('/')
-def panel():
-    ganancia = dinero_demo - dinero_inicial
-    pos = f"📍 Posición: {posicion_abierta['tipo']} {posicion_abierta['activo']} en ${posicion_abierta['entrada']:.2f}" if posicion_abierta else "📍 Sin posición - Buscando en 14 activos solo..."
-    # Botones por tipo
-    def botones_por_tipo(tipo):
-        html = ""
-        for k, v in ACTIVOS.items():
-            if v["tipo"] == tipo:
-                html += f"<div style='background:#222; padding:10px; border:1px solid gold; border-radius:10px; display:inline-block; margin:5px; min-width:110px;'><b>{k}</b><br>${v['precio']:.2f}<br><small>{tipo}</small></div>"
-        return html
-    historial_html = "<br><br>".join(historial[:6]) if historial else "El robot automático completo está trabajando solo en divisas y acciones..."
-    return f"""
-    <html><head><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="refresh" content="30">
-    <script src="https://s3.tradingview.com/tv.js"></script></head>
-    <body style="font-family:Arial; background:#000; color:white; padding:10px; text-align:center;">
-        <h1 style="color:gold;">👑 RAUDY VIP PRO - AUTOMÁTICO COMPLETO 👑</h1>
-        <h3 style="color:#FFD700;">DIVISAS + ACCIONES + TESLA + META + SP500 + AMAZON + ORO + BTC</h3>
-        <div style="background:#111; border:2px solid gold; padding:15px; border-radius:15px;">
-            <h2>💰 DEMO: ${dinero_demo:.2f} | Ganancia: ${ganancia:.2f} | Operaciones: {operaciones_hoy}/3</h2>
-            <p>{pos}</p><p>📢 {ultima_señal}</p><p>🎤 {ultima_voz}</p>
-            <button onclick="hablar()" style="background:gold; color:black; padding:12px 20px; border:none; border-radius:10px; font-size:16px; font-weight:bold;">🔊 ESCUCHAR AL ROBOT</button>
-            <p>✅ Automático | ✅ 14 Activos | ✅ Entra Solo | ✅ Sale Solo | ✅ Stop Loss | ✅ Max 3</p>
-        </div>
-        <h3 style="color:gold;">💱 DIVISAS - FOREX REAL</h3><div>{botones_por_tipo("DIVISA")}</div>
-        <h3 style="color:gold;">📈 ACCIONES - EMPRESAS REALES</h3><div>{botones_por_tipo("ACCION")}</div>
-        <h3 style="color:gold;">🏆 INDICE + ORO + CRIPTO</h3><div>{botones_por_tipo("INDICE")}{botones_por_tipo("ORO")}{botones_por_tipo("CRIPTO")}</div>
+# OREJAS - ESCUCHA TELEGRAM Y RESPONDE
+def telegram_escuchar():
+    while True:
+        try:
+            if not TELE_TOKEN:
+                time.sleep(10)
+                continue
+            u = "https://api.telegram.org/bot" + TELE_TOKEN + "/getUpdates?offset=" + str(ULTIMO_ID[0]+1) + "&timeout=10"
+            req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=15) as r:
+                d = json.loads(r.read().decode())
+                for up in d.get("result", []):
+                    ULTIMO_ID[0] = up["update_id"]
+                    msg = up.get("message", {})
+                    texto = msg.get("text", "").lower()
+                    chat = str(msg.get("chat", {}).get("id", ""))
+                    if not chat:
+                        continue
+                    oro = precio("GC=F") or 4065
+                    if "/start" in texto:
+                        telegram("Hola JEFE Soy VIP ORO Raudy Escribe /precio para ORO, /senal para SENAL, /todo para todo", chat)
+                    elif "/precio" in texto or "/todo" in texto:
+                        telegram("JEFE ORO AHORA: " + str(oro) + " Balance: " + str(BOT["balance"]) + " Bot: " + ("PRENDIDO" if BOT["activo"] else "APAGADO") + " Ganadas: " + str(BOT["ganadas"]) + " Perdidas: " + str(BOT["perdidas"]), chat)
+                    elif "/senal" in texto:
+                        dec = cerebro(oro, HIST)
+                        telegram("JEFE SENAL: " + dec + " ORO: " + str(oro) + " RSI: " + str(round(rsi(HIST),1)) + " MACD: " + ("SUBIENDO" if macd(HIST) > 0 else "BAJANDO") + " Bollinger: " + boll(HIST) + " Doble: " + ("CONFIRMADO" if doble(HIST) else "ESPERA"), chat)
+                    elif texto.strip() != "":
+                        telegram("JEFE escribe /precio para ver el oro, /senal para la senal", chat)
+        except:
+            time.sleep(5)
+threading.Thread(target=telegram_escuchar, daemon=True).start()
+threading.Thread(target=bot_motor, daemon=True).start()
 
-        <h3>📈 GRÁFICO ORO</h3><div id="chart_oro" style="height:350px;"></div>
-        <h3>📈 GRÁFICO EUR/USD - DIVISA</h3><div id="chart_euro" style="height:350px;"></div>
-        <h3>📈 GRÁFICO TESLA</h3><div id="chart_tesla" style="height:350px;"></div>
-        <h3>📈 GRÁFICO META</h3><div id="chart_meta" style="height:350px;"></div>
-        <h3>📈 GRÁFICO SP500</h3><div id="chart_sp" style="height:350px;"></div>
-        <h3>📈 GRÁFICO AMAZON</h3><div id="chart_amzn" style="height:350px;"></div>
-        <h3>📈 GRÁFICO BTC</h3><div id="chart_btc" style="height:350px;"></div>
+HTML = """
+<html><head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RAUDY VIP PRO</title>
+<style>
+body{margin:0;font-family:Arial;background:#0a0a0a;color:#fff;padding:12px}
+.top{background:gold;color:#000;padding:16px;border-radius:16px;text-align:center}
+.top h1{margin:0;font-size:30px}
+.card{background:#1a1a1a;border-radius:18px;padding:16px;margin-top:12px;border:2px solid #333}
+.big{font-size:55px;font-weight:bold;text-align:center;color:#00ff88}
+.cen{text-align:center;font-size:16px}
+.btn{width:100%;padding:18px;font-size:22px;font-weight:bold;border:none;border-radius:14px;margin-top:10px}
+.verde{background:#00c853;color:#fff}
+.rojo{background:#d50000;color:#fff}
+.morado{background:#7b1fa2;color:#fff}
+.azul{background:#00bcd4;color:#fff}
+.naranja{background:#ff9800;color:#000}
+.oro{background:gold;color:#000}
+input,select{width:100%;padding:14px;font-size:20px;border-radius:12px;border:none;margin-top:8px}
+</style></head><body>
+<div class="top"><h1>RAUDY VIP PRO</h1><p>PROFESIONAL - EN VIVO</p><p id="estado">CONECTANDO...</p></div>
+<div class="card">
+<h2 style="text-align:center">BOT AUTO - PROFESIONAL</h2>
+<p class="cen">RSI: <b id="rsi" style="color:gold">--</b> | MACD: <b id="macd" style="color:#00bcd4">--</b></p>
+<p class="cen">Bollinger: <b id="boll" style="color:#ff9800">--</b> | Doble: <b id="doble" style="color:#00ff88">--</b></p>
+<p class="cen">Balance: <b id="balance" style="color:#00ff88">$1000</b></p>
+<p class="cen" id="bot-est">BOT APAGADO</p>
+<p class="cen" id="perf">Ganadas: 0 | Perdidas: 0</p>
+<p class="cen" id="pro-info" style="background:#000;padding:8px;border-radius:10px">PRO: Telegram | Freno 3 perdidas | Sin noticias | Trailing | Broker listo</p>
+<p class="cen" style="background:#000;padding:8px;border-radius:10px">RIESGO 1:2 - Gano $20 | Pierdo $10 | Trailing asegura $5</p>
+<button class="btn morado" id="btn-bot" onclick="toggleBot()">PRENDER BOT AUTO</button>
+<button class="btn azul" onclick="hacerBack()">BACKTEST REAL</button>
+<p class="cen" id="back-res" style="background:#000;padding:10px;border-radius:10px">Sin backtest todavia</p>
+</div>
+<div class="card">
+<h2 style="text-align:center">ORO EN VIVO</h2>
+<div class="big" id="precio">----</div>
+<p class="cen" id="cerebro">CEREBRO: ESPERA</p>
+<p class="cen" id="senal">SENAL: ESPERA</p>
+<button class="btn naranja" onclick="activarVoz()">ACTIVAR VOZ</button>
+</div>
+<div class="card">
+<h2 style="text-align:center">ELIGE ACTIVO</h2>
+<select id="activo" onchange="cambiar()"><option value="ORO">ORO</option><option value="TESLA">TESLA</option><option value="APPLE">APPLE</option><option value="META">META</option><option value="EUR/USD">EUR/USD</option><option value="BTC">BTC</option></select>
+<p class="cen">TP</p><input id="tp" value="4200" type="number">
+<p class="cen">SL</p><input id="sl" value="4100" type="number">
+<button class="btn verde" onclick="operar('COMPRAR')">COMPRAR</button>
+<button class="btn rojo" onclick="operar('VENDER')">VENDER</button>
+</div>
+<div class="card">
+<h2 style="text-align:center">PRECIOS</h2>
+<p class="cen" id="lista">Cargando...</p>
+</div>
+<div class="card">
+<h2 style="text-align:center">HABLAME JEFE</h2>
+<a href="https://t.me/raudy_vip_oro_bot"><button class="btn" style="background:#0088cc;color:#fff">TELEGRAM</button></a>
+<a href="https://wa.me/41767574050"><button class="btn" style="background:#25D366;color:#fff">WHATSAPP</button></a>
+<a href="https://paypal.me/RaudyManzueta/20"><button class="btn oro">PAGAR $20 - PAYPAL</button></a>
+</div>
+<script>
+let precios={};let act="ORO";let voz=false;
+function hablar(t){let v=new SpeechSynthesisUtterance(t);v.lang='es-DO';speechSynthesis.speak(v);}
+function activarVoz(){voz=true;hablar('Jefe voz activada');alert('VOZ ACTIVADA');}
+function cambiar(){act=document.getElementById('activo').value;actualizar();}
+function operar(t){hablar('Jefe voy a '+t);alert('Orden '+t+' '+act);}
+async function toggleBot(){let r=await fetch('/api/bot_auto',{method:'POST'});let d=await r.json();document.getElementById('btn-bot').innerText=d.activo?'APAGAR BOT AUTO':'PRENDER BOT AUTO';document.getElementById('bot-est').innerText=d.ult;hablar(d.activo?'Bot prendido':'Bot apagado');}
+async function hacerBack(){document.getElementById('back-res').innerText='Probando con datos reales...';let r=await fetch('/api/backtest');let d=await r.json();document.getElementById('back-res').innerHTML='Modo '+d.modo+'<br>Final $'+d.balance_final+'<br>Ganadas '+d.ganadas+' Perdidas '+d.perdidas+' Win '+d.winrate+'%';hablar('Backtest listo '+d.balance_final+' dolares');}
+function actualizar(){if(precios[act]){document.getElementById('precio').innerText=precios[act];}}
+async function cargar(){try{let r=await fetch('/api/precios');precios=await r.json();document.getElementById('estado').innerText='EN VIVO '+new Date().toLocaleTimeString();let h='';for(let k in precios){h+=k+': '+precios[k]+'<br>';}document.getElementById('lista').innerHTML=h;actualizar();let s=await fetch('/api/senal');let sd=await s.json();document.getElementById('cerebro').innerText='CEREBRO: '+sd.decision;document.getElementById('senal').innerText='SENAL: '+sd.decision;document.getElementById('rsi').innerText=sd.rsi;document.getElementById('macd').innerText=sd.macd;document.getElementById('boll').innerText=sd.bollinger;document.getElementById('doble').innerText=sd.doble;let b=await fetch('/api/bot_auto');let bd=await b.json();document.getElementById('balance').innerText='$'+bd.balance;document.getElementById('bot-est').innerText=bd.ult;document.getElementById('perf').innerText='Ganadas: '+bd.ganadas+' | Perdidas: '+bd.perdidas;document.getElementById('btn-bot').innerText=bd.activo?'APAGAR BOT AUTO':'PRENDER BOT AUTO';}catch(e){document.getElementById('estado').innerText='Sin internet...';}}
+cargar();setInterval(cargar,3000);
+</script></body></html>
+"""
 
-        <div style="background:#111; border:2px solid gold; padding:15px; border-radius:15px; text-align:left;"><h3>📊 Historial Automático:</h3><p>{historial_html}</p></div>
-        <div style="margin-top:15px;">
-            <p><a href="{MI_TELEGRAM_BOT}" style="color:#00BFFF; font-size:18px;">🤖 TELEGRAM - @raudy_vip_oro_bot</a></p>
-            <p><a href="{MI_PAYPAL}" style="color:#FFD700; font-size:18px;">💳 PAYPAL $20 - Activar VIP PRO</a></p>
-        </div>
-        <script>
-        function hablar() {{
-            var msg = new SpeechSynthesisUtterance("{ultima_voz}");
-            msg.lang = 'es-ES'; window.speechSynthesis.speak(msg);
-        }}
-        new TradingView.widget({{"autosize":true,"symbol":"OANDA:XAUUSD","interval":"15","timezone":"America/Santo_Domingo","theme":"dark","style":"1","locale":"es","container_id":"chart_oro"}});
-        new TradingView.widget({{"autosize":true,"symbol":"OANDA:EURUSD","interval":"15","timezone":"America/Santo_Domingo","theme":"dark","style":"1","locale":"es","container_id":"chart_euro"}});
-        new TradingView.widget({{"autosize":true,"symbol":"NASDAQ:TSLA","interval":"15","timezone":"America/Santo_Domingo","theme":"dark","style":"1","locale":"es","container_id":"chart_tesla"}});
-        new TradingView.widget({{"autosize":true,"symbol":"NASDAQ:META","interval":"15","timezone":"America/Santo_Domingo","theme":"dark","style":"1","locale":"es","container_id":"chart_meta"}});
-        new TradingView.widget({{"autosize":true,"symbol":"OANDA:SPX500USD","interval":"15","timezone":"America/Santo_Domingo","theme":"dark","style":"1","locale":"es","container_id":"chart_sp"}});
-        new TradingView.widget({{"autosize":true,"symbol":"NASDAQ:AMZN","interval":"15","timezone":"America/Santo_Domingo","theme":"dark","style":"1","locale":"es","container_id":"chart_amzn"}});
-        new TradingView.widget({{"autosize":true,"symbol":"BINANCE:BTCUSDT","interval":"15","timezone":"America/Santo_Domingo","theme":"dark","style":"1","locale":"es","container_id":"chart_btc"}});
-        </script>
-    </body></html>
-    """
-if not bot_encendido:
-    threading.Thread(target=bot_automatico, daemon=True).start()
+@app.route("/")
+def home():
+    return HTML
+
+@app.route("/api/precios")
+def api_precios():
+    oro = precio("GC=F") or 4149
+    tes = precio("TSLA") or 378
+    apl = precio("AAPL") or 350
+    met = precio("META") or 641
+    eur = precio("EURUSD=X") or 1.16
+    return jsonify({"ORO": oro, "TESLA": tes, "APPLE": apl, "META": met, "EUR/USD": eur, "BTC": 90000})
+
+@app.route("/api/senal")
+def api_senal():
+    oro = precio("GC=F") or 4149
+    dec = cerebro(oro, HIST)
+    rr = rsi(HIST)
+    mc = macd(HIST)
+    bb = boll(HIST)
+    dd = doble(HIST)
+    txt = "CONFIRMADO" if dd else "ESPERA"
+    return jsonify({"precio": oro, "decision": dec, "rsi": round(rr, 1), "macd": "SUBIENDO" if mc > 0 else "BAJANDO", "bollinger": bb, "doble": txt, "noticias": noticias_peligrosas()})
+
+@app.route("/api/bot_auto", methods=["GET", "POST"])
+def api_bot():
+    if request.method == "POST":
+        BOT["activo"] = not BOT["activo"]
+        if BOT["activo"]:
+            BOT["ult"] = "BOT PRENDIDO - Dinero falso"
+            telegram("JEFE Bot prendido - Modo practica")
+        else:
+            BOT["ult"] = "BOT APAGADO"
+            BOT["pos"] = None
+    return jsonify(BOT)
+
+@app.route("/api/backtest")
+def api_back():
+    return jsonify(backtest())
+
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=10000)
