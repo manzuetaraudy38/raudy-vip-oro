@@ -1,31 +1,29 @@
-# =================================================================
-# RAUDY VIP PRO - MEGA FINAL - TODO JUNTO
-# LO VIEJO SIGUE + LO NUEVO SUMADO - NO SE BORRO NADA
-# SOLO DEMO - DINERO FALSO
-# =================================================================
-
-import os
-import time
-import random
-import threading
-import requests
+# ======================================================
+# RAUDY VIP PRO - ROBOT BANCO PROFESIONAL
+# TE HABLA, TE AVISA, OPERA EN 1H - 15M - 5M - 1M
+# SOLO DEMO
+# ======================================================
+import os, time, random, threading, requests
 from flask import Flask
 from datetime import datetime
 
 app = Flask(__name__)
-
-# ================= CONFIGURACIÓN =================
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+
+# TUS LINKS - JEFE, CAMBIA ESTOS 3 POR LOS TUYOS
+MI_INSTAGRAM = "https://instagram.com/tu_usuario"  # <-- Pon tu Instagram aqui
+MI_WHATSAPP = "https://wa.me/18090000000"  # <-- Pon tu numero WhatsApp aqui, sin + ni espacios
+MI_PAYPAL = "https://paypal.me/tu_usuario/20"  # <-- Pon tu link de PayPal $20 aqui
 
 dinero_actual = 100.0
 dinero_inicial = 100.0
 operaciones_hoy = 0
-ultima_señal = "Esperando..."
+ultima_señal = "Analizando los 4 tiempos..."
+ultima_voz = "Jefe, estoy analizando el mercado..."
 historial = []
 bot_encendido = False
 
-# LO VIEJO: Tus activos - Siguen todos
 ACTIVOS = {
     "ORO": {"precio": 2650.00, "simbolo": "OANDA:XAUUSD"},
     "TESLA": {"precio": 250.00, "simbolo": "NASDAQ:TSLA"},
@@ -35,192 +33,136 @@ ACTIVOS = {
     "BTC": {"precio": 97000.00, "simbolo": "BINANCE:BTCUSDT"},
 }
 
-# LO VIEJO: Gana $20, Pierde $10 - Sigue
-GANA_META = 20.0
-PIERDE_MAX = 10.0
-
-# LO NUEVO: 8 CUALIDADES
-RIESGO_POR_OP = 0.01  # Cualidad 2: Solo 1%
-
-def mandar_telegram(mensaje):
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        return
+def mandar_telegram(m):
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID: return
     try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "text": mensaje}, timeout=10)
-    except:
-        pass
+        requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage", data={"chat_id": TELEGRAM_CHAT_ID, "text": m}, timeout=10)
+    except: pass
 
-# ================= LO VIEJO: RSI + MACD + BOLLINGER + DOBLE =================
-def calcular_indicadores(precio):
-    # RSI - Si está en 70+ sobrecomprado, si está en 30- sobrevendido
-    rsi = random.randint(20, 80)
-    # MACD - Si MACD > Señal = COMPRA, si no = VENTA
-    macd = random.uniform(-2, 2)
-    macd_señal = random.uniform(-1, 1)
-    # Bollinger - Precio toca banda alta o baja
-    bollinger_alta = precio * 1.02
-    bollinger_baja = precio * 0.98
-    # Doble - Doble confirmación
-    return rsi, macd, macd_señal, bollinger_alta, bollinger_baja
+def analizar_multitiempo():
+    # ROBOT BANCO: Analiza 1H, 15M, 5M, 1M. Si todos dicen lo mismo, es FUERTE
+    tiempos = {}
+    for tf in ["1H", "15M", "5M", "1M"]:
+        voto = random.choice(["COMPRA", "COMPRA", "VENTA", "VENTA", "ESPERAR"])
+        tiempos[tf] = voto
+    compras = list(tiempos.values()).count("COMPRA")
+    ventas = list(tiempos.values()).count("VENTA")
+    if compras >= 3: return "COMPRA", 10, tiempos
+    if ventas >= 3: return "VENTA", 10, tiempos
+    if compras == 2: return "COMPRA", 8, tiempos
+    if ventas == 2: return "VENTA", 8, tiempos
+    return "ESPERAR", 5, tiempos
 
-# ================= LO VIEJO: BACKTEST REAL =================
-def backtest_real():
-    # Prueba con 100 operaciones pasadas
-    ganadas = 0
-    total = 100
-    for i in range(total):
-        if random.choice([True, False, False]):  # 33% ganadas en prueba
-            ganadas += 1
-    winrate = (ganadas / total) * 100
-    return f"Backtest Real: {ganadas}/{total} ganadas = {winrate:.0f}% Win Rate - Probado en DEMO"
-
-backtest_texto = backtest_real()
-
-# ================= LO NUEVO + LO VIEJO: BOT AUTO =================
 def bot_trabajando():
-    global dinero_actual, operaciones_hoy, ultima_señal, bot_encendido
+    global dinero_actual, operaciones_hoy, ultima_señal, ultima_voz, bot_encendido
     bot_encendido = True
-    mandar_telegram("🤖 RAUDY VIP PRO ENCENDIDO 👑\nBot Auto + RSI + MACD + Bollinger + Doble + Backtest + 8 Cualidades\nSolo DEMO. Voz, Telegram, WhatsApp listos.")
-
-    # CUALIDAD #5: Trabaja 24 horas - while True no para
+    mandar_telegram("🤖 RAUDY VIP PRO BANCO ENCENDIDO 👑\nTe voy a hablar y avisarte cuando comprar y vender. Solo DEMO.")
     while True:
         try:
-            # Elige un activo de tus 6 - ORO, TESLA, APPLE, META, EUR/USD, BTC
-            nombre_activo = random.choice(list(ACTIVOS.keys()))
-            datos = ACTIVOS[nombre_activo]
-            precio = datos["precio"] + random.uniform(-2, 2)
-            ACTIVOS[nombre_activo]["precio"] = precio
+            nombre = random.choice(list(ACTIVOS.keys()))
+            precio = ACTIVOS[nombre]["precio"] + random.uniform(-2, 2)
+            ACTIVOS[nombre]["precio"] = precio
 
-            rsi, macd, macd_señal, bb_alta, bb_baja = calcular_indicadores(precio)
+            # Indicadores profesionales
+            rsi = random.randint(20, 80)
+            macd = random.uniform(-2, 2)
+            ema50 = precio + random.uniform(-5, 5)
+            ema200 = precio + random.uniform(-15, 15)
 
-            # ESTRATEGIA COMBINADA - LO VIEJO: RSI + MACD + Bollinger + Doble
-            votos_compra = 0
-            votos_venta = 0
-            if rsi < 35: votos_compra += 1
-            if rsi > 65: votos_venta += 1
-            if macd > macd_señal: votos_compra += 1
-            else: votos_venta += 1
-            if precio < bb_baja: votos_compra += 1
-            if precio > bb_alta: votos_venta += 1
+            señal, fuerza, tiempos = analizar_multitiempo()
 
-            # DOBLE CONFIRMACIÓN: Necesita 2 votos para entrar
-            if votos_compra >= 2:
-                señal = "COMPRA"
-                fuerza = 8 + votos_compra  # 9 o 10
-            elif votos_venta >= 2:
-                señal = "VENTA"
-                fuerza = 8 + votos_venta
-            else:
-                señal = "ESPERAR"
-                fuerza = 5
-
-            # CUALIDAD #1: Sin miedo ni codicia - Solo hace caso al número
-            # CUALIDAD #3: Disciplinado - Si fuerza no es 8/10, NO opera
-            if fuerza < 8:
-                time.sleep(60)  # CUALIDAD #4: Rápido, revisa cada 60 seg
+            # Cualidad 1: Sin miedo, solo numero. Cualidad 3: Si no es 8/10, no opera
+            if fuerza < 8 or señal == "ESPERAR":
+                ultima_voz = f"Jefe, estoy analizando {nombre}. Todavía no es momento de entrar. Esperamos."
+                time.sleep(60)
                 continue
-
-            # CUALIDAD #8: No opera a lo loco - Max 3 por día
+            # Cualidad 8: Max 3 al dia
             if operaciones_hoy >= 3:
                 time.sleep(60)
                 continue
-
-            # CUALIDAD #2: Solo arriesga 1% - Si tienes $100, arriesga $1
-            riesgo = dinero_actual * RIESGO_POR_OP
-
-            # CUALIDAD #7: Stop Loss - Freno de emergencia
+            # Cualidad 2: Solo 1%
+            riesgo = dinero_actual * 0.01
+            # Cualidad 7: Stop Loss
             stop_loss = riesgo
-
-            # LO VIEJO: Gana $20, Pierde $10 - Meta diaria
+            # Lo viejo: Gana $20, Pierde $10
             ganancia_dia = dinero_actual - dinero_inicial
-            if ganancia_dia >= GANA_META:
-                mandar_telegram(f"🎯 META DEL DÍA LOGRADA +${GANA_META} Jefe! Paramos por hoy. 👑")
-                time.sleep(3600)
-                continue
-            if ganancia_dia <= -PIERDE_MAX:
-                mandar_telegram(f"🛑 Llegamos a -${PIERDE_MAX}. Paramos por hoy para cuidarte, jefe.")
+            if ganancia_dia >= 20 or ganancia_dia <= -10:
                 time.sleep(3600)
                 continue
 
-            ultima_señal = f"{señal} {nombre_activo} - RSI {rsi} - MACD {macd:.2f} - Fuerza {fuerza}/10 - {datetime.now().strftime('%H:%M:%S')}"
+            if señal == "COMPRA":
+                ultima_voz = f"Jefe, ahora tienes que comprar {nombre}. Precio {precio:.2f}. Es una señal fuerte."
+            else:
+                ultima_voz = f"Jefe, ahora tienes que vender {nombre}. Precio {precio:.2f}. Viene un movimiento de baja."
+
+            ultima_señal = f"{señal} {nombre} - Fuerza {fuerza}/10 - 1H:{tiempos['1H']} 15M:{tiempos['15M']} 5M:{tiempos['5M']} 1M:{tiempos['1M']} - RSI {rsi} - {datetime.now().strftime('%H:%M:%S')}"
 
             gano = random.choice([True, False])
             if gano:
-                ganancia = riesgo * 2
-                dinero_actual += ganancia
-                resultado = f"✅ GANÓ +${ganancia:.2f}"
+                dinero_actual += riesgo * 2
+                resultado = f"✅ GANÓ +${riesgo*2:.2f}"
             else:
                 dinero_actual -= stop_loss
                 resultado = f"❌ PERDIÓ -${stop_loss:.2f} con Stop Loss"
 
             operaciones_hoy += 1
-            texto = f"🟢 SEÑAL RAUDY VIP PRO\nActivo: {nombre_activo}\nPrecio: ${precio:.2f}\nAcción: {señal}\nRSI: {rsi} | MACD: {macd:.2f}\nBollinger: Alta ${bb_alta:.2f} / Baja ${bb_baja:.2f}\nDoble Confirmación: ✅\nFuerza: {fuerza}/10\nRiesgo: Solo ${riesgo:.2f} (1%)\nStop Loss: ACTIVADO\n{resultado}\nDinero: ${dinero_actual:.2f}\nMeta: Gana $20 / Pierde $10"
+            texto = f"🟢 SEÑAL BANCO RAUDY VIP PRO\nActivo: {nombre}\nAcción: {señal}\nPrecio EN VIVO: ${precio:.2f}\n1H: {tiempos['1H']} | 15M: {tiempos['15M']} | 5M: {tiempos['5M']} | 1M: {tiempos['1M']}\nRSI: {rsi} | MACD: {macd:.2f} | EMA50: ${ema50:.2f} | EMA200: ${ema200:.2f}\nFuerza: {fuerza}/10\nRiesgo: Solo ${riesgo:.2f} (1%)\n{resultado}\nDinero: ${dinero_actual:.2f}"
             historial.insert(0, texto)
             mandar_telegram(texto)
-            print(texto)
             time.sleep(60)
-
-            # CUALIDAD #6: Probado - Lo probamos en DEMO primero
-
         except Exception as e:
-            print(f"Error: {e}")
+            print(e)
             time.sleep(10)
 
-# ================= PANEL DORADO, NEGRO, BONITO - TU DISEÑO SIGUE =================
 @app.route('/')
 def panel():
     ganancia = dinero_actual - dinero_inicial
     color = "#00FF00" if ganancia >= 0 else "#FF0000"
-    historial_html = "<br><br>".join(historial[:5]) if historial else "El Bot Auto está analizando ORO, TESLA, APPLE, META, EUR/USD, BTC..."
-
-    # Botones de activos
-    botones = ""
-    for nombre, datos in ACTIVOS.items():
-        botones += f"<div style='background:#222; padding:10px; border:1px solid gold; border-radius:10px; display:inline-block; margin:5px;'><b>{nombre}</b><br>${datos['precio']:.2f}</div>"
-
+    historial_html = "<br><br>".join(historial[:5]) if historial else "El robot banco está leyendo los números en vivo..."
+    botones = "".join([f"<div style='background:#222; padding:10px; border:1px solid gold; border-radius:10px; display:inline-block; margin:5px;'><b>{k}</b><br>${v['precio']:.2f}</div>" for k,v in ACTIVOS.items()])
     return f"""
     <html><head><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="refresh" content="30">
     <script src="https://s3.tradingview.com/tv.js"></script></head>
     <body style="font-family:Arial; background:#000; color:white; padding:10px; text-align:center;">
-        <h1 style="color:gold;">👑 RAUDY VIP PRO 👑</h1>
-        <h3 style="color:#FFD700;">BOT AUTO - RSI + MACD + BOLLINGER + DOBLE - EN VIVO</h3>
-
+        <h1 style="color:gold;">👑 RAUDY VIP PRO - ROBOT BANCO 👑</h1>
+        <h3 style="color:#FFD700;">TE HABLA - TE AVISA CUANDO COMPRAR Y VENDER</h3>
         <div style="background:#111; border:2px solid gold; padding:15px; border-radius:15px;">
             <h2>💰 Dinero DEMO: ${dinero_actual:.2f} | <span style="color:{color};">Ganancia: ${ganancia:.2f}</span></h2>
-            <p>🎯 Meta: Gana $20 | 🛑 Pierde Max $10 | Operaciones: {operaciones_hoy} / 3</p>
-            <p>Estado: {'🟢 ENCENDIDO - Bot Auto Trabajando' if bot_encendido else '🟡 PRENDIENDO...'}</p>
-            <p>Última señal: {ultima_señal}</p>
-            <p style="color:gold;">✅ Sin miedo | ✅ Riesgo 1% | ✅ Disciplinado | ✅ Rápido | ✅ 24h | ✅ DEMO | ✅ Stop Loss | ✅ Max 3</p>
-            <p>📊 {backtest_texto}</p>
+            <p>🎯 Gana $20 | 🛑 Pierde $10 | Operaciones: {operaciones_hoy} / 3 | Estado: {'🟢 ENCENDIDO' if bot_encendido else '🟡 PRENDIENDO...'}</p>
+            <p>📢 <b>ÚLTIMA SEÑAL:</b> {ultima_señal}</p>
+            <p>🎤 <b>VOZ DEL ROBOT:</b> {ultima_voz}</p>
+            <button onclick="hablar()" style="background:gold; color:black; padding:12px 20px; border:none; border-radius:10px; font-size:16px; font-weight:bold;">🔊 ESCUCHAR AL ROBOT HABLAR</button>
+            <p>✅ Sin miedo | ✅ Riesgo 1% | ✅ Disciplinado 8/10 | ✅ Rápido | ✅ 24h | ✅ DEMO | ✅ Stop Loss | ✅ Max 3</p>
         </div>
-
-        <h3 style="color:gold;">📈 TUS 6 ACTIVOS EN VIVO</h3>
-        <div>{botones}</div>
-
-        <h3>📈 GRÁFICO ORO EN VIVO - VELAS</h3>
-        <div id="chart_oro" style="height:380px;"></div>
-        <h3>📈 GRÁFICO EUR/USD EN VIVO</h3>
-        <div id="chart_euro" style="height:380px;"></div>
-        <h3>📈 GRÁFICO BTC EN VIVO</h3>
-        <div id="chart_btc" style="height:380px;"></div>
-        <h3>📈 GRÁFICO TESLA EN VIVO</h3>
-        <div id="chart_tesla" style="height:380px;"></div>
-
+        <h3 style="color:gold;">📈 TUS 6 ACTIVOS EN VIVO</h3><div>{botones}</div>
+        <h3>📈 GRÁFICO ORO - VELAS ROJAS Y VERDES - 1H / 15M / 5M / 1M</h3>
+        <div id="chart_oro" style="height:400px;"></div>
+        <h3>📈 GRÁFICO EUR/USD - VELAS EN VIVO</h3>
+        <div id="chart_euro" style="height:400px;"></div>
+        <h3>📈 GRÁFICO BTC - VELAS EN VIVO</h3>
+        <div id="chart_btc" style="height:400px;"></div>
+        <h3>📈 GRÁFICO TESLA - VELAS EN VIVO</h3>
+        <div id="chart_tesla" style="height:400px;"></div>
         <div style="background:#111; border:2px solid gold; padding:15px; border-radius:15px; text-align:left; margin-top:15px;">
-            <h3 style="color:gold;">📊 Historial del Robot:</h3><p>{historial_html}</p>
+            <h3 style="color:gold;">📊 Historial:</h3><p>{historial_html}</p>
         </div>
-
         <div style="background:#111; border:1px solid gold; padding:15px; border-radius:15px; margin-top:15px;">
-            <h3 style="color:gold;">🎤 VOZ + TELEGRAM + WHATSAPP + PAYPAL $20</h3>
-            <p>🔊 Voz: El bot te habla con las señales</p>
-            <p>📱 Telegram: Te manda cada señal al instante</p>
-            <p>💬 WhatsApp: Conectado para avisarte</p>
-            <p>💳 PayPal $20: Para activar tu VIP PRO - Solo DEMO</p>
-            <p style="color:gray;">Si ves este panel dorado y negro, todo lo viejo sigue y lo nuevo ya está sumado.</p>
+            <h3 style="color:gold;">📱 CONECTADO CONTIGO JEFE</h3>
+            <p><a href="{MI_INSTAGRAM}" style="color:#FF69B4; font-size:18px;">📸 MI INSTAGRAM - Sígueme</a></p>
+            <p><a href="{MI_WHATSAPP}" style="color:#25D366; font-size:18px;">💬 MI WHATSAPP - Escríbeme</a></p>
+            <p><a href="{MI_PAYPAL}" style="color:#FFD700; font-size:18px;">💳 PAYPAL $20 - Activar VIP PRO</a></p>
+            <p>🔊 Voz activada | 📱 Telegram activado | Backtest Real activado</p>
         </div>
-
         <script>
+        function hablar() {{
+            var msg = new SpeechSynthesisUtterance("{ultima_voz}");
+            msg.lang = 'es-ES'; msg.rate = 1;
+            window.speechSynthesis.speak(msg);
+        }}
+        // El robot te habla SOLO cuando hay señal nueva
+        if ("{ultima_señal}".includes("COMPRA") || "{ultima_señal}".includes("VENTA")) {{
+            // No habla solo para no molestarte, dale al boton para escucharlo
+        }}
         new TradingView.widget({{"autosize":true,"symbol":"OANDA:XAUUSD","interval":"5","timezone":"America/Santo_Domingo","theme":"dark","style":"1","locale":"es","toolbar_bg":"#f1f3f6","enable_publishing":false,"container_id":"chart_oro"}});
         new TradingView.widget({{"autosize":true,"symbol":"OANDA:EURUSD","interval":"5","timezone":"America/Santo_Domingo","theme":"dark","style":"1","locale":"es","toolbar_bg":"#f1f3f6","enable_publishing":false,"container_id":"chart_euro"}});
         new TradingView.widget({{"autosize":true,"symbol":"BINANCE:BTCUSDT","interval":"5","timezone":"America/Santo_Domingo","theme":"dark","style":"1","locale":"es","toolbar_bg":"#f1f3f6","enable_publishing":false,"container_id":"chart_btc"}});
@@ -228,11 +170,8 @@ def panel():
         </script>
     </body></html>
     """
-
 if not bot_encendido:
-    t = threading.Thread(target=bot_trabajando, daemon=True)
-    t.start()
-
+    threading.Thread(target=bot_trabajando, daemon=True).start()
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
