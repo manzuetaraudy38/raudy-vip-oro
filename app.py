@@ -5,7 +5,6 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 TU_ID = os.environ.get("TU_ID")
 
-# PRECIOS DE VENTA EN GINEBRA
 PRECIOS = {
     "JABON": 5.00,
     "CREMA": 8.00,
@@ -13,7 +12,6 @@ PRECIOS = {
     "PASTA": 6.00,
 }
 
-# STOCK QUE TIENES - TU LO CAMBIAS AQUI
 STOCK = {
     "JABON": 20,
     "CREMA": 15,
@@ -58,83 +56,4 @@ async def vender(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"✅ ¡LISTO {nombre}!\n\n"
             f"Tu COMBO de 20 CHF esta pedido.\n"
             f"Raudy te va a escribir para el TWINT y la entrega en Ginebra.\n"
-            f"Gracias por comprar con RAUDY VIP 👑"
-        )
-        if TU_ID:
-            try:
-                await context.bot.send_message(chat_id=int(TU_ID), text=f"🔔 NUEVA VENTA JEFE!\nCliente: {nombre}\nQuiere: COMBO COMPLETO 20 CHF\n¡Preparalo!")
-            except:
-                pass
-        return
-
-    if texto == "SI":
-        await update.message.reply_text("Ya tu pedido esta hecho, jefe. Raudy te va a escribir ahora. Gracias!")
-        return
-
-    # SI ESCRIBE EJEMPLO: JABON 2
-    try:
-        for producto, precio in PRECIOS.items():
-            if producto in texto or (producto == "DESODORANTE" and "DESO" in texto) or (producto == "PASTA" and "DIENTE" in texto):
-                partes = texto.split()
-                cantidad = 1
-                for p in partes:
-                    if p.isdigit():
-                        cantidad = int(p)
-                total = precio * cantidad
-                stock_actual = STOCK.get(producto, 0)
-                if cantidad > stock_actual:
-                    await update.message.reply_text(f"Jefe, solo me quedan {stock_actual} de {producto}. Pide menos.")
-                    return
-                await update.message.reply_text(
-                    f"👑 PEDIDO RAUDY VIP\n\n"
-                    f"Producto: {producto}\n"
-                    f"Cantidad: {cantidad}\n"
-                    f"Precio: {precio} CHF cada uno\n"
-                    f"Total a pagar: {total} CHF\n\n"
-                    f"¿Lo quieres? Escribe SI"
-                )
-                context.user_data['pedido'] = f"{cantidad} x {producto} = {total} CHF"
-                context.user_data['producto'] = producto
-                context.user_data['cantidad'] = cantidad
-                return
-        await update.message.reply_text("Escribeme: JABON 1, CREMA 1, DESO 1, PASTA 1, o COMBO")
-    except:
-        await update.message.reply_text("Escribeme: JABON 1, CREMA 1, DESO 1, PASTA 1, o COMBO")
-
-def main():
-    print("Robot Tienda Raudy prendido!")
-    app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, vender))
-    app.run_polling()
-
-if __name__ == "__main__":
-    main()
-import os
-import threading
-from flask import Flask
-from bot import main as run_bot
-
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "👑 Tienda Raudy VIP prendida! Jabon, Crema, Deso, Pasta!"
-
-@app.route('/health')
-def health():
-    return "OK"
-
-def start_bot():
-    try:
-        run_bot()
-    except Exception as e:
-        print(f"Error: {e}")
-
-t = threading.Thread(target=start_bot, daemon=True)
-t.start()
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))Flask==3.0.0
-python-telegram-bot==20.7
-gunicorn==21.2.0
+            f"Gracias por comprar con RAUDY
