@@ -1,15 +1,17 @@
-# ROBOT CAMBIA MONEDA - RAUDY VIP GINEBRA
-# Este robot cambia Euro y Franco solo por Telegram
+# =================================================
+# ROBOT RAUDY VIP - CAMBIA EURO Y FRANCO SOLO
+# GINEBRA SUIZA 🇨🇭
+# =================================================
 import os
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-# TUS TASAS - TU LAS CAMBIAS AQUI
-COMPRA_EURO = 0.92  # Tu compras Euro a 0.92
-VENTA_EURO = 0.96   # Tu vendes Euro a 0.96
+# --- TUS TASAS, JEFE - TU LAS CAMBIAS AQUI SI QUIERES GANAR MAS ---
+COMPRA_EURO = 0.92  # Tu compras Euro a 0.92 CHF
+VENTA_EURO = 0.96   # Tu vendes Euro a 0.96 CHF
 
-# Tu numero de Telegram para que te avise
-TU_ID = 123456789  # Aqui pones tu ID de Telegram
+# --- TU TOKEN DE TELEGRAM - RENDER LO PONE SOLO ---
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -22,12 +24,44 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def cambiar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    texto = update.message.text.upper().replace(",", ".")
+    texto = update.message.text.upper().replace(",", ".").strip()
     nombre = update.message.from_user.first_name
 
+    # SI EL CLIENTE DICE SI, HACEMOS EL CAMBIO
+    if texto == "SI":
+        monto = context.user_data.get('monto', 0)
+        tipo = context.user_data.get('tipo', '')
+        le_toca = context.user_data.get('le_toca', 0)
+        ganancia = context.user_data.get('ganancia', 0)
+
+        if monto == 0:
+            await update.message.reply_text("Primero escribeme cuanto quieres cambiar. Ejemplo: 100 CHF")
+            return
+
+        await update.message.reply_text(
+            f"✅ ¡LISTO {nombre}!\n\n"
+            f"Raudy ya recibio tu pedido.\n"
+            f"Cambio: {monto} ({tipo})\n"
+            f"Te toca: {le_toca:.2f}\n\n"
+            f"Raudy te va a escribir ahora para hacerte el TWINT.\n"
+            f"Gracias por cambiar con RAUDY VIP 👑"
+        )
+        # Aviso para ti, jefe
+        TU_ID = os.environ.get("TU_ID")
+        if TU_ID:
+            try:
+                await context.bot.send_message(
+                    chat_id=int(TU_ID),
+                    text=f"🔔 NUEVO CAMBIO JEFE!\nCliente: {nombre}\nQuiere: {monto} {tipo}\nLe toca: {le_toca:.2f}\nTu ganas: {ganancia:.2f} CHF"
+                )
+            except:
+                pass
+        return
+
     try:
+        # CASO 1: CLIENTE TIENE FRANCOS Y QUIERE EUROS
         if "CHF" in texto:
-            monto = float(texto.replace("CHF", "").strip())
+            monto = float(texto.replace("CHF", "").replace("FRANCOS", "").strip())
             euros = monto / VENTA_EURO
             ganancia = monto - (euros * COMPRA_EURO)
             await update.message.reply_text(
@@ -37,14 +71,15 @@ async def cambiar(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"¿Quieres hacerlo? Escribe SI\n"
                 f"Tasa de hoy: 1€ = {VENTA_EURO} CHF"
             )
-            # Guardamos para cuando diga SI
             context.user_data['monto'] = monto
             context.user_data['tipo'] = 'CHF_A_EUR'
             context.user_data['le_toca'] = euros
             context.user_data['ganancia'] = ganancia
+            return
 
-        elif "EUR" in texto or "€" in texto:
-            monto = float(texto.replace("EUR", "").replace("€", "").strip())
+        # CASO 2: CLIENTE TIENE EUROS Y QUIERE FRANCOS
+        if "EUR" in texto or "€" in texto or "EURO" in texto:
+            monto = float(texto.replace("EUR", "").replace("€", "").replace("EURO", "").replace("EUROS", "").strip())
             francos = monto * COMPRA_EURO
             ganancia = monto * (VENTA_EURO - COMPRA_EURO)
             await update.message.reply_text(
@@ -58,36 +93,17 @@ async def cambiar(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data['tipo'] = 'EUR_A_CHF'
             context.user_data['le_toca'] = francos
             context.user_data['ganancia'] = ganancia
+            return
 
-        elif texto.strip() == "SI":
-            monto = context.user_data.get('monto', 0)
-            tipo = context.user_data.get('tipo', '')
-            le_toca = context.user_data.get('le_toca', 0)
-            ganancia = context.user_data.get('ganancia', 0)
-            await update.message.reply_text(
-                f"✅ ¡LISTO {nombre}!\n\n"
-                f"Raudy ya recibio tu pedido.\n"
-                f"Cambio: {monto} ({tipo})\n"
-                f"Te toca: {le_toca:.2f}\n\n"
-                f"Raudy te va a escribir ahora para hacerte el TWINT.\n"
-                f"Gracias por cambiar con RAUDY VIP 👑"
-            )
-            # Te avisa a ti
-            try:
-                await context.bot.send_message(chat_id=TU_ID, text=f"🔔 NUEVO CAMBIO JEFE!\nCliente: {nombre}\nQuiere: {monto} {tipo}\nLe toca: {le_toca:.2f}\nTu ganas: {ganancia:.2f} CHF")
-            except:
-                pass
-        else:
-            await update.message.reply_text("Escribeme asi: *100 CHF* o *100 EUR*")
+        await update.message.reply_text("Escribeme asi: *100 CHF* o *100 EUR*")
     except:
         await update.message.reply_text("Escribeme asi: *100 CHF* o *100 EUR*  Ejemplo: 100 CHF")
 
 def main():
-    TOKEN = os.environ.get("BOT_TOKEN")
-    app = Application.builder().token(TOKEN).build()
+    print("Robot prendido... Raudy VIP listo!")
+    app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, cambiar))
-    print("Robot prendido...")
     app.run_polling()
 
 if __name__ == "__main__":
