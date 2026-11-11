@@ -110,3 +110,31 @@ def main():
 
 if __name__ == "__main__":
     main()
+import os
+import threading
+from flask import Flask
+from bot import main as run_bot
+
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "👑 Tienda Raudy VIP prendida! Jabon, Crema, Deso, Pasta!"
+
+@app.route('/health')
+def health():
+    return "OK"
+
+def start_bot():
+    try:
+        run_bot()
+    except Exception as e:
+        print(f"Error: {e}")
+
+t = threading.Thread(target=start_bot, daemon=True)
+t.start()
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))Flask==3.0.0
+python-telegram-bot==20.7
+gunicorn==21.2.0
