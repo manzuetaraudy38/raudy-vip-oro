@@ -1,12 +1,3 @@
-from flask import Flask
-app = Flask(__name__)
-
-@app.route("/")
-def home():
-    return "RAUDY VIP ORO - Robot DEMO funcionando"
-
-if __name__ == "__main__":
-    app.run()
 //+------------------------------------------------------------------+
 //| RAUDY VIP ORO - Robot DEMO - NO usar con dinero real            |
 //| Regla: Compra si el precio esta sobre la media, vende si baja   |
