@@ -1,241 +1,99 @@
-# ======================================================
-# RAUDY VIP PRO - AUTOMÁTICO COMPLETO
-# DIVISAS + ACCIONES + ORO + BTC + SP500 + AMAZON
-# 100% AUTOMÁTICO - ÉL OPERA SOLO - SOLO DEMO
-# ======================================================
-import os, time, threading, requests
-from flask import Flask
+from flask import Flask, jsonify, request
+import requests, os
 from datetime import datetime
-
 app = Flask(__name__)
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "767574050")
 
-MI_PAYPAL = "https://paypal.me/RaudyManzueta/20"
-MI_TELEGRAM_BOT = "https://t.me/raudy_vip_oro_bot"
+# ===== RAUDY ORO M5 - AUTOMATICO =====
+# MT5 | M5 | XAUUSD ORO | ROBOT AUTO SIEMPRE PRENDIDO
+ZONA_ABAJO = 3910
+ZONA_ARRIBA = 3970
+MT5_DATA = {"ultimo": "MT5 M5 esperando...", "hora": "", "precio": 0, "activo": "XAUUSD", "accion": "ESPERA"}
+OPS = {"abiertas": [], "cerradas": [], "auto": True, "ganado": 0, "perdido": 0, "u": "Robot M5 AUTO PRENDIDO"}
 
-dinero_demo = 100.0
-dinero_inicial = 100.0
-operaciones_hoy = 0
-posicion_abierta = None
-ultima_señal = "Robot automático completo prendiendo..."
-ultima_voz = "Jefe, ya tengo divisas, acciones, Tesla, Meta, SP500 y Amazon..."
-historial = []
-bot_encendido = False
-
-# ============ TODOS TUS ACTIVOS - JEFE ============
-# DIVISAS = Forex, ACCIONES = Empresas, INDICE = SP500, CRIPTO = BTC, ORO = Oro
-ACTIVOS = {
-    # --- ORO Y CRIPTO ---
-    "ORO": {"precio": 4032.04, "tipo": "ORO", "yahoo": "GC=F", "tv": "OANDA:XAUUSD"},
-    "BTC": {"precio": 97000.00, "tipo": "CRIPTO", "yahoo": "BTC-USD", "tv": "BINANCE:BTCUSDT"},
-    # --- DIVISAS - FOREX ---
-    "EUR/USD": {"precio": 1.0850, "tipo": "DIVISA", "yahoo": "EURUSD=X", "tv": "OANDA:EURUSD"},
-    "GBP/USD": {"precio": 1.2700, "tipo": "DIVISA", "yahoo": "GBPUSD=X", "tv": "OANDA:GBPUSD"},
-    "USD/JPY": {"precio": 155.00, "tipo": "DIVISA", "yahoo": "USDJPY=X", "tv": "OANDA:USDJPY"},
-    "USD/CHF": {"precio": 0.8800, "tipo": "DIVISA", "yahoo": "USDCHF=X", "tv": "OANDA:USDCHF"},
-    "AUD/USD": {"precio": 0.6500, "tipo": "DIVISA", "yahoo": "AUDUSD=X", "tv": "OANDA:AUDUSD"},
-    "USD/CAD": {"precio": 1.3600, "tipo": "DIVISA", "yahoo": "USDCAD=X", "tv": "OANDA:USDCAD"},
-    # --- ACCIONES - EMPRESAS GRANDES ---
-    "TESLA": {"precio": 250.00, "tipo": "ACCION", "yahoo": "TSLA", "tv": "NASDAQ:TSLA"},
-    "META": {"precio": 580.00, "tipo": "ACCION", "yahoo": "META", "tv": "NASDAQ:META"},
-    "APPLE": {"precio": 220.00, "tipo": "ACCION", "yahoo": "AAPL", "tv": "NASDAQ:AAPL"},
-    "AMAZON": {"precio": 200.00, "tipo": "ACCION", "yahoo": "AMZN", "tv": "NASDAQ:AMZN"},
-    "NVIDIA": {"precio": 135.00, "tipo": "ACCION", "yahoo": "NVDA", "tv": "NASDAQ:NVDA"},
-    # --- INDICE SP500 ---
-    "SP500": {"precio": 5900.00, "tipo": "INDICE", "yahoo": "^GSPC", "tv": "OANDA:SPX500USD"},
-}
-
-def mandar_telegram(m):
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID: return
+def precio_oro_m5():
     try:
-        requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage", data={"chat_id": TELEGRAM_CHAT_ID, "text": m}, timeout=10)
-    except: pass
-
-# ============ PRECIOS REALES DE YAHOO - FUNCIONA EN RENDER ============
-def get_precio_yahoo(ticker):
-    try:
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range=1d&interval=15m"
-        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=8).json()
-        result = r['chart']['result'][0]
-        precio = result['meta']['regularMarketPrice']
-        cierres = [c for c in result['indicators']['quote'][0]['close'] if c is not None]
-        return float(precio), cierres
+        r = requests.get("https://api.gold-api.com/price/XAU", timeout=4)
+        return float(r.json().get("price", 4088))
     except:
-        return None, []
+        return 4088
 
-def get_velas_btc():
+def analiza_m5(precio):
+    rango = ZONA_ARRIBA - ZONA_ABAJO
+    tol = rango * 0.15
+    if abs(precio - ZONA_ABAJO) <= tol:
+        return {"accion": "COMPRA M5", "msg": "🟢 M5 COMPRA AUTO - ORO $" + str(precio) + " toco ZONA ABAJO M5", "tp": round(precio + rango*0.8, 2), "sl": round(precio - rango*0.2, 2)}
+    if abs(precio - ZONA_ARRIBA) <= tol:
+        return {"accion": "VENTA M5", "msg": "🔴 M5 VENTA AUTO - ORO $" + str(precio) + " toco ZONA ARRIBA M5", "tp": round(precio - rango*0.8, 2), "sl": round(precio + rango*0.2, 2)}
+    return {"accion": "ESPERA M5", "msg": "🟡 M5 ESPERA AUTO - ORO $" + str(precio) + " esperando zona M5", "tp": ZONA_ABAJO, "sl": ZONA_ARRIBA}
+
+def robot_m5_auto(precio, info):
+    # 1. CIERRA SOLO SI LLEGO A TP O SL
+    for op in list(OPS["abiertas"]):
+        gano = False; perdio = False
+        if op["lado"] == "COMPRA M5":
+            if precio >= op["tp"]: gano = True
+            elif precio <= op["sl"]: perdio = True
+        else:
+            if precio <= op["tp"]: gano = True
+            elif precio >= op["sl"]: perdio = True
+        if gano or perdio:
+            op["resultado"] = "GANO +$5" if gano else "PERDIO -$2"
+            op["cierre"] = precio
+            OPS["abiertas"].remove(op)
+            OPS["cerradas"].append(op)
+            if gano: OPS["ganado"] += 5
+            else: OPS["perdido"] += 2
+            OPS["u"] = "🤖 ROBOT M5 CERRO SOLO: " + op["lado"] + " - " + op["resultado"]
+    # 2. SI AUTO ESTA APAGADO, NO ABRE
+    if not OPS.get("auto", True):
+        return OPS["u"]
+    # 3. SI YA HAY UNA ABIERTA, NO ABRE OTRA
+    if len(OPS["abiertas"]) >= 1:
+        return "🤖 ROBOT M5 AUTO: Ya hay una abierta - esperando TP/SL"
+    # 4. SI NO TOCO ZONA, NO OPERA
+    if info["accion"] not in ["COMPRA M5", "VENTA M5"]:
+        return "🤖 ROBOT M5 AUTO: ESPERA - no toco zona M5"
+    # 5. ABRE SOLO
+    nueva = {"activo": "XAUUSD", "lado": info["accion"], "entrada": precio, "tp": info["tp"], "sl": info["sl"], "lote": 0.01, "hora": datetime.now().strftime("%H:%M"), "estado": "ABIERTA", "tf": "M5", "modo": "AUTO"}
+    OPS["abiertas"].append(nueva)
+    OPS["u"] = "🤖 ROBOT M5 ABRIO SOLO AUTO: " + info["accion"] + " ORO $" + str(precio) + " TP $" + str(info["tp"]) + " SL $" + str(info["sl"])
+    return OPS["u"]
+
+@app.route("/")
+def home():
+    return """<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>RAUDY ORO M5 AUTO</title><style>body{background:#050505;color:#fff;font-family:Arial;text-align:center;margin:0}header{background:#FFD700;color:#000;padding:15px}.box{margin:10px;padding:15px;border-radius:15px;border:3px solid #FFD700}.m5{border-color:#FF00FF;background:#1a001a}.auto{border-color:#00FF88;background:#001a0a}button{width:100%;padding:14px;border-radius:15px;font-weight:bold;margin-top:5px}input{width:100%;padding:12px;margin:4px 0;border-radius:10px;background:#111;color:#fff}table{width:100%;font-size:12px;border-collapse:collapse}td,th{border:1px solid #333;padding:5px}</style></head><body><header><h1>👑 RAUDY ORO M5 AUTO 👑</h1><p>MT5 + M5 + XAUUSD ORO + ROBOT AUTOMATICO</p><p id='vivo'>🟢 EN VIVO M5 AUTO...</p></header><div class='box m5'><h2>📊 M5 - MT5 - CADA 5 MINUTOS</h2><p>Plataforma: MT5 | Timeframe: M5 | Simbolo: XAUUSD ORO</p><p id='m5Zona' style='font-weight:bold;font-size:18px'>Cargando M5...</p><p id='m5TP'></p><p id='mt5Estado'></p></div><div class='box auto'><h2>🤖 ROBOT M5 AUTOMATICO - PRENDIDO SOLO</h2><p>El robot abre solo y cierra solo. Tu no tocas nada.</p><p id='robotEstado'>Robot M5 AUTO esperando...</p><p id='robotOps'></p><button onclick='toggleAuto()' style='background:#00FF88'>🤖 APAGAR / PRENDER ROBOT AUTO</button><p id='autoEstado'>AUTO: 🟢 PRENDIDO</p></div><div class='box'><h2>📋 OPERACIONES M5 AUTO</h2><div id='tablaOps'>Cargando...</div></div><div class='box'><h2>💬 CHAT M5</h2><input id='chat' placeholder='Ej: m5 oro'><button onclick='enviarChat()' style='background:#FFD700'>💬 ENVIAR</button><p id='chatR' style='background:#111;padding:12px;border-radius:10px'>🤖 Hola jefe M5 AUTO...</p></div><script>async function enviarChat(){let t=document.getElementById('chat').value;if(!t)return;let r=await fetch('/api/chat?msg='+encodeURIComponent(t));let d=await r.json();document.getElementById('chatR').innerHTML='🤖 '+d.respuesta}async function toggleAuto(){let r=await fetch('/api/robot_auto');let d=await r.json();document.getElementById('autoEstado').innerHTML='AUTO: '+(d.auto?'🟢 PRENDIDO':'🔴 APAGADO')}async function up(){try{let r=await fetch('/api/m5?v='+Date.now());let d=await r.json();document.getElementById('vivo').innerHTML='🟢 EN VIVO M5 AUTO '+d.hora+' - ORO $'+d.precio;document.getElementById('m5Zona').innerHTML=d.m5.mensaje;document.getElementById('m5TP').innerHTML='TP M5 $'+d.m5.tp+' SL M5 $'+d.m5.sl+' - Accion: '+d.m5.accion;document.getElementById('mt5Estado').innerHTML=d.mt5.ultimo;document.getElementById('robotEstado').innerHTML=d.robot.mensaje;document.getElementById('robotOps').innerHTML='Abiertas: '+d.robot.abiertas.length+' | Ganado $'+d.robot.ganado+' | Perdido $'+d.robot.perdido+' | AUTO: '+(d.robot.auto?'🟢 ON':'🔴 OFF');let html='<table><tr><th>Hora</th><th>Lado</th><th>Entrada</th><th>TP</th><th>SL</th></tr>';d.robot.abiertas.forEach(o=>{html+='<tr><td>'+o.hora+'</td><td>'+o.lado+'</td><td>'+o.entrada+'</td><td>'+o.tp+'</td><td>'+o.sl+'</td></tr>'});d.robot.cerradas.slice(-5).forEach(o=>{html+='<tr><td>'+o.hora+'</td><td>'+o.lado+'</td><td>'+o.entrada+'</td><td>'+o.tp+'</td><td>'+o.sl+'</td></tr>'});html+='</table>';document.getElementById('tablaOps').innerHTML=html}catch(e){}}setInterval(up,10000);up();</script></body></html>"""
+
+@app.route("/api/m5")
+def api_m5():
+    precio = precio_oro_m5()
+    info = analiza_m5(precio)
+    msg = robot_m5_auto(precio, info)
+    return jsonify({"precio": precio, "hora": datetime.now().strftime("%H:%M:%S"), "m5": {"mensaje": info["msg"], "accion": info["accion"], "tp": info["tp"], "sl": info["sl"]}, "mt5": MT5_DATA, "robot": {"mensaje": msg, "abiertas": OPS["abiertas"], "cerradas": OPS["cerradas"], "ganado": OPS["ganado"], "perdido": OPS["perdido"], "auto": OPS.get("auto", True)}})
+
+@app.route("/api/mt5", methods=["GET", "POST"])
+def api_mt5():
+    global MT5_DATA
     try:
-        url = "https://api.binance.us/api/v3/klines?symbol=BTCUSDT&interval=15m&limit=100"
-        r = requests.get(url, timeout=10).json()
-        return [float(x[4]) for x in r]
-    except:
-        return []
+        if request.method == "POST":
+            data = request.get_json(force=True, silent=True) or {}
+        else:
+            data = request.args.to_dict()
+        MT5_DATA = {"ultimo": "✅ MT5 M5 AUTO CONECTADO - XAUUSD $" + str(data.get("precio", "")) + " - " + str(data.get("accion", "")), "hora": datetime.now().strftime("%H:%M:%S"), "precio": data.get("precio", 0), "activo": "XAUUSD", "accion": data.get("accion", "ESPERA")}
+        return jsonify({"ok": True, "recibido": MT5_DATA})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
 
-def calcular_rsi(cierres, periodo=14):
-    if len(cierres) < periodo + 1: return 50
-    ganancias = []; perdidas = []
-    for i in range(1, len(cierres)):
-        cambio = cierres[i] - cierres[i-1]
-        if cambio > 0: ganancias.append(cambio); perdidas.append(0)
-        else: ganancias.append(0); perdidas.append(-cambio)
-    avg_gan = sum(ganancias[-periodo:]) / periodo
-    avg_per = sum(perdidas[-periodo:]) / periodo
-    if avg_per == 0: return 100
-    rs = avg_gan / avg_per
-    return round(100 - (100 / (1 + rs)), 2)
+@app.route("/api/robot_auto")
+def api_auto():
+    OPS["auto"] = not OPS.get("auto", True)
+    return jsonify({"auto": OPS["auto"]})
 
-def calcular_ema(cierres, periodo):
-    if len(cierres) < periodo: return cierres[-1] if cierres else 0
-    k = 2 / (periodo + 1)
-    ema = sum(cierres[:periodo]) / periodo
-    for p in cierres[periodo:]:
-        ema = (p * k) + (ema * (1 - k))
-    return round(ema, 2)
+@app.route("/api/chat")
+def api_chat():
+    precio = precio_oro_m5()
+    info = analiza_m5(precio)
+    return jsonify({"respuesta": info["msg"] + " | TP M5 $" + str(info["tp"]) + " SL M5 $" + str(info["sl"]) + " | Robot AUTO: " + ("PRENDIDO" if OPS.get("auto", True) else "APAGADO")})
 
-def calcular_macd(cierres):
-    if len(cierres) < 26: return 0
-    return round(calcular_ema(cierres, 12) - calcular_ema(cierres, 26), 4)
-
-# ============ ROBOT 100% AUTOMÁTICO - CON 14 ACTIVOS ============
-def bot_automatico():
-    global dinero_demo, operaciones_hoy, posicion_abierta, ultima_señal, ultima_voz, bot_encendido
-    bot_encendido = True
-    mandar_telegram("🤖 RAUDY VIP PRO AUTOMÁTICO COMPLETO ENCENDIDO 👑\nDivisas + Acciones + Tesla + Meta + SP500 + Amazon + Oro + BTC. Yo opero SOLO. Solo DEMO.")
-
-    while True:
-        try:
-            ganancia = dinero_demo - dinero_inicial
-            if ganancia >= 20 or ganancia <= -10:
-                ultima_voz = "Jefe, ya llegué a mi meta del día. Me apago solo."
-                time.sleep(3600); continue
-            if operaciones_hoy >= 3:
-                time.sleep(3600); continue
-
-            # SI YA TIENE POSICIÓN, LA CUIDA SOLO
-            if posicion_abierta:
-                nombre = posicion_abierta["activo"]
-                ticker = ACTIVOS[nombre]["yahoo"]
-                precio_actual, _ = get_precio_yahoo(ticker)
-                if precio_actual is None:
-                    precio_actual = posicion_abierta["entrada"]
-                entrada = posicion_abierta["entrada"]; stop = posicion_abierta["stop"]; tp = posicion_abierta["tp"]; tipo = posicion_abierta["tipo"]
-                if (tipo == "COMPRA" and precio_actual >= tp) or (tipo == "VENTA" and precio_actual <= tp):
-                    g = abs(tp - entrada)
-                    # En DEMO ganamos 1% simulado para no romper el dinero
-                    gan = dinero_demo * 0.02
-                    dinero_demo += gan; operaciones_hoy += 1
-                    texto = f"✅ AUTOMÁTICO CERRÓ CON GANANCIA\n{nombre} {tipo}\nEntró ${entrada:.2f} Salió ${tp:.2f}\nGanó +${gan:.2f}\nDinero: ${dinero_demo:.2f}"
-                    historial.insert(0, texto); mandar_telegram(texto); posicion_abierta = None
-                elif (tipo == "COMPRA" and precio_actual <= stop) or (tipo == "VENTA" and precio_actual >= stop):
-                    perdida = dinero_demo * 0.01
-                    dinero_demo -= perdida; operaciones_hoy += 1
-                    texto = f"🛑 AUTOMÁTICO CERRÓ CON STOP LOSS\n{nombre} {tipo}\nProtegiendo tu dinero en ${stop:.2f}\nPerdió -${perdida:.2f}\nDinero: ${dinero_demo:.2f}"
-                    historial.insert(0, texto); mandar_telegram(texto); posicion_abierta = None
-                time.sleep(30); continue
-
-            # SI NO TIENE POSICIÓN, BUSCA EN TODOS LOS 14 ACTIVOS
-            for nombre, info in ACTIVOS.items():
-                precio, cierres = get_precio_yahoo(info["yahoo"])
-                if precio is None:
-                    if nombre == "BTC":
-                        cierres = get_velas_btc()
-                        if cierres: precio = cierres[-1]
-                        else: continue
-                    else: continue
-                ACTIVOS[nombre]["precio"] = precio
-                if len(cierres) < 30: continue
-                rsi = calcular_rsi(cierres)
-                macd = calcular_macd(cierres)
-                ema50 = calcular_ema(cierres, 50)
-                ema200 = calcular_ema(cierres, 50)
-
-                votos_compra = 0; votos_venta = 0
-                if rsi < 30: votos_compra += 1
-                elif rsi > 70: votos_venta += 1
-                if macd > 0: votos_compra += 1
-                elif macd < 0: votos_venta += 1
-                if ema50 > ema200: votos_compra += 1
-                else: votos_venta += 1
-
-                if votos_compra >= 3:
-                    entrada = precio; stop = precio * 0.995; tp = precio * 1.01
-                    posicion_abierta = {"activo": nombre, "tipo": "COMPRA", "entrada": entrada, "stop": stop, "tp": tp}
-                    ultima_señal = f"AUTOMÁTICO COMPRÓ {nombre} ({info['tipo']}) SOLO - ${entrada:.2f} - RSI {rsi}"
-                    ultima_voz = f"Jefe, yo solo compré {nombre}. Es una {info['tipo']}. Yo lo cuido."
-                    texto = f"🤖 AUTOMÁTICO COMPRÓ SOLO\nActivo: {nombre} ({info['tipo']})\nEntró SOLO: ${entrada:.2f}\nStop: ${stop:.2f} | TP: ${tp:.2f}\nRSI REAL: {rsi} | MACD: {macd}"
-                    historial.insert(0, texto); mandar_telegram(texto); break
-                elif votos_venta >= 3:
-                    entrada = precio; stop = precio * 1.005; tp = precio * 0.99
-                    posicion_abierta = {"activo": nombre, "tipo": "VENTA", "entrada": entrada, "stop": stop, "tp": tp}
-                    ultima_señal = f"AUTOMÁTICO VENDIÓ {nombre} ({info['tipo']}) SOLO - ${entrada:.2f} - RSI {rsi}"
-                    ultima_voz = f"Jefe, yo solo vendí {nombre}. Yo lo cuido."
-                    texto = f"🤖 AUTOMÁTICO VENDIÓ SOLO\nActivo: {nombre} ({info['tipo']})\nEntró SOLO: ${entrada:.2f}\nStop: ${stop:.2f} | TP: ${tp:.2f}\nRSI REAL: {rsi} | MACD: {macd}"
-                    historial.insert(0, texto); mandar_telegram(texto); break
-                else:
-                    ultima_señal = f"AUTOMÁTICO ANALIZANDO {nombre} ({info['tipo']}) - Precio REAL ${precio:.2f} - RSI {rsi} - Esperando..."
-            time.sleep(60)
-        except Exception as e:
-            print(e); time.sleep(15)
-
-@app.route('/')
-def panel():
-    ganancia = dinero_demo - dinero_inicial
-    pos = f"📍 Posición: {posicion_abierta['tipo']} {posicion_abierta['activo']} en ${posicion_abierta['entrada']:.2f}" if posicion_abierta else "📍 Sin posición - Buscando en 14 activos solo..."
-    # Botones por tipo
-    def botones_por_tipo(tipo):
-        html = ""
-        for k, v in ACTIVOS.items():
-            if v["tipo"] == tipo:
-                html += f"<div style='background:#222; padding:10px; border:1px solid gold; border-radius:10px; display:inline-block; margin:5px; min-width:110px;'><b>{k}</b><br>${v['precio']:.2f}<br><small>{tipo}</small></div>"
-        return html
-    historial_html = "<br><br>".join(historial[:6]) if historial else "El robot automático completo está trabajando solo en divisas y acciones..."
-    return f"""
-    <html><head><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="refresh" content="30">
-    <script src="https://s3.tradingview.com/tv.js"></script></head>
-    <body style="font-family:Arial; background:#000; color:white; padding:10px; text-align:center;">
-        <h1 style="color:gold;">👑 RAUDY VIP PRO - AUTOMÁTICO COMPLETO 👑</h1>
-        <h3 style="color:#FFD700;">DIVISAS + ACCIONES + TESLA + META + SP500 + AMAZON + ORO + BTC</h3>
-        <div style="background:#111; border:2px solid gold; padding:15px; border-radius:15px;">
-            <h2>💰 DEMO: ${dinero_demo:.2f} | Ganancia: ${ganancia:.2f} | Operaciones: {operaciones_hoy}/3</h2>
-            <p>{pos}</p><p>📢 {ultima_señal}</p><p>🎤 {ultima_voz}</p>
-            <button onclick="hablar()" style="background:gold; color:black; padding:12px 20px; border:none; border-radius:10px; font-size:16px; font-weight:bold;">🔊 ESCUCHAR AL ROBOT</button>
-            <p>✅ Automático | ✅ 14 Activos | ✅ Entra Solo | ✅ Sale Solo | ✅ Stop Loss | ✅ Max 3</p>
-        </div>
-        <h3 style="color:gold;">💱 DIVISAS - FOREX REAL</h3><div>{botones_por_tipo("DIVISA")}</div>
-        <h3 style="color:gold;">📈 ACCIONES - EMPRESAS REALES</h3><div>{botones_por_tipo("ACCION")}</div>
-        <h3 style="color:gold;">🏆 INDICE + ORO + CRIPTO</h3><div>{botones_por_tipo("INDICE")}{botones_por_tipo("ORO")}{botones_por_tipo("CRIPTO")}</div>
-
-        <h3>📈 GRÁFICO ORO</h3><div id="chart_oro" style="height:350px;"></div>
-        <h3>📈 GRÁFICO EUR/USD - DIVISA</h3><div id="chart_euro" style="height:350px;"></div>
-        <h3>📈 GRÁFICO TESLA</h3><div id="chart_tesla" style="height:350px;"></div>
-        <h3>📈 GRÁFICO META</h3><div id="chart_meta" style="height:350px;"></div>
-        <h3>📈 GRÁFICO SP500</h3><div id="chart_sp" style="height:350px;"></div>
-        <h3>📈 GRÁFICO AMAZON</h3><div id="chart_amzn" style="height:350px;"></div>
-        <h3>📈 GRÁFICO BTC</h3><div id="chart_btc" style="height:350px;"></div>
-
-        <div style="background:#111; border:2px solid gold; padding:15px; border-radius:15px; text-align:left;"><h3>📊 Historial Automático:</h3><p>{historial_html}</p></div>
-        <div style="margin-top:15px;">
-            <p><a href="{MI_TELEGRAM_BOT}" style="color:#00BFFF; font-size:18px;">🤖 TELEGRAM - @raudy_vip_oro_bot</a></p>
-            <p><a href="{MI_PAYPAL}" style="color:#FFD700; font-size:18px;">💳 PAYPAL $20 - Activar VIP PRO</a></p>
-        </div>
-        <script>
-        function hablar() {{
-            var msg = new SpeechSynthesisUtterance("{ultima_voz}");
-            msg.lang = 'es-ES'; window.speechSynthesis.speak(msg);
-        }}
-        new TradingView.widget({{"autosize":true,"symbol":"OANDA:XAUUSD","interval":"15","timezone":"America/Santo_Domingo","theme":"dark","style":"1","locale":"es","container_id":"chart_oro"}});
-        new TradingView.widget({{"autosize":true,"symbol":"OANDA:EURUSD","interval":"15","timezone":"America/Santo_Domingo","theme":"dark","style":"1","locale":"es","container_id":"chart_euro"}});
-        new TradingView.widget({{"autosize":true,"symbol":"NASDAQ:TSLA","interval":"15","timezone":"America/Santo_Domingo","theme":"dark","style":"1","locale":"es","container_id":"chart_tesla"}});
-        new TradingView.widget({{"autosize":true,"symbol":"NASDAQ:META","interval":"15","timezone":"America/Santo_Domingo","theme":"dark","style":"1","locale":"es","container_id":"chart_meta"}});
-        new TradingView.widget({{"autosize":true,"symbol":"OANDA:SPX500USD","interval":"15","timezone":"America/Santo_Domingo","theme":"dark","style":"1","locale":"es","container_id":"chart_sp"}});
-        new TradingView.widget({{"autosize":true,"symbol":"NASDAQ:AMZN","interval":"15","timezone":"America/Santo_Domingo","theme":"dark","style":"1","locale":"es","container_id":"chart_amzn"}});
-        new TradingView.widget({{"autosize":true,"symbol":"BINANCE:BTCUSDT","interval":"15","timezone":"America/Santo_Domingo","theme":"dark","style":"1","locale":"es","container_id":"chart_btc"}});
-        </script>
-    </body></html>
-    """
-if not bot_encendido:
-    threading.Thread(target=bot_automatico, daemon=True).start()
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
+    port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
