@@ -1,670 +1,443 @@
-from flask import Flask, jsonify
-import requests
-import os
-from datetime import datetime, timedelta
+from flask import Flask
+from flask import jsonify, request
+import requests, json, os, re, urllib.parse, time, hmac, hashlib
+from datetime import datetime
 app = Flask(__name__)
 
-# ============================================================
-# 🔌 BYBIT AUTOMATICO - LEE LO QUE YA PUSISTE EN RENDER
-# NO SE BORRO NADA - Solo lee tus llaves de Environment Variables
-# En Render ya tienes: BYBIT_API_KEY / BYBIT_API_SECRET / BOT_TOKEN
-# Nunca pongas las llaves aqui en el codigo, solo en Render
-# ============================================================
-BYBIT_API_KEY = os.environ.get("BYBIT_API_KEY", "")
-BYBIT_API_SECRET = os.environ.get("BYBIT_API_SECRET", "")
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
-BYBIT_CONECTADO = "SI" if BYBIT_API_KEY and BYBIT_API_SECRET else "NO"
+LINK_BROKER = "https://www.bybit.com/invite?ref=RAUDYORO"
+NOMBRE_BROKER_QR = "BYBIT - RAUDY ORO"
+M5_CONFIG = {"plataforma": "MT5", "timeframe": "M5", "simbolo": "XAUUSD", "activa": True, "jefe": "RAUDY ORO"}
 
-def check_bybit_conectado():
-    # Solo dice si las llaves estan puestas, no muestra las llaves
-    if BYBIT_API_KEY and BYBIT_API_SECRET:
-        return {"conectado": True, "mensaje": "✅ BYBIT AUTOMATICO CONECTADO - Llaves leidas desde Render", "modo": "AUTOMATICO"}
-    else:
-        return {"conectado": False, "mensaje": "❌ BYBIT NO CONECTADO - Faltan BYBIT_API_KEY / BYBIT_API_SECRET en Render", "modo": "MANUAL"}
+# ===== BYBIT - CONEXION ROBOT =====
+BYBIT_KEY = os.environ.get("BYBIT_API_KEY", "")
+BYBIT_SECRET = os.environ.get("BYBIT_API_SECRET", "")
+BYBIT_TESTNET = os.environ.get("BYBIT_TESTNET", "false") == "true"
+BYBIT_BASE = "https://api-testnet.bybit.com" if BYBIT_TESTNET else "https://api.bytick.com"
+MAP_BYBIT = {"ORO": "PAXGUSDT", "BTC": "BTCUSDT", "EURUSD": "EURUSDT"}
 
-# ============================================================
-# 💰 QR DE BYBIT DEL JEFE - SOLO AGREGADO, NO SE BORRO NADA
-# Pon aqui el link de tu imagen QR de Bybit
-# Ejemplo: https://tu-link.com/mi-qr-bybit.png
-# ============================================================
-BYBIT_QR_URL = "PON_AQUI_TU_LINK_DE_QR_BYBIT"
-BYBIT_LINK_DEPOSITO = "https://www.bybit.com"
+def bybit_firma(ts, body_str):
+    msg = ts + BYBIT_KEY + "5000" + body_str
+    return hmac.new(BYBIT_SECRET.encode(), msg.encode(), hashlib.sha256).hexdigest()
 
-# ============================================================
-# 🏦 INFORMACION BANCARIA PARA EL JEFE
-# ============================================================
-EVENTOS_BANCOS_FIJOS = [
-    {"evento": "FED - Tasa de Interés USA", "impacto": "ALTO", "hora": "14:00 NY", "efecto": "Si sube tasa, ORO BAJA. Si baja tasa, ORO SUBE"},
-    {"evento": "NFP - Empleo USA", "impacto": "ALTO", "hora": "08:30 NY", "efecto": "Si empleo fuerte, ORO BAJA. Si empleo flojo, ORO SUBE"},
-    {"evento": "CPI - Inflación USA", "impacto": "ALTO", "hora": "08:30 NY", "efecto": "Si inflación alta, ORO SUBE. Si inflación baja, ORO BAJA"},
-    {"evento": "BCE - Banco Central Europa", "impacto": "ALTO", "hora": "08:15 NY", "efecto": "Mueve EUR y ORO fuerte"},
-    {"evento": "FOMC - Habla Powell FED", "impacto": "ALTO", "hora": "14:30 NY", "efecto": "Cada palabra mueve el ORO $20-$50"},
-    {"evento": "PPI - Precios Productor", "impacto": "MEDIO", "hora": "08:30 NY", "efecto": "Adelanta inflación"},
-    {"evento": "Ventas Minoristas USA", "impacto": "MEDIO", "hora": "08:30 NY", "efecto": "Si ventas fuertes, dólar sube, oro baja"},
-    {"evento": "PIB USA", "impacto": "ALTO", "hora": "08:30 NY", "efecto": "Mueve todo el mercado"},
-]
-
-def get_info_bancaria():
-    bancos = {
-        "fed_tasa": "5.25% - FED USA - Vigilando",
-        "bce_tasa": "2.15% - BCE Europa",
-        "inflacion_usa": "CPI - Vigilando cada mes",
-        "fuente": "ForexFactory.com + TradingEconomics + federalreserve.gov + ecb.europa.eu",
-        "eventos_hoy": EVENTOS_BANCOS_FIJOS,
-        "alerta_banco": "SIN NOTICIA FUERTE AHORA - Robots pueden trabajar",
-        "nivel_riesgo": "VERDE"
-    }
+def bybit_orden_real(simbolo, lado, cantidad):
+    if not BYBIT_KEY or not BYBIT_SECRET:
+        return {"ok": False, "msg": "Sin llave Bybit - sigue en SIMULACION"}
     try:
-        r = requests.get('https://api.tradingeconomics.com/calendar?c=guest:guest&f=json&d1=today&d2=today', timeout=4)
-        if r.status_code == 200:
-            data = r.json()
-            eventos_reales = []
-            for e in data[:8]:
-                eventos_reales.append({
-                    "evento": e.get('Event', 'Evento Banco'),
-                    "impacto": e.get('Importance', 'MEDIO'),
-                    "hora": e.get('Date', '')[:16],
-                    "efecto": e.get('Country', 'USA') + " - " + e.get('Category', '')
-                })
-            if eventos_reales:
-                bancos["eventos_hoy"] = eventos_reales
-                for ev in eventos_reales:
-                    if str(ev.get("impacto")).upper() in ["HIGH", "3", "ALTO"]:
-                        bancos["alerta_banco"] = "⚠️ ALERTA BANCO: Hoy hay noticia FUERTE - " + ev["evento"] + " - JEFE ORDENA PRECAUCION"
-                        bancos["nivel_riesgo"] = "ROJO"
-                        break
+        ts = str(int(time.time()*1000))
+        body = {"category": "spot", "symbol": simbolo, "side": lado, "orderType": "Market", "qty": str(cantidad)}
+        body_str = json.dumps(body)
+        headers = {"X-BAPI-API-KEY": BYBIT_KEY, "X-BAPI-TIMESTAMP": ts, "X-BAPI-RECV-WINDOW": "5000", "X-BAPI-SIGN": bybit_firma(ts, body_str), "Content-Type": "application/json"}
+        r = requests.post(BYBIT_BASE + "/v5/order/create", json=body, headers=headers, timeout=10)
+        j = r.json()
+        if j.get("retCode") == 0:
+            return {"ok": True, "msg": "Orden Bybit OK " + simbolo + " " + lado, "data": j}
+        else:
+            return {"ok": False, "msg": "Bybit error: " + str(j.get("retMsg")), "data": j}
+    except Exception as e:
+        return {"ok": False, "msg": "Error Bybit: " + str(e)}
+
+def bybit_balance():
+    if not BYBIT_KEY or not BYBIT_SECRET:
+        return {"ok": False, "msg": "Sin llave - pon BYBIT_API_KEY en Render Environment"}
+    try:
+        ts = str(int(time.time()*1000))
+        params = "accountType=UNIFIED"
+        firma = hmac.new(BYBIT_SECRET.encode(), (ts + BYBIT_KEY + "5000" + params).encode(), hashlib.sha256).hexdigest()
+        headers = {"X-BAPI-API-KEY": BYBIT_KEY, "X-BAPI-TIMESTAMP": ts, "X-BAPI-RECV-WINDOW": "5000", "X-BAPI-SIGN": firma}
+        r = requests.get(BYBIT_BASE + "/v5/account/wallet-balance?" + params, headers=headers, timeout=10)
+        return {"ok": True, "data": r.json(), "modo": "TESTNET" if BYBIT_TESTNET else "REAL"}
+    except Exception as e:
+        return {"ok": False, "msg": str(e)}
+
+_CACHE = {"tiempo": 0, "datos": None}
+def load(n, d):
+    try:
+        if os.path.exists(n):
+            return json.load(open(n))
     except:
         pass
-    return bancos
-
-# ============================================================
-# 🆕 NUEVO - DXY + VIX + BTC + PETROLEO + BONO 10 AÑOS - AGREGADO AHORA
-# ESTO ES LO QUE USAN LOS BANCOS - NO SE BORRO NADA DE LO TUYO
-# ============================================================
-def get_mercado_extra():
-    dxy = get_precio_yahoo('DX-Y.NYB', 99.50)
-    vix = get_precio_yahoo('^VIX', 15.20)
-    btc = get_precio_yahoo('BTC-USD', 105000)
-    petroleo = get_precio_yahoo('CL=F', 61.50)
-    bono10 = get_precio_yahoo('^TNX', 4.10)
-    if vix >= 30:
-        vix_texto = "😱 PANICO TOTAL - VIX " + str(round(vix,2)) + " - JEFE ORDENA PAUSA - Viene caida fuerte"
-        vix_nivel = "ROJO"
-    elif vix >= 20:
-        vix_texto = "⚠️ MIEDO ALTO - VIX " + str(round(vix,2)) + " - Cuidado, mercado nervioso"
-        vix_nivel = "AMARILLO"
-    else:
-        vix_texto = "😎 MERCADO TRANQUILO - VIX " + str(round(vix,2)) + " - Se puede operar"
-        vix_nivel = "VERDE"
-    if dxy >= 101:
-        dxy_texto = "💵 DOLAR FUERTE " + str(round(dxy,2)) + " - Malo para ORO, oro tiende a BAJAR"
-        dxy_para_oro = "BAJISTA"
-    elif dxy <= 98:
-        dxy_texto = "💵 DOLAR DEBIL " + str(round(dxy,2)) + " - Bueno para ORO, oro tiende a SUBIR"
-        dxy_para_oro = "ALCISTA"
-    else:
-        dxy_texto = "💵 DOLAR NEUTRAL " + str(round(dxy,2)) + " - Oro sin presion del dolar"
-        dxy_para_oro = "NEUTRAL"
-    return {
-        "DXY": dxy, "DXY_texto": dxy_texto, "DXY_para_oro": dxy_para_oro,
-        "VIX": vix, "VIX_texto": vix_texto, "VIX_nivel": vix_nivel,
-        "BTC": btc, "PETROLEO": petroleo, "BONO10": bono10,
-        "fuente": "Yahoo Finance USA - DX-Y.NYB + ^VIX + BTC-USD + CL=F + ^TNX - GRATIS",
-        "resumen_jefe": dxy_texto + " | " + vix_texto
-    }
-
-ROBOTS_EQUIPO_COMPLETO = {
-    40: {"nombre": "MAESTRO DIOS RAUDY - JEFE", "rol": "JEFE", "tarea": "Yo mando a los 39. Yo leo bancos, FED, BCE, NFP, CPI, DXY, VIX. Yo digo CUANDO operar y CUANDO PARAR. Nadie opera sin mi permiso."},
-    1: {"nombre": "RAYO RAUDY", "rol": "TRABAJADOR", "tarea": "Busca noticias USA rapido"},
-    2: {"nombre": "RAYO VELOZ", "rol": "TRABAJADOR", "tarea": "Busca noticias NVDA y TESLA"},
-    3: {"nombre": "COMETA ORO", "rol": "TRABAJADOR", "tarea": "Busca noticias del ORO"},
-    4: {"nombre": "GUARDIA 08:30", "rol": "VIGIA BANCO", "tarea": "Vigila noticias 08:30 - NFP, CPI - Si hay noticia, avisa al JEFE"},
-    5: {"nombre": "COMETA VENTA", "rol": "TRABAJADOR", "tarea": "Busca ventas fuertes"},
-    6: {"nombre": "COMETA FUERTE", "rol": "TRABAJADOR", "tarea": "Analiza caidas rapidas"},
-    7: {"nombre": "COMETA DIOS", "rol": "TRABAJADOR", "tarea": "Avisa cuando viene venta grande"},
-    8: {"nombre": "RAYO COMPRA", "rol": "TRABAJADOR", "tarea": "Busca compras rapidas"},
-    9: {"nombre": "RAYO ORO", "rol": "TRABAJADOR", "tarea": "Sigue ORO segundo a segundo"},
-    10: {"nombre": "HIELO PACIENTE", "rol": "TRABAJADOR", "tarea": "Espera frio, no entra con prisa"},
-    11: {"nombre": "HIELO ANALISTA", "rol": "TRABAJADOR", "tarea": "Analiza si mercado esta tranquilo"},
-    12: {"nombre": "FUEGO COMPRA", "rol": "TRABAJADOR", "tarea": "Quema cuando hay compra fuerte"},
-    13: {"nombre": "FUEGO TESLA", "rol": "TRABAJADOR", "tarea": "Cuida solo TESLA"},
-    14: {"nombre": "FUEGO NVDA", "rol": "TRABAJADOR", "tarea": "Cuida solo NVIDIA"},
-    15: {"nombre": "FUEGO APPLE", "rol": "TRABAJADOR", "tarea": "Cuida solo APPLE"},
-    16: {"nombre": "FUEGO ORO", "rol": "TRABAJADOR", "tarea": "Cuida ORO con fuego"},
-    17: {"nombre": "FUEGO VENTA", "rol": "TRABAJADOR", "tarea": "Dice VENTA cuando hay fuego rojo"},
-    18: {"nombre": "RAYO META", "rol": "TRABAJADOR", "tarea": "Cuida META y GOOGLE"},
-    19: {"nombre": "RAYO AMAZON", "rol": "TRABAJADOR", "tarea": "Cuida AMAZON"},
-    20: {"nombre": "HIELO JEFE", "rol": "TRABAJADOR", "tarea": "Dice ESPERA cuando hay peligro"},
-    21: {"nombre": "COMETA AMAZON", "rol": "TRABAJADOR", "tarea": "Busca noticias AMAZON"},
-    22: {"nombre": "COMETA MICROSOFT", "rol": "TRABAJADOR", "tarea": "Busca noticias MICROSOFT"},
-    23: {"nombre": "RAYO NOTICIAS", "rol": "TRABAJADOR", "tarea": "Busca noticias Telegram y WhatsApp"},
-    24: {"nombre": "HIELO SOPORTE", "rol": "TRABAJADOR", "tarea": "Busca soportes donde precio no baja"},
-    25: {"nombre": "FUEGO RESISTENCIA", "rol": "TRABAJADOR", "tarea": "Busca resistencias donde precio no sube"},
-    26: {"nombre": "COMETA 14:30", "rol": "VIGIA BANCO", "tarea": "Vigila 14:30 - Habla FED Powell - Avisa al JEFE"},
-    27: {"nombre": "RAYO ENTRADA", "rol": "TRABAJADOR", "tarea": "Busca mejor ENTRADA"},
-    28: {"nombre": "FUEGO BOTIN", "rol": "TRABAJADOR", "tarea": "Calcula tu BOTIN"},
-    29: {"nombre": "HIELO SALIDA", "rol": "TRABAJADOR", "tarea": "Te dice cuando SALIR"},
-    30: {"nombre": "COMETA PELIGRO", "rol": "VIGIA BANCO", "tarea": "Grita PELIGRO si hay noticia mala de banco"},
-    31: {"nombre": "RAYO VIP", "rol": "TRABAJADOR", "tarea": "Solo habla para los VIP"},
-    32: {"nombre": "FUEGO DIOS", "rol": "TRABAJADOR", "tarea": "Tiene fuego de DIOS"},
-    33: {"nombre": "HIELO DIOS", "rol": "TRABAJADOR", "tarea": "Tiene hielo de DIOS"},
-    34: {"nombre": "COMETA ORO 2", "rol": "TRABAJADOR", "tarea": "Confirma lo que dice el ORO"},
-    35: {"nombre": "RAYO CONFIRMA", "rol": "TRABAJADOR", "tarea": "Confirma COMPRA o VENTA"},
-    36: {"nombre": "FUEGO CONFIRMA", "rol": "TRABAJADOR", "tarea": "Confirma con fuego"},
-    37: {"nombre": "HIELO CONFIRMA", "rol": "TRABAJADOR", "tarea": "Confirma con calma"},
-    38: {"nombre": "COMETA JEFE", "rol": "TRABAJADOR", "tarea": "Jefe de los cometas"},
-    39: {"nombre": "RAYO MAESTRO 2", "rol": "TRABAJADOR", "tarea": "Mano derecha del Maestro 40"},
-}
-
-def jefe_manda_orden(bancos, datos, extra=None):
-    if extra and extra.get("VIX_nivel") == "ROJO":
-        return {"orden": "🛑 PAUSA TOTAL - PANICO - ORDEN DEL JEFE", "motivo": extra["VIX_texto"], "permiso_operar": False, "mensaje": "JEFE DICE: VIX en " + str(extra["VIX"]) + " - Hay PANICO. Todos los 39 robots PARADOS. No operen, viene caida."}
-    if bancos["nivel_riesgo"] == "ROJO":
-        return {"orden": "🛑 PAUSA TOTAL - ORDEN DEL JEFE", "motivo": bancos["alerta_banco"], "permiso_operar": False, "mensaje": "JEFE DICE: Hay noticia de BANCO FUERTE ahora. Todos los 39 robots PARADOS. Esperen que pase la noticia. No pierdan dinero."}
-    if datos["ORO"] > 3910 and datos["ORO"] < 3970:
-        extra_txt = ""
-        if extra:
-            extra_txt = " | " + extra["DXY_texto"] + " | " + extra["VIX_texto"]
-        return {"orden": "🟡 ESPERA - ORDEN DEL JEFE", "motivo": "Oro fuera de zona + Bancos tranquilos", "permiso_operar": False, "mensaje": "JEFE DICE: Oro en $" + str(datos["ORO"]) + " fuera de zona. Mis 39 robots buscando." + extra_txt}
-    extra_txt = ""
-    if extra:
-        extra_txt = " | " + extra["DXY_texto"]
-    return {"orden": "🟢 PERMISO PARA OPERAR - ORDEN DEL JEFE", "motivo": "Bancos tranquilos + Oro en zona", "permiso_operar": True, "mensaje": "JEFE DICE: Bancos tranquilos, Oro en zona. Mis 39 robots listos. Pueden operar con cuidado." + extra_txt}
-
-def get_precio_yahoo(symbol, fallback):
+    return d
+def save(n, d):
     try:
-        url = f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}'
-        r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
-        j = r.json()
-        price = j['chart']['result'][0]['meta']['regularMarketPrice']
-        return float(price)
+        json.dump(d, open(n, "w"))
     except:
-        return fallback
+        pass
 
-def motor_fuerza_total(precio, simbolo):
-    if simbolo == "ORO":
-        if precio <= 3910 or precio >= 3970:
-            return "🔥🔥🔥🔥🔥 FUERZA TOTAL ULTRA 200% - DIOS - SATELITE ACTIVO"
-        if precio <= 3940:
-            return "🔥🔥🔥 FUERZA MEGA 150% - SATELITE ACTIVO"
-        return "🔥🔥 FUERZA ALTA 100% - BUSCANDO"
-    else:
-        return "💪 MOTOR 200% VIGILANDO " + simbolo + " DESDE SATELITE USA"
+MEM = load("mem.json", {"h": [], "c": 0, "v": 0, "e": 0, "l": "Nada aun jefe."})
+M5 = load("m5.json", {"v": [], "u": "Nada M5 aun.", "s": 0, "b": 0})
+M5_ZONA = load("m5_zona.json", {"h": [], "senales": 0, "u": "Nada M5 ZONA aun."})
+ZONA_H = load("zona.json", {"h": [], "toques_c": 0, "toques_v": 0, "u": "Nada zona."})
+OPS = load("ops.json", {"h": [], "abiertas": [], "cerradas": [], "auto": True, "ganado": 0, "perdido": 0, "u": "Robot esperando zona..."})
+GRAFICO = load("grafico.json", {"velas": []})
 
-def buscador_nada_se_escape(datos):
-    encontrados = []
-    if datos["ORO"] <= 3910:
-        encontrados.append("🟢 ORO EN COMPRA " + str(datos["ORO"]))
-    if datos["ORO"] >= 3970:
-        encontrados.append("🔴 ORO EN VENTA " + str(datos["ORO"]))
-    if datos["NVDA"] <= 180:
-        encontrados.append("🟢 NVDA EN COMPRA " + str(datos["NVDA"]))
-    if datos["TSLA"] <= 330:
-        encontrados.append("🟢 TESLA EN COMPRA " + str(datos["TSLA"]))
-    if datos["AAPL"] <= 255:
-        encontrados.append("🟢 APPLE EN COMPRA " + str(datos["AAPL"]))
-    if not encontrados:
-        return "🔍 BUSCADOR: Revisé TODO - ORO, NVDA, TESLA, APPLE, META, GOOGLE, AMAZON, MICROSOFT - Nada en zona, ESPERA"
-    return "🔍 BUSCADOR ENCONTRÓ: " + " | ".join(encontrados)
+PLATS = {
+    "CAPITAL": load("cap.json", {"h": [], "u": "Nada Capital.", "c": 0, "b": 0}),
+    "T212": load("t212.json", {"h": [], "u": "Nada T212.", "c": 0, "b": 0, "e": 0}),
+    "BINANCE": load("bin.json", {"h": [], "u": "Nada Binance.", "c": 0, "b": 0, "e": 0}),
+    "ETORO": load("eto.json", {"h": [], "u": "Nada eToro.", "c": 0, "b": 0, "e": 0}),
+    "MT5": load("mt5.json", {"h": [], "u": "Nada MT5.", "c": 0, "b": 0, "e": 0}),
+    "XTB": load("xtb.json", {"h": [], "u": "Nada XTB.", "c": 0, "b": 0, "e": 0}),
+    "COINBASE": load("coin.json", {"h": [], "u": "Nada Coinbase.", "c": 0, "b": 0, "e": 0}),
+    "BYBIT": load("bybit.json", {"h": [], "u": "Nada Bybit.", "c": 0, "b": 0, "e": 0})
+}
+CEREBROS = []
+for i in range(1, 101):
+    if i <= 15: rol = "M5 ZONA - Toca y rebota"
+    elif i <= 30: rol = "M5 DIVISAS"
+    elif i <= 45: rol = "M5 BITCOIN"
+    elif i <= 60: rol = "M5 BINANCE BYBIT"
+    elif i <= 70: rol = "M5 MT5 - PEGADO"
+    elif i <= 80: rol = "M5 XTB COINBASE"
+    elif i <= 90: rol = "M5 APPLE TESLA"
+    elif i <= 99: rol = "M5 CAPITAL T212"
+    else: rol = "JEFE RAUDY ORO M5"
+    CEREBROS.append({"id": i, "rol": rol, "estado": "VIVO M5", "jefe": "RAUDY ORO", "tf": "M5"})
+ZONAS = {"ORO": {"c": 3910, "v": 3970},"EURUSD": {"c": 1.1150, "v": 1.1250},"GBPUSD": {"c": 1.2700, "v": 1.2850},"USDJPY": {"c": 148.00, "v": 151.00},"USDCHF": {"c": 0.8800, "v": 0.8950},"AUDUSD": {"c": 0.6500, "v": 0.6650},"BTC": {"c": 95000, "v": 108000},"ETH": {"c": 3200, "v": 3800},"AAPL": {"c": 255, "v": 270},"TSLA": {"c": 330, "v": 355},"NVDA": {"c": 180, "v": 195},"MSFT": {"c": 490, "v": 505},"AMZN": {"c": 230, "v": 245},"META": {"c": 640, "v": 660},"GOOGL": {"c": 280, "v": 292},"NFLX": {"c": 750, "v": 790},"AMD": {"c": 120, "v": 135}}
+NOMBRES = {"ORO": "ORO 🥇", "EURUSD": "EUR/USD 💶", "GBPUSD": "GBP/USD 💷","USDJPY": "USD/JPY 💴", "USDCHF": "USD/CHF 🇨🇭", "AUDUSD": "AUD/USD 🦘","BTC": "BITCOIN ₿", "ETH": "ETHEREUM Ξ", "AAPL": "APPLE 🍎","TSLA": "TESLA 🚗", "NVDA": "NVIDIA 💚", "MSFT": "MICROSOFT 🪟","AMZN": "AMAZON 📦", "META": "META 👍", "GOOGL": "GOOGLE 🔍","NFLX": "NETFLIX 🎬", "AMD": "AMD 🔴"}
 
-def conectar_todos_los_robots(datos):
-    robots_conectados = {}
-    zonas = {
-        "ORO": {"compra": 3910, "venta": 3970, "fuente": "gold-api.com + Yahoo USA GC=F"},
-        "NVDA": {"compra": 180, "venta": 195, "fuente": "Yahoo USA - NASDAQ"},
-        "AAPL": {"compra": 255, "venta": 270, "fuente": "Yahoo USA - NASDAQ"},
-        "TSLA": {"compra": 330, "venta": 355, "fuente": "Yahoo USA - NASDAQ"},
-        "MSFT": {"compra": 490, "venta": 505, "fuente": "Yahoo USA - NASDAQ"},
-        "AMZN": {"compra": 230, "venta": 245, "fuente": "Yahoo USA - NASDAQ"},
-        "META": {"compra": 640, "venta": 660, "fuente": "Yahoo USA - NASDAQ"},
-        "GOOGL": {"compra": 280, "venta": 292, "fuente": "Yahoo USA - NASDAQ"},
-    }
-    for simbolo, precio in datos.items():
-        if simbolo in zonas:
-            z = zonas[simbolo]
-            if precio <= z["compra"]:
-                robots_conectados[simbolo] = {"senal": "COMPRA", "precio": precio, "fuente": z["fuente"]}
-            elif precio >= z["venta"]:
-                robots_conectados[simbolo] = {"senal": "VENTA", "precio": precio, "fuente": z["fuente"]}
+def yahoo(s, fb):
+    try:
+        u = "https://query1.finance.yahoo.com/v8/finance/chart/" + s
+        r = requests.get(u, headers={"User-Agent": "Mozilla/5.0"}, timeout=3)
+        j = r.json()
+        v = j["chart"]["result"][0]["meta"]
+        return float(v["regularMarketPrice"])
+    except:
+        return fb
+def oro_real():
+    try:
+        r = requests.get("https://api.gold-api.com/price/XAU", timeout=3)
+        return float(r.json().get("price", 4088))
+    except:
+        return yahoo("GC=F", 4088)
+def precio_binance():
+    try:
+        r = requests.get("https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT", timeout=3)
+        return float(r.json().get("price", 98000))
+    except:
+        return yahoo("BTC-USD", 98000)
+def precio_coinbase():
+    try:
+        r = requests.get("https://api.coinbase.com/v2/prices/BTC-USD/spot", timeout=3)
+        return float(r.json()["data"]["amount"])
+    except:
+        return yahoo("BTC-USD", 98000)
+def precio_bybit():
+    try:
+        r = requests.get("https://api.bytick.com/v5/market/tickers?category=spot&symbol=BTCUSDT", timeout=3)
+        return float(r.json()["result"]["list"][0]["lastPrice"])
+    except:
+        return yahoo("BTC-USD", 98000)
+
+def todos_precios():
+    global _CACHE
+    ahora = time.time()
+    if _CACHE["datos"] is not None and (ahora - _CACHE["tiempo"] < 30):
+        return _CACHE["datos"]
+    try:
+        oro = oro_real(); btc_b = precio_binance(); btc_c = precio_coinbase(); btc_y = precio_bybit()
+        d = {"ORO": oro, "EURUSD": yahoo("EURUSD=X", 1.1150),"GBPUSD": yahoo("GBPUSD=X", 1.2750), "USDJPY": yahoo("USDJPY=X", 149.5),"USDCHF": yahoo("USDCHF=X", 0.8850), "AUDUSD": yahoo("AUDUSD=X", 0.6550),"BTC": btc_b, "BTC_COINBASE": btc_c, "BTC_BINANCE": btc_b, "BTC_BYBIT": btc_y,"ETH": yahoo("ETH-USD", 3400), "AAPL": yahoo("AAPL", 262),"TSLA": yahoo("TSLA", 340), "NVDA": yahoo("NVDA", 185),"MSFT": yahoo("MSFT", 495), "AMZN": yahoo("AMZN", 235),"META": yahoo("META", 645), "GOOGL": yahoo("GOOGL", 282),"NFLX": yahoo("NFLX", 765), "AMD": yahoo("AMD", 125)}
+    except:
+        d = {"ORO": 4070, "EURUSD": 1.1140, "GBPUSD": 1.2750, "USDJPY": 149.5, "USDCHF": 0.8850, "AUDUSD": 0.6550, "BTC": 98000, "BTC_COINBASE": 98000, "BTC_BINANCE": 98000, "BTC_BYBIT": 98000, "ETH": 3400, "AAPL": 262, "TSLA": 340, "NVDA": 185, "MSFT": 495, "AMZN": 235, "META": 645, "GOOGL": 282, "NFLX": 765, "AMD": 125}
+    _CACHE = {"tiempo": ahora, "datos": d}
+    return d
+
+def robot_decide_y_opera(activo, precio, m5_dato):
+    try:
+        GRAFICO["velas"].append({"hora": datetime.now().strftime("%H:%M"), "p": precio, "a": activo})
+        GRAFICO["velas"] = GRAFICO["velas"][-60:]
+        for op in list(OPS["abiertas"]):
+            if op["activo"] != activo: continue
+            gano = False; perdio = False
+            if op["lado"] == "COMPRA":
+                if precio >= op["tp"]: gano = True
+                elif precio <= op["sl"]: perdio = True
             else:
-                robots_conectados[simbolo] = {"senal": "ESPERA", "precio": precio, "fuente": z["fuente"]}
-    return robots_conectados
+                if precio <= op["tp"]: gano = True
+                elif precio >= op["sl"]: perdio = True
+            if gano or perdio:
+                op["cierre"] = precio; op["hora_cierre"] = datetime.now().strftime("%H:%M")
+                op["resultado"] = "GANO +$" + str(op["ganar"]) if gano else "PERDIO -$" + str(op["perder"])
+                if op.get("bybit_id"):
+                    lado_cierre = "Sell" if op["lado"] == "COMPRA" else "Buy"
+                    bybit_orden_real(MAP_BYBIT.get(activo, "PAXGUSDT"), lado_cierre, op.get("bybit_qty", "0.002"))
+                OPS["abiertas"].remove(op); OPS["cerradas"].append(op); OPS["h"].append(op)
+                if gano: OPS["ganado"] += op["ganar"]
+                else: OPS["perdido"] += op["perder"]
+                OPS["u"] = "Robot cerro " + op["lado"] + " " + op["activo"] + " en $" + str(precio) + " - " + op["resultado"]
+        if not OPS.get("auto", True):
+            save("ops.json", OPS); return OPS["u"]
+        for op in OPS["abiertas"]:
+            if op["activo"] == activo:
+                save("ops.json", OPS); return "Robot ya tiene abierta " + activo + " - esperando TP/SL"
+        accion = m5_dato.get("accion", "ESPERA M5")
+        if "COMPRA" in accion: lado = "COMPRA"; tp = m5_dato.get("tp_m5"); sl = m5_dato.get("sl_m5")
+        elif "VENTA" in accion: lado = "VENTA"; tp = m5_dato.get("tp_m5"); sl = m5_dato.get("sl_m5")
+        else:
+            save("ops.json", OPS); return "Robot M5: ESPERA - " + activo + " $" + str(precio) + " no toco zona, no opera"
+        bybit_msg = "SIMULACION"
+        bybit_qty = "0.002"
+        if activo == "BTC": bybit_qty = "0.0001"
+        if activo == "EURUSD": bybit_qty = "5"
+        bybit_id = ""
+        if BYBIT_KEY:
+            simbolo = MAP_BYBIT.get(activo, "PAXGUSDT")
+            lado_bybit = "Buy" if lado == "COMPRA" else "Sell"
+            res = bybit_orden_real(simbolo, lado_bybit, bybit_qty)
+            bybit_msg = res.get("msg", "")
+            if res.get("ok"):
+                try: bybit_id = res["data"]["result"].get("orderId", "")
+                except: bybit_id = "OK"
+        nueva = {"activo": activo, "lado": lado, "entrada": precio, "tp": tp, "sl": sl, "lote": 0.01, "ganar": 5, "perder": 2, "hora": datetime.now().strftime("%H:%M"), "estado": "ABIERTA", "motivo": m5_dato.get("mensaje", ""), "bybit": bybit_msg, "bybit_id": bybit_id, "bybit_qty": bybit_qty}
+        OPS["abiertas"].append(nueva); OPS["h"].append(nueva)
+        OPS["u"] = "🤖 ROBOT ABRIO SOLO: " + lado + " " + activo + " en $" + str(precio) + " TP $" + str(tp) + " SL $" + str(sl) + " | BYBIT: " + bybit_msg
+        save("ops.json", OPS); save("grafico.json", GRAFICO)
+        return OPS["u"]
+    except Exception as e:
+        return "Robot error: " + str(e)
 
-HTML = """<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RAUDY VIP ROBOTS PODEROSOS - ACCIONES + ORO</title>
-<style>
-*{box-sizing:border-box;font-family:Arial,sans-serif}
-body{margin:0;background:#050505;color:white;text-align:center}
-header{background:linear-gradient(90deg,#FFD700,#FF6B00,#FFD700);color:black;padding:15px}
-header h1{margin:0;font-size:22px}
-header p{margin:5px 0;font-weight:bold}
-.top-btns{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;padding:10px;background:#111}
-.top-btns a{padding:12px 16px;border-radius:25px;text-decoration:none;font-weight:bold;color:white;font-size:14px}
-.wa{background:#25D366}.tg{background:#0088cc}.ig{background:#E1306C}.pay{background:#FFD700;color:black!important}
-.clock{background:#111;padding:10px;border:2px solid #FFD700;margin:10px;border-radius:15px}
-.clock b{color:#FFD700;font-size:20px}
-.maestro{background:linear-gradient(180deg,#FFD700,#FF6B00);color:black;margin:10px;padding:18px;border-radius:20px;border:4px solid white;box-shadow:0 0 30px #FFD700}
-.maestro h2{margin:0;font-size:26px}
-.maestro p{font-size:18px;font-weight:bold}
-.maestro button{padding:12px 20px;border:none;border-radius:20px;background:black;color:#FFD700;font-weight:bold;font-size:16px;cursor:pointer;margin:3px}
-.broker{background:#1a1a2e;margin:10px;padding:15px;border-radius:15px;border:2px solid #00FFFF}
-.broker img{width:90px;height:90px;border-radius:50%;border:3px solid #00FFFF;object-fit:cover}
-.acciones{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;padding:10px}
-.act{background:#1a1a1a;border:1px solid #333;padding:10px;border-radius:12px;min-width:130px;cursor:pointer}
-.act b{color:#FFD700}.act span{font-size:12px}
-.act.active{border:2px solid #FFD700;box-shadow:0 0 15px #FFD700}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px}
-.robot{background:#1a1a1a;border:2px solid #333;border-radius:15px;padding:10px}
-.robot .luz{width:18px;height:18px;border-radius:50%;background:yellow;margin:0 auto 5px;box-shadow:0 0 12px yellow;animation:parpadeo 1s infinite}
-@keyframes parpadeo{0%{opacity:1}50%{opacity:.3}100%{opacity:1}}
-.robot h3{margin:5px 0;font-size:14px;color:#FFD700}
-.robot p{font-size:12px;margin:3px 0}
-.robot .poder{font-size:18px}
-.robot .msg{font-size:12px;background:#222;padding:6px;border-radius:8px;min-height:38px}
-.btns{margin-top:6px;display:flex;gap:5px;justify-content:center}
-.btns button{border:none;padding:7px 8px;border-radius:10px;font-weight:bold;cursor:pointer;font-size:11px}
-.felicitar{background:#00FF88}.estrella{background:#FFD700}
-.estrellas{font-size:16px;color:#FFD700}
-.footer{padding:20px;font-size:12px;color:#888}
-.satelite{background:#001a33;margin:10px;padding:15px;border-radius:15px;border:2px solid #00FFFF}
-.motorbox{background:#2a0000;margin:10px;padding:15px;border-radius:15px;border:2px solid #FF0000}
-.buscadorbox{background:#0a2a00;margin:10px;padding:15px;border-radius:15px;border:2px solid #00FF88}
-.origen{font-size:11px;color:#aaa;background:#111;padding:8px;border-radius:10px;margin-top:8px;text-align:left}
-.conectado{background:#002a00;margin:10px;padding:12px;border-radius:15px;border:2px solid #00FF88}
-.bancobox{background:#1a1a00;margin:10px;padding:15px;border-radius:15px;border:2px solid #FFD700;text-align:left}
-.jefebox{background:#2a0000;margin:10px;padding:15px;border-radius:15px;border:3px solid #FF0000}
-.extrabox{background:#001a33;margin:10px;padding:15px;border-radius:15px;border:2px solid #00FFFF;text-align:left}
-.bybitbox{background:#FFF8DC;margin:10px;padding:18px;border-radius:20px;border:3px solid #F7A600;text-align:center;color:black}
-.bybitbox img{width:220px;height:220px;border:4px solid #F7A600;border-radius:15px;background:white;object-fit:contain}
-.bybitbox a{display:inline-block;margin-top:10px;padding:12px 20px;background:#F7A600;color:black;font-weight:bold;border-radius:25px;text-decoration:none}
-.bybitstatus{background:#001a00;margin:10px;padding:15px;border-radius:15px;border:3px solid #00FF88}
-</style>
-</head>
-<body>
-<header>
-<h1>👑 RAUDY VIP ROBOTS PODEROSOS ⚡☄️</h1>
-<p>ACCIONES + ORO • ELLOS BUSCAR Y ANALIZAN SOLOS</p>
-<p>JEFE: RAUDY MANZUETA</p>
-</header>
-<div class="top-btns">
-<a class="wa" href="https://wa.me/41767574050" target="_blank">💬 WHATSAPP 0767574050</a>
-<a class="tg" href="https://t.me/raudy_vip_oro_bot" target="_blank">✈️ TELEGRAM @raudy_vip_oro_bot</a>
-<a class="ig" href="https://instagram.com/raudy_vip_oro_bot" target="_blank">📸 INSTAGRAM @raudy_vip_oro_bot</a>
-<a class="pay" href="https://paypal.me/RaudyManzueta/20" target="_blank">💰 PAGAR VIP $20</a>
-</div>
-<!-- 🔌 NUEVO - ESTADO BYBIT AUTOMATICO - NO SE BORRO NADA -->
-<div class="bybitstatus">
-<h2 style="color:#00FF88;margin:0;">🔌 BYBIT AUTOMATICO - ESTADO</h2>
-<p id="bybit-estado" style="font-size:15px;font-weight:bold;">🔌 Verificando Bybit automático...</p>
-<p style="font-size:12px;color:#aaa;">Si dice CONECTADO, el robot ya lee tus llaves de Render. Si dice NO CONECTADO, revisa los nombres en Render.</p>
-</div>
-<!-- 💰 SOLO AGREGADO - QR BYBIT DEL JEFE - NO SE BORRO NADA -->
-<div class="bybitbox">
-<h2 style="margin:0;">💰 DEPOSITAR EN BYBIT - JEFE RAUDY</h2>
-<p style="font-weight:bold;">Escanea el QR con tu app de Bybit para depositar</p>
-<img src="__BYBIT_QR_URL__" alt="QR BYBIT JEFE RAUDY">
-<br>
-<a href="__BYBIT_LINK__" target="_blank">🟡 ABRIR BYBIT</a>
-<p style="font-size:12px;color:#555;">Si el QR no se ve, cambia el link en BYBIT_QR_URL arriba del código. Tu código original sigue intacto.</p>
-</div>
-<div class="jefebox">
-<h2 style="color:#FF4444;margin:0;">👑 JEFE 40 - YO MANDO A LOS 39 - ORDEN EN VIVO</h2>
-<p id="jefe-orden" style="font-size:16px;font-weight:bold;color:white;">👑 JEFE: Cargando orden...</p>
-<p id="jefe-mensaje" style="font-size:13px;color:#FFD700;">Esperando orden del Jefe...</p>
-<p style="font-size:11px;color:#aaa;">Si el JEFE dice PAUSA, nadie opera. Asi no pierdes dinero con noticias de bancos.</p>
-</div>
-<div class="bancobox">
-<h2 style="color:#FFD700;margin:0;text-align:center;">🏦 BANCOS QUE MUEVEN EL ORO - INFO EN VIVO</h2>
-<p id="banco-alerta" style="font-size:14px;font-weight:bold;color:#00FF88;">🏦 Bancos: Cargando...</p>
-<p id="banco-lista" style="font-size:12px;line-height:1.6;">Cargando bancos...</p>
-<p style="font-size:11px;color:#aaa;">Fuente: ForexFactory.com + federalreserve.gov (FED) + ecb.europa.eu (BCE) + TradingEconomics - GRATIS</p>
-</div>
-<div class="extrabox">
-<h2 style="color:#00FFFF;margin:0;text-align:center;">💵 DOLAR + 😱 MIEDO + ₿ BITCOIN - LO QUE USAN LOS BANCOS</h2>
-<p id="dxy-texto" style="font-size:14px;font-weight:bold;">💵 DXY: Cargando...</p>
-<p id="vix-texto" style="font-size:14px;font-weight:bold;">😱 VIX: Cargando...</p>
-<p id="extra-texto" style="font-size:13px;">₿ BTC + 🛢️ Petroleo + 📈 Bono 10 años: Cargando...</p>
-<p style="font-size:11px;color:#aaa;">Si DXY sube, ORO baja. Si VIX pasa 30, JEFE dice PAUSA. Fuente: Yahoo Finance USA - GRATIS</p>
-</div>
-<div class="satelite">
-<h2 style="color:#00FFFF;margin:0;">🛰️ SATÉLITE RAUDY - LLEGÓ A ESTADOS UNIDOS 🇺🇸</h2>
-<p style="font-size:14px;font-weight:bold;">Mirando WALL STREET - NEW YORK en vivo - NYSE + NASDAQ</p>
-<p id="satelite-texto" style="font-size:13px;">🛰️ Satélite conectando con USA... Buscando bolsa...</p>
-<p id="satelite-usa" style="font-size:13px;color:#00FF88;">Cargando bolsa USA...</p>
-<iframe src="https://www.google.com/maps?q=Wall+Street+New+York+USA&z=16&t=k&output=embed" width="100%" height="180" style="border:0;border-radius:10px;margin-top:8px;"></iframe>
-<div class="origen">📍 <b>SATÉLITE APUNTA A:</b> Wall Street, New York, USA - 40.7075° N, 74.0113° W<br>📍 <b>FUENTE BOLSA USA:</b> Yahoo Finance USA - query1.finance.yahoo.com - Precios reales de NYSE / NASDAQ</div>
-</div>
-<div class="conectado">
-<h2 style="color:#00FF88;margin:0;">🔌 TODOS LOS 40 ROBOTS CONECTADOS A LA BOLSA USA ✅</h2>
-<p id="conexion-texto" style="font-size:13px;font-weight:bold;">🔌 Conectando robots a Wall Street...</p>
-<p style="font-size:11px;color:#aaa;">Cada robot lee el mismo precio real de NYSE / NASDAQ - Ya no inventan</p>
-</div>
-<div class="motorbox">
-<h2 style="color:#FF4444;margin:0;">💪 MOTOR FUERZA TOTAL ULTRA 200% 🔥</h2>
-<p id="motor-texto" style="font-size:15px;font-weight:bold;">💪 MOTOR: Cargando fuerza...</p>
-<p style="font-size:12px;color:#aaa;">Motor vigilando ORO + ACCIONES USA con satélite</p>
-</div>
-<div class="buscadorbox">
-<h2 style="color:#00FF88;margin:0;">🔍 BUSCADOR RAUDY - NADA SE ESCAPA</h2>
-<p id="buscador-texto" style="font-size:13px;font-weight:bold;">🔍 Buscando en todo el mercado...</p>
-<p style="font-size:11px;color:#aaa;">Busca: ORO, NVDA, TESLA, APPLE, META, GOOGLE, AMAZON, MICROSOFT cada 15 segundos</p>
-</div>
-<div class="clock">SESION NEW YORK 🕐 <b id="reloj">--:--:--</b><br><span id="sesion">Buscando información...</span></div>
-<div class="acciones" id="acciones"></div>
-<div class="maestro">
-<div style="font-size:40px">👑⚡☄️🔥🧊</div>
-<h2>ROBOT 40 - MAESTRO DIOS RAUDY</h2>
-<p>Función: Yo mando a los 39. Yo tengo TODOS los poderes. Yo decido.</p>
-<p id="maestroMsg">Analizando todo... Espera jefe...</p>
-<p>⭐ Estrellas del Maestro: <span id="maestroEstrellas">⭐⭐⭐⭐⭐</span></p>
-<button onclick="felicitarMaestro()">👏 FELICITAR MAESTRO</button>
-<button onclick="estrellaMaestro()">⭐ MANDAR ESTRELLA AL MAESTRO</button>
-</div>
-<div class="broker">
-<img src="https://i.pravatar.cc/150?img=12" alt="Broker">
-<h3>🧑‍💼 BROKER RAUDY - Persona Real</h3>
-<p id="brokerMsg">Hola jefe, soy tu Broker. Estoy mirando lo que dicen los robots...</p>
-<button onclick="hablarBroker()" style="padding:10px 18px;border-radius:20px;background:#00FFFF;border:none;font-weight:bold">🎤 PREGUNTAR AL BROKER</button>
-</div>
-<h2>🤖 LOS 40 ROBOTS CON PODERES</h2>
-<p>Ellos buscan información, la analizan y te dicen COMPRA o VENTA solos.</p>
-<div class="grid" id="grid"></div>
-<div style="background:#111;margin:10px;padding:15px;border-radius:15px;border:2px solid #FFD700;text-align:left;">
-<h3 style="color:#FFD700;margin:0;">📍 ¿DE DÓNDE SALE CADA PRECIO? - DIRECTO JEFE</h3>
-<p id="origen-precios" style="font-size:12px;line-height:1.6;">Cargando origen...</p>
-<p style="font-size:11px;color:#888;">Esto es para que tú sepas que no es inventado. Cada precio viene de USA.</p>
-</div>
-<div class="footer">RAUDY VIP © 2026 - Solo Robots Hacen Todo - WhatsApp 0767574050 - No es consejo financiero, es educación</div>
-<script>
-const simbolos=[{id:"ORO",nombre:"ORO",precio:4088,emoji:"🥇"},{id:"NVDA",nombre:"NVIDIA",precio:185.20,emoji:"💚"},{id:"AAPL",nombre:"APPLE",precio:262.10,emoji:"🍎"},{id:"TSLA",nombre:"TESLA",precio:340.50,emoji:"🚗"},{id:"MSFT",nombre:"MICROSOFT",precio:495.30,emoji:"🪟"},{id:"AMZN",nombre:"AMAZON",precio:235.40,emoji:"📦"},{id:"META",nombre:"META",precio:645.20,emoji:"👍"},{id:"GOOGL",nombre:"GOOGLE",precio:282.10,emoji:"🔍"}];
-let activo="ORO";
-let datosRealesGlobal=null;
-const accDiv=document.getElementById("acciones");
-function renderAcc(){
- accDiv.innerHTML="";
- simbolos.forEach(s=>{
-  let cambio=(Math.random()*4-2).toFixed(2);
-  let color=cambio>=0?"#00FF88":"#FF4444";
-  let d=document.createElement("div");
-  d.className="act "+(activo===s.id?"active":"");
-  d.innerHTML="<b>"+s.emoji+" "+s.id+"</b><br>"+s.nombre+"<br><b>$"+s.precio.toFixed(2)+"</b><br><span style='color:"+color+"'>"+cambio+"%</span>";
-  d.onclick=()=>{activo=s.id;renderAcc();analizarTodo();sonido()};
-  accDiv.appendChild(d);
- });
-}
-renderAcc();
-const robots=[
-[1,"RAYO RAUDY","⚡","Yo soy el más rápido, busco noticias de USA"],
-[2,"RAYO VELOZ","⚡","Yo busco noticias de NVDA y TESLA"],
-[3,"COMETA ORO","☄️","Yo busco noticias del ORO"],
-[4,"GUARDIA 08:30","🔥","Yo vigilo noticias de las 08:30"],
-[5,"COMETA VENTA","☄️","Yo busco ventas fuertes, rompo el mercado"],
-[6,"COMETA FUERTE","☄️","Yo analizo caídas rápidas"],
-[7,"COMETA DIOS","☄️","Yo aviso cuando viene una venta grande"],
-[8,"RAYO COMPRA","⚡","Yo busco compras rápidas"],
-[9,"RAYO ORO","⚡","Yo sigo el ORO segundo a segundo"],
-[10,"HIELO PACIENTE","🧊","Yo espero frío, no entro con prisa"],
-[11,"HIELO ANALISTA","🧊","Yo analizo si el mercado está tranquilo"],
-[12,"FUEGO COMPRA","🔥","Yo quemo cuando hay compra fuerte"],
-[13,"FUEGO TESLA","🔥","Yo cuido solo TESLA"],
-[14,"FUEGO NVDA","🔥","Yo cuido solo NVIDIA"],
-[15,"FUEGO APPLE","🔥","Yo cuido solo APPLE"],
-[16,"FUEGO ORO","🔥","Yo cuido el ORO con fuego"],
-[17,"FUEGO VENTA","🔥","Yo digo VENTA cuando hay fuego rojo"],
-[18,"RAYO META","⚡","Yo cuido META y GOOGLE"],
-[19,"RAYO AMAZON","⚡","Yo cuido AMAZON"],
-[20,"HIELO JEFE","🧊","Yo digo ESPERA cuando hay peligro"],
-[21,"COMETA AMAZON","☄️","Yo busco noticias de AMAZON"],
-[22,"COMETA MICROSOFT","☄️","Yo busco noticias de MICROSOFT"],
-[23,"RAYO NOTICIAS","⚡","Yo busco noticias en Telegram y WhatsApp"],
-[24,"HIELO SOPORTE","🧊","Yo busco soportes, donde el precio no baja"],
-[25,"FUEGO RESISTENCIA","🔥","Yo busco resistencias, donde el precio no sube"],
-[26,"COMETA 14:30","☄️","Yo vigilo noticias de las 14:30"],
-[27,"RAYO ENTRADA","⚡","Yo busco la mejor ENTRADA"],
-[28,"FUEGO BOTIN","🔥","Yo calculo tu BOTÍN"],
-[29,"HIELO SALIDA","🧊","Yo te digo cuando SALIR"],
-[30,"COMETA PELIGRO","☄️","Yo grito PELIGRO si hay noticia mala"],
-[31,"RAYO VIP","⚡","Yo solo hablo para los VIP"],
-[32,"FUEGO DIOS","🔥","Yo tengo fuego de DIOS"],
-[33,"HIELO DIOS","🧊","Yo tengo hielo de DIOS"],
-[34,"COMETA ORO 2","☄️","Yo confirmo lo que dice el ORO"],
-[35,"RAYO CONFIRMA","⚡","Yo confirmo COMPRA o VENTA"],
-[36,"FUEGO CONFIRMA","🔥","Yo confirmo con fuego"],
-[37,"HIELO CONFIRMA","🧊","Yo confirmo con calma"],
-[38,"COMETA JEFE","☄️","Yo soy el jefe de los cometas"],
-[39,"RAYO MAESTRO 2","⚡","Yo soy la mano derecha del Maestro 40"],
-[40,"MAESTRO DIOS RAUDY","👑⚡☄️🔥🧊","Yo mando a todos, tengo TODOS los poderes"]
-];
-const grid=document.getElementById("grid");
-let estrellas={};
-robots.slice(0,39).forEach(r=>{
- let num=r[0]; let nombre=r[1]; let poder=r[2]; let funcion=r[3];
- estrellas[num]=0;
- let div=document.createElement("div");
- div.className="robot";
- div.innerHTML="<div class='luz' id='luz"+num+"'></div><div class='poder'>"+poder+"</div><h3>Robot "+num+" - "+nombre+"</h3><p><b>Función:</b> "+funcion+"</p><div class='msg' id='msg"+num+"'>Buscando información...</div><div class='estrellas' id='est"+num+"'></div><div class='btns'><button class='felicitar' onclick='felicitar("+num+")'>👏 FELICITAR</button><button class='estrella' onclick='darEstrella("+num+")'>⭐ ESTRELLA</button></div>";
- grid.appendChild(div);
-});
-function sonido(){
- try{
-  let ctx=new (window.AudioContext||window.webkitAudioContext)();
-  let o=ctx.createOscillator(); let g=ctx.createGain();
-  o.connect(g); g.connect(ctx.destination);
-  o.frequency.value=880; o.type="sine"; g.gain.value=0.1; o.start(); o.stop(ctx.currentTime+0.15);
- }catch(e){}
-}
-function hablar(texto){
- if('speechSynthesis' in window){ let u=new SpeechSynthesisUtterance(texto); u.lang='es-ES'; speechSynthesis.speak(u); }
-}
-function felicitar(num){
- sonido();
- document.getElementById("msg"+num).innerHTML="¡Gracias jefe Raudy! Lo estoy haciendo bien, te felicito a ti también 👏";
- hablar("Gracias jefe Raudy, lo estoy haciendo bien");
- document.getElementById("luz"+num).style.background="#00FF88";
-}
-function darEstrella(num){
- sonido(); sonido();
- estrellas[num]++;
- document.getElementById("est"+num).innerHTML="⭐".repeat(estrellas[num]);
- document.getElementById("msg"+num).innerHTML="¡WOW! ¡Me mandaste una estrella! ¡Gracias jefe! ⭐ ¡Voy a trabajar más fuerte!";
- hablar("Gracias jefe, me mandaste una estrella");
-}
-let maestroEstrellasCount=5;
-function felicitarMaestro(){
- sonido();
- document.getElementById("maestroMsg").innerHTML="¡Gracias jefe! ¡Lo estoy haciendo bien, te felicito! ¡Eres el mejor jefe! 👑";
- hablar("Gracias jefe, lo estoy haciendo bien, te felicito");
-}
-function estrellaMaestro(){
- sonido();
- maestroEstrellasCount++;
- document.getElementById("maestroEstrellas").innerHTML="⭐".repeat(maestroEstrellasCount);
- document.getElementById("maestroMsg").innerHTML="¡ESTRELLA RECIBIDA! ¡Ahora tengo más poder! ⭐⚡☄️";
- hablar("Estrella recibida, ahora tengo más poder");
-}
-function hablarBroker(){
- sonido();
- let msgs=["Jefe, el Maestro 40 dice que esperes, el ORO está en zona caliente.","Jefe, los robots dicen COMPRA en NVDA, pero con cuidado.","Jefe, yo como tu Broker te digo: no entres sin confirmación del Maestro.","Jefe, hoy hay mucha fuerza en TESLA, los robots están buscando información."];
- let msg=msgs[Math.floor(Math.random()*msgs.length)];
- document.getElementById("brokerMsg").innerHTML=msg;
- hablar(msg);
-}
-async function analizarTodo(){
- sonido();
- let datos = datosRealesGlobal;
- if(!datos){
-   try{
-     let r = await fetch('/api/satelite_usa?v='+Date.now());
-     datos = await r.json();
-     datosRealesGlobal = datos;
-   }catch(e){ datos = null; }
- }
- let precioReal = datos && datos[activo] ? datos[activo] : simbolos.find(s=>s.id===activo).precio;
- let senalTexto = "ESPERA 🟡";
- let esCompra = false; let esVenta = false;
- if(activo==="ORO"){ if(precioReal<=3910){senalTexto="COMPRA DIOS 🟢"; esCompra=true;} else if(precioReal>=3970){senalTexto="VENTA DIOS 🔴"; esVenta=true;} }
- else if(activo==="NVDA"){ if(precioReal<=180){senalTexto="COMPRA DIOS 🟢"; esCompra=true;} else if(precioReal>=195){senalTexto="VENTA DIOS 🔴"; esVenta=true;} }
- else if(activo==="TSLA"){ if(precioReal<=330){senalTexto="COMPRA DIOS 🟢"; esCompra=true;} else if(precioReal>=355){senalTexto="VENTA DIOS 🔴"; esVenta=true;} }
- else if(activo==="AAPL"){ if(precioReal<=255){senalTexto="COMPRA DIOS 🟢"; esCompra=true;} else if(precioReal>=270){senalTexto="VENTA DIOS 🔴"; esVenta=true;} }
- else if(activo==="MSFT"){ if(precioReal<=490){senalTexto="COMPRA DIOS 🟢"; esCompra=true;} else if(precioReal>=505){senalTexto="VENTA DIOS 🔴"; esVenta=true;} }
- else if(activo==="AMZN"){ if(precioReal<=230){senalTexto="COMPRA DIOS 🟢"; esCompra=true;} else if(precioReal>=245){senalTexto="VENTA DIOS 🔴"; esVenta=true;} }
- else if(activo==="META"){ if(precioReal<=640){senalTexto="COMPRA DIOS 🟢"; esCompra=true;} else if(precioReal>=660){senalTexto="VENTA DIOS 🔴"; esVenta=true;} }
- else if(activo==="GOOGL"){ if(precioReal<=280){senalTexto="COMPRA DIOS 🟢"; esCompra=true;} else if(precioReal>=292){senalTexto="VENTA DIOS 🔴"; esVenta=true;} }
- let entrada = precioReal.toFixed(2);
- let botin, salida;
- if(esCompra){ botin = (precioReal*1.02).toFixed(2); salida = (precioReal*0.99).toFixed(2); }
- else if(esVenta){ botin = (precioReal*0.98).toFixed(2); salida = (precioReal*1.01).toFixed(2); }
- else { botin = entrada; salida = entrada; }
- let origen = activo==="ORO" ? "gold-api.com + Yahoo USA (GC=F)" : "Yahoo Finance USA - NYSE / NASDAQ";
- let ordenJefe = datos && datos.jefe ? datos.jefe.orden : "";
- let textoJefe = ordenJefe ? " | 👑 JEFE DICE: " + ordenJefe : "";
- document.getElementById("maestroMsg").innerHTML="He analizado "+activo+" con PRECIO REAL de BOLSA USA. Los 40 robots están CONECTADOS. Decisión: <b>"+senalTexto+"</b><br>ENTRADA: $"+entrada+" | BOTÍN: $"+botin+" | SALIDA: $"+salida+"<br>📍 Fuente: "+origen + "<br>" + textoJefe;
- hablar("He analizado "+activo+" con precio real de bolsa USA, decisión "+senalTexto);
- robots.slice(0,39).forEach(r=>{
-  let num=r[0]; let funcion=r[3];
-  let el=document.getElementById("msg"+num);
-  let luz=document.getElementById("luz"+num);
-  if(!el) return;
-  let texto = "🔌 "+funcion+" - "+activo+" $"+entrada+" - Fuente: "+origen+" - Veo "+senalTexto + " - Obedezco al JEFE 40";
-  el.innerHTML = texto;
-  let col = esCompra ? "#00FF88" : (esVenta ? "#FF4444" : "#FFD700");
-  luz.style.background = col;
-  luz.style.boxShadow = "0 0 15px "+col;
- });
- document.getElementById("brokerMsg").innerHTML="Jefe, ya analicé "+activo+" con BOLSA USA REAL. El Maestro dice "+senalTexto+". ENTRADA $"+entrada+", BOTÍN $"+botin+". Fuente: "+origen+". Yo te recomiendo esperar confirmación.";
- document.getElementById("conexion-texto").innerHTML="🔌 40/40 ROBOTS CONECTADOS ✅ - "+activo+" $"+entrada+" - Fuente: "+origen+" - Actualizado ahora";
-}
-async function actualizarSateliteUSA(){
-  try{
-    let r = await fetch('/api/satelite_usa?v='+Date.now());
-    let d = await r.json();
-    datosRealesGlobal = d;
-    if(d.bybit){ document.getElementById("bybit-estado").innerHTML = d.bybit.mensaje; }
-    document.getElementById("satelite-texto").innerHTML = "🛰️ SATÉLITE EN USA ✅ - NYSE: " + d.nyse + " | NASDAQ: " + d.nasdaq;
-    document.getElementById("satelite-usa").innerHTML = "🇺🇸 Wall Street: ORO $" + d.ORO + " | NVDA $" + d.NVDA + " | TESLA $" + d.TSLA + " | APPLE $" + d.AAPL;
-    document.getElementById("motor-texto").innerHTML = "💪 MOTOR: " + d.motor + " | " + d.velocidad;
-    document.getElementById("buscador-texto").innerHTML = d.buscador;
-    document.getElementById("conexion-texto").innerHTML = "🔌 40/40 ROBOTS CONECTADOS ✅ - ORO $"+d.ORO+" - Fuente: Yahoo USA + gold-api";
-    if(d.jefe){
-      document.getElementById("jefe-orden").innerHTML = d.jefe.orden;
-      document.getElementById("jefe-mensaje").innerHTML = d.jefe.mensaje;
-    }
-    if(d.bancos){
-      document.getElementById("banco-alerta").innerHTML = "🏦 " + d.bancos.alerta_banco + " | Riesgo: " + d.bancos.nivel_riesgo;
-      let lista = d.bancos.eventos_hoy.map(e=> "🏦 <b>" + e.evento + "</b> - Impacto: " + e.impacto + " - " + e.efecto).join("<br>");
-      document.getElementById("banco-lista").innerHTML = lista + "<br>📍 Fuente: " + d.bancos.fuente;
-    }
-    if(d.extra){
-      document.getElementById("dxy-texto").innerHTML = "💵 " + d.extra.DXY_texto;
-      document.getElementById("vix-texto").innerHTML = "😱 " + d.extra.VIX_texto;
-      document.getElementById("extra-texto").innerHTML = "₿ BTC $" + Math.round(d.extra.BTC) + " | 🛢️ Petroleo $" + d.extra.PETROLEO + " | 📈 Bono 10 años " + d.extra.BONO10 + "%";
-    }
-    document.getElementById("origen-precios").innerHTML =
-      "🥇 <b>ORO $" + d.ORO + "</b> → Viene de: <b>gold-api.com</b> + Yahoo Finance USA (GC=F) - Señal: "+d.robots_conectados.ORO.senal+"<br>" +
-      "💚 <b>NVDA $" + d.NVDA + "</b> → Viene de: <b>Yahoo Finance USA - NASDAQ</b> - Señal: "+d.robots_conectados.NVDA.senal+"<br>" +
-      "🍎 <b>APPLE $" + d.AAPL + "</b> → Viene de: <b>Yahoo Finance USA - NASDAQ</b> - Señal: "+d.robots_conectados.AAPL.senal+"<br>" +
-      "🚗 <b>TESLA $" + d.TSLA + "</b> → Viene de: <b>Yahoo Finance USA - NASDAQ</b> - Señal: "+d.robots_conectados.TSLA.senal+"<br>" +
-      "🪟 <b>MICROSOFT $" + d.MSFT + "</b> → Viene de: <b>Yahoo Finance USA - NASDAQ</b> - Señal: "+d.robots_conectados.MSFT.senal+"<br>" +
-      "📦 <b>AMAZON $" + d.AMZN + "</b> → Viene de: <b>Yahoo Finance USA - NASDAQ</b> - Señal: "+d.robots_conectados.AMZN.senal+"<br>" +
-      "👍 <b>META $" + d.META + "</b> → Viene de: <b>Yahoo Finance USA - NASDAQ</b> - Señal: "+d.robots_conectados.META.senal+"<br>" +
-      "🔍 <b>GOOGLE $" + d.GOOGL + "</b> → Viene de: <b>Yahoo Finance USA - NASDAQ</b> - Señal: "+d.robots_conectados.GOOGL.senal;
-    let mapa = {"ORO":d.ORO,"NVDA":d.NVDA,"AAPL":d.AAPL,"TSLA":d.TSLA,"MSFT":d.MSFT,"AMZN":d.AMZN,"META":d.META,"GOOGL":d.GOOGL};
-    simbolos.forEach(s=>{ if(mapa[s.id]) s.precio = mapa[s.id]; });
-    renderAcc();
-  }catch(e){
-    document.getElementById("satelite-texto").innerHTML = "🛰️ Satélite buscando USA... Reintentando";
-  }
-}
-setInterval(actualizarSateliteUSA, 15000);
-actualizarSateliteUSA();
-setInterval(()=>{
- let d=new Date();
- document.getElementById("reloj").innerHTML=d.toLocaleTimeString("es-ES");
- let h=d.getHours();
- document.getElementById("sesion").innerHTML=h>=14&&h<21?"🟢 SESIÓN NEW YORK ABIERTA - Robots trabajando":"🟡 Sesión cerrada - Robots buscando información";
-},1000);
-setInterval(analizarTodo,30000);
-analizarTodo();
-</script>
-</body>
-</html>
-"""
+def m5_zona_analiza(activo, precio):
+    z = ZONAS[activo]; zc = z["c"]; zv = z["v"]; rango = zv - zc; tol = rango * 0.15
+    M5["v"].append({"hora": datetime.now().strftime("%H:%M"), "p": precio, "a": activo}); M5["v"] = M5["v"][-30:]
+    velas = [x["p"] for x in M5["v"][-3:] if x["a"] == activo]
+    if len(velas) >= 3:
+        if velas[-1] > velas[-2] > velas[-3]: dir_m5 = "M5 SUBIENDO ⬆️"
+        elif velas[-1] < velas[-2] < velas[-3]: dir_m5 = "M5 BAJANDO ⬇️"
+        else: dir_m5 = "M5 LATERAL 🟡"
+    else: dir_m5 = "M5 ESPERANDO VELAS..."
+    if abs(precio - zc) <= tol:
+        msg = "🟢 M5 ZONA ABAJO TOCADA - " + NOMBRES[activo] + " $" + str(precio) + " en M5 - COMPRA YA - " + dir_m5; accion = "COMPRA M5"; tp = precio + rango * 0.8; sl = precio - rango * 0.2; M5_ZONA["senales"] += 1
+    elif abs(precio - zv) <= tol:
+        msg = "🔴 M5 ZONA ARRIBA TOCADA - " + NOMBRES[activo] + " $" + str(precio) + " en M5 - VENTA YA - " + dir_m5; accion = "VENTA M5"; tp = precio - rango * 0.8; sl = precio + rango * 0.2; M5_ZONA["senales"] += 1
+    else:
+        msg = "🟡 M5 ESPERA - " + NOMBRES[activo] + " $" + str(precio) + " - " + dir_m5 + " - Espera que toque ZONA M5"; accion = "ESPERA M5"; tp = zc; sl = zv
+    M5_ZONA["u"] = msg; M5_ZONA["h"].append({"hora": datetime.now().strftime("%H:%M"), "a": activo, "p": precio, "accion": accion, "tf": "M5"}); M5_ZONA["h"] = M5_ZONA["h"][-20:]
+    save("m5_zona.json", M5_ZONA); save("m5.json", M5)
+    return {"activo": activo, "precio": precio, "tf": "M5", "plataforma": "MT5", "mensaje": msg, "accion": accion, "direccion_m5": dir_m5, "tp_m5": round(tp, 4), "sl_m5": round(sl, 4), "velas_m5": velas}
+def zona_analiza(activo, precio, precios):
+    z = ZONAS[activo]; zc = z["c"]; zv = z["v"]; rango = zv - zc; tol = rango * 0.15
+    pos = (precio - zc) / rango * 100 if rango != 0 else 50
+    if pos < 0: pos = 0
+    if pos > 100: pos = 100
+    if abs(precio - zc) <= tol:
+        ZONA_H["toques_c"] += 1; msg = "🟢 ZONA ABAJO TOCADA - " + NOMBRES[activo] + " toco ZONA $" + str(zc) + " REBOTE PARA ARRIBA - COMPRA YA"; tipo = "ZONA_COMPRA"; accion = "COMPRA"; tp = precio + rango * 0.8; sl = precio - rango * 0.2
+    elif abs(precio - zv) <= tol:
+        ZONA_H["toques_v"] += 1; msg = "🔴 ZONA ARRIBA TOCADA - " + NOMBRES[activo] + " toco ZONA $" + str(zv) + " REBOTE PARA ABAJO - VENTA YA"; tipo = "ZONA_VENTA"; accion = "VENTA"; tp = precio - rango * 0.8; sl = precio + rango * 0.2
+    elif precio < zc:
+        msg = "🔴 " + NOMBRES[activo] + " ABAJO DE ZONA $" + str(precio) + " - Espera que vuelva a ZONA para COMPRAR"; tipo = "DEBAJO_ZONA"; accion = "ESPERA_BARREDOR"; tp = zc + rango * 0.8; sl = zc - rango * 0.2
+    elif precio > zv:
+        msg = "🔴 " + NOMBRES[activo] + " ARRIBA DE ZONA $" + str(precio) + " - Espera que vuelva a ZONA para VENDER"; tipo = "ENCIMA_ZONA"; accion = "ESPERA"; tp = zv - rango * 0.8; sl = zv + rango * 0.2
+    else:
+        msg = "🟡 " + NOMBRES[activo] + " en MEDIO DE ZONA $" + str(precio) + " - ESPERA que toque ZONA"; tipo = "MEDIO"; accion = "ESPERA"; tp = zc; sl = zv
+    ZONA_H["u"] = msg; ZONA_H["h"].append({"hora": datetime.now().strftime("%H:%M"), "a": activo, "p": precio, "t": tipo}); ZONA_H["h"] = ZONA_H["h"][-20:]; save("zona.json", ZONA_H)
+    return {"activo": activo, "precio": precio, "zona_abajo": zc, "zona_arriba": zv, "posicion": round(pos, 1), "mensaje": msg, "tipo": tipo, "accion": accion, "tp_zona": round(tp, 4), "sl_zona": round(sl, 4)}
+def zona_todos(precios):
+    out = {}
+    for a in ZONAS:
+        if a in precios: out[a] = zona_analiza(a, precios[a], precios)
+    return out
+def aprende(oro, orden):
+    if "COMPRA" in orden or oro <= 3910: MEM["c"] += 1; dec = "COMPRA"
+    elif "VENTA" in orden or oro >= 3970: MEM["v"] += 1; dec = "VENTA"
+    else: MEM["e"] += 1; dec = "ESPERA"
+    if oro <= 3910: MEM["l"] = "ORO bajo a " + str(oro) + ". Despues SUBIO."
+    elif oro >= 3970: MEM["l"] = "ORO subio a " + str(oro) + ". Despues BAJO."
+    else: MEM["l"] = "ORO en " + str(oro) + ". Me acuerdo jefe."
+    MEM["h"].append({"hora": datetime.now().strftime("%H:%M"), "oro": oro, "d": dec}); MEM["h"] = MEM["h"][-20:]; save("mem.json", MEM)
+def m5_aprende(p):
+    M5["v"].append({"hora": datetime.now().strftime("%H:%M"), "p": p}); M5["v"] = M5["v"][-20:]
+    if len(M5["v"]) >= 3:
+        a = M5["v"][-3]["p"]; b = M5["v"][-2]["p"]; c = M5["v"][-1]["p"]
+        if c > b > a: M5["s"] += 1; M5["b"] = 0; M5["u"] = "M5 subio 3 velas " + str(a) + ">" + str(b) + ">" + str(c)
+        elif c < b < a: M5["b"] += 1; M5["s"] = 0; M5["u"] = "M5 bajo 3 velas " + str(a) + ">" + str(b) + ">" + str(c)
+        else: M5["u"] = "M5 en " + str(c) + " mezclado. ESPERA."
+    save("m5.json", M5)
+def plat_aprende(key, pc, pr, nombre, archivo):
+    D = PLATS[key]
+    if pc > 10000:
+        if pc <= 95000: D["b"] += 1; lec = nombre + " BARATO BTC $" + str(pc)
+        elif pc >= 108000: D["c"] += 1; lec = nombre + " CARO BTC $" + str(pc)
+        else: lec = nombre + " MEDIO BTC $" + str(pc)
+    else:
+        if pc >= 3970: D["c"] += 1; lec = nombre + " CARO ORO $" + str(pc)
+        elif pc <= 3910: D["b"] += 1; lec = nombre + " BARATO ORO $" + str(pc)
+        else: lec = nombre + " MEDIO ORO $" + str(pc)
+    D["u"] = lec; D["h"].append({"hora": datetime.now().strftime("%H:%M"), "p": pc}); D["h"] = D["h"][-20:]; save(archivo, D); return lec
+def calc_lote(lote, ganar, perder, precio, lado, activo):
+    div = lote * 100
+    if activo in ["EURUSD", "GBPUSD", "AUDUSD"]: d_tp = ganar * 0.001; d_sl = perder * 0.001
+    elif activo in ["USDJPY", "USDCHF"]: d_tp = ganar * 0.01; d_sl = perder * 0.01
+    else:
+        if div == 0: div = 1
+        d_tp = ganar / div; d_sl = perder / div
+    if lado == "COMPRA": tp = precio + d_tp; sl = precio - d_sl
+    else: tp = precio - d_tp; sl = precio + d_sl
+    return tp, sl, d_tp, d_sl
+def busca_activo(m):
+    if "bitcoin" in m or "btc" in m: return "BTC"
+    if "ethereum" in m or "eth" in m: return "ETH"
+    if "euro" in m or "eur" in m: return "EURUSD"
+    if "libra" in m or "gbp" in m: return "GBPUSD"
+    if "yen" in m or "jpy" in m: return "USDJPY"
+    if "franco" in m or "chf" in m: return "USDCHF"
+    if "aud" in m or "austral" in m: return "AUDUSD"
+    if "apple" in m or "aapl" in m: return "AAPL"
+    if "tesla" in m or "tsla" in m: return "TSLA"
+    if "nvidia" in m or "nvda" in m: return "NVDA"
+    if "microsoft" in m or "msft" in m: return "MSFT"
+    if "amazon" in m or "amzn" in m: return "AMZN"
+    if "meta" in m: return "META"
+    if "google" in m or "googl" in m: return "GOOGL"
+    if "netflix" in m or "nflx" in m: return "NFLX"
+    if "amd" in m: return "AMD"
+    return "ORO"
+def chat_robot(msg, precios, zonas, m5_dato):
+    m = msg.lower(); nums = re.findall(r"\d+\.?\d*", msg); activo = busca_activo(m); precio = precios.get(activo, 4088); nombre = NOMBRES.get(activo, activo); z = zonas.get(activo, {})
+    lote = 0.01; ganar = 5.0; perder = 2.0
+    if "0.02" in msg: lote = 0.02
+    if "0.05" in msg: lote = 0.05
+    if "0.1" in msg: lote = 0.1
+    if "ganar" in m and len(nums) >= 2:
+        try: ganar = float(nums[-2]); perder = float(nums[-1])
+        except: pass
+    if "hola" in m: return "Hola jefe RAUDY ORO. 100 cerebros M5 ZONA en vivo. Dime: m5 oro o compro 0.01 en m5 para ganar 5 y perder 2"
+    if "m5" in m: return "M5 MT5 PEGADO - " + m5_dato.get("mensaje", "") + " | TP M5 " + str(m5_dato.get("tp_m5")) + " SL M5 " + str(m5_dato.get("sl_m5")) + " | " + nombre + " $" + str(precio)
+    if "zona" in m: return "ZONA " + nombre + ": " + z.get("mensaje", "") + " | TP ZONA " + str(z.get("tp_zona")) + " SL ZONA " + str(z.get("sl_zona"))
+    if "bybit" in m: return "BYBIT jefe: BTC $" + str(precios["BTC_BYBIT"]) + ". " + PLATS["BYBIT"]["u"] + " | Llave: " + ("SI CONECTADA " + ("TESTNET" if BYBIT_TESTNET else "REAL") if BYBIT_KEY else "NO - pon llave en Render")
+    if "binance" in m: return "BINANCE jefe: BTC $" + str(precios["BTC_BINANCE"]) + ". " + PLATS["BINANCE"]["u"]
+    if "mt5" in m: return "MT5 M5 PEGADO jefe: ORO $" + str(precios["ORO"]) + " EUR $" + str(precios["EURUSD"]) + " - " + m5_dato.get("mensaje", "")
+    if "qr" in m or "broker" in m: return "QR JEFE: Escanea para entrar a " + NOMBRE_BROKER_QR + " Link: " + LINK_BROKER
+    if "compr" in m:
+        if "ganar" in m or "gana" in m or "perder" in m:
+            entrada = ZONAS[activo]["c"] if precio > ZONAS[activo]["c"] else precio; tp, sl, dt, ds = calc_lote(lote, ganar, perder, entrada, "COMPRA", activo); return "Jefe M5 PEGADO: COMPRA " + nombre + " " + str(lote) + " en M5 ZONA $" + str(round(entrada, 4)) + " TP " + str(round(tp, 4)) + " ganas $" + str(ganar) + " SL " + str(round(sl, 4)) + " pierdes $" + str(perder) + ". " + m5_dato.get("mensaje", "")
+        return "Dime: compro 0.01 en m5"
+    if "vend" in m:
+        if "ganar" in m or "perder" in m:
+            entrada = ZONAS[activo]["v"] if precio < ZONAS[activo]["v"] else precio; tp, sl, dt, ds = calc_lote(lote, ganar, perder, entrada, "VENTA", activo); return "Jefe M5 PEGADO: VENTA " + nombre + " " + str(lote) + " en M5 ZONA $" + str(round(tp, 4)) + " ganas $" + str(ganar) + " SL " + str(round(sl, 4)) + " pierdes $" + str(perder)
+        return "VENTA " + nombre + " en ZONA $" + str(ZONAS[activo]["v"])
+    if "opera" in m or "robot" in m or "auto" in m: return "🤖 ROBOT AUTO: " + OPS["u"] + " | Abiertas: " + str(len(OPS["abiertas"])) + " | Ganado: $" + str(OPS["ganado"]) + " Perdido: $" + str(OPS["perdido"]) + " | BYBIT: " + ("CONECTADO " + ("TESTNET" if BYBIT_TESTNET else "REAL") if BYBIT_KEY else "SIMULACION")
+    return "Te entendi jefe: " + msg + ". " + nombre + " $" + str(precio) + ". " + m5_dato.get("mensaje", "")
+def qr_url():
+    return "https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=" + urllib.parse.quote(LINK_BROKER)
 
-HTML_FINAL = HTML.replace("__BYBIT_QR_URL__", BYBIT_QR_URL).replace("__BYBIT_LINK__", BYBIT_LINK_DEPOSITO)
+H = []
+H.append("<!DOCTYPE html><html lang='es'><head>")
+H.append("<meta charset='UTF-8'>")
+H.append("<meta name='viewport' content='width=device-width, initial-scale=1.0'>")
+H.append("<title>RAUDY VIP M5 PEGADO</title>")
+H.append("<style>body{background:#050505;color:#fff;font-family:Arial;text-align:center;margin:0}")
+H.append("header{background:#FFD700;color:#000;padding:15px}")
+H.append(".box{margin:10px;padding:15px;border-radius:15px;border:3px solid #FFD700}")
+H.append(".zona{border-color:#00FFFF;background:#001a2a}")
+H.append(".qr{border-color:#00FF88;background:#001a00}")
+H.append(".m5box{border-color:#FF00FF;background:#1a001a}")
+H.append("input{width:100%;padding:12px;margin:4px 0;border-radius:10px;background:#111;color:#fff}")
+H.append("button{width:100%;padding:14px;border-radius:15px;font-weight:bold;margin-top:5px}")
+H.append(".grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px}")
+H.append(".robot{background:#1a1a1a;padding:8px;border-radius:12px;font-size:12px}")
+H.append(".luz{width:14px;height:14px;border-radius:50%;background:#FF00FF;margin:auto}")
+H.append(".barra{width:100%;height:22px;background:#111;border-radius:10px;overflow:hidden}")
+H.append(".relleno{height:100%;background:linear-gradient(90deg,#00FF88,#FFD700,#FF4444)}")
+H.append("canvas{width:100%;background:#000;border-radius:10px}")
+H.append("table{width:100%;font-size:12px;border-collapse:collapse}td,th{border:1px solid #333;padding:5px}")
+H.append("</style></head><body>")
+H.append("<header><h1>👑 RAUDY VIP M5 PEGADO ⚡</h1><p>JEFE: RAUDY ORO - MT5 + M5 + ZONA + QR</p><p id='vivo'>🟢 EN VIVO M5...</p></header>")
+H.append("<div class='box' style='border-color:#FFD700;background:#1a1500'><h2>🟡 BYBIT CONECTADO - ROBOT</h2><p id='bybitEstado'>Revisando Bybit...</p><button onclick='probarBybit()' style='background:#FFD700'>🔌 PROBAR CONEXION BYBIT</button><button onclick='verBalance()' style='background:#00FFFF'>💰 VER MI BALANCE BYBIT</button><p id='bybitRes' style='background:#111;padding:10px;border-radius:10px;text-align:left;font-size:12px'>...</p></div>")
+H.append("<div class='box' style='border-color:#00FF88;background:#001100'><h2>📈 GRAFICO OPERACIONES - ROBOT M5</h2><canvas id='graf' width='360' height='220'></canvas><p id='robotEstado' style='font-weight:bold'>🤖 Robot esperando...</p><p id='robotOps'></p><button onclick='toggleAuto()' style='background:#00FF88'>🤖 PRENDER / APAGAR ROBOT AUTO</button><p id='autoEstado'></p></div>")
+H.append("<div class='box' style='border-color:#FF4444'><h2>📋 OPERACIONES DEL ROBOT - ORO + EUR + BTC</h2><div id='tablaOps' style='text-align:left'>Cargando operaciones...</div></div>")
+H.append("<div class='box m5box'><h2>📊 PEGADO A M5 - MT5 - CADA 5 MINUTOS</h2><p>Plataforma: MT5 | Timeframe: M5 | Simbolo: XAUUSD ORO</p><p id='m5Zona' style='font-weight:bold;font-size:16px'>Cargando M5...</p><p id='m5Dir'></p><p id='m5TP'></p><p id='m5Velas' style='font-size:12px'></p></div>")
+H.append("<div class='box qr'><h2>📱 ESCANEA MI BROKER - RAUDY ORO</h2><img src='" + qr_url() + "' style='width:250px;height:250px;background:#fff;padding:10px;border-radius:15px'><p style='font-weight:bold'>BYBIT - RAUDY ORO</p><p style='font-size:12px;word-break:break-all'>" + LINK_BROKER + "</p><button onclick=\"window.open('" + LINK_BROKER + "','_blank')\" style='background:#00FF88'>🔗 ABRIR MI BROKER</button></div>")
+H.append("<div class='box zona'><h2>📊 ESTRATEGIA ZONA M5 - COMO LA FOTO</h2><p>⬆️ Si toca ZONA ABAJO en M5 - REBOTA ARRIBA = COMPRA</p><p>⬇️ Si toca ZONA ARRIBA en M5 - REBOTA ABAJO = VENTA</p><p id='zonaOro' style='font-weight:bold'>Cargando ZONA...</p><p>ZONA ARRIBA 🔴 VENTA</p><div class='barra'><div class='relleno' id='barraZona' style='width:50%'></div></div><p>ZONA ABAJO 🟢 COMPRA</p><p id='zonaPos'></p><p id='zonaTP'></p></div>")
+H.append("<div class='box vivo'><h2>🟢 EN VIVO M5</h2><p id='vivo2'>Conectando M5...</p></div>")
+H.append("<div class='box chat'><h2>💬 CHAT M5 + LOTE 0.01</h2><input id='chat' placeholder='Ej: m5 oro o bybit'><button onclick='enviarChat()' style='background:#FFD700'>💬 ENVIAR</button><p id='chatR' style='background:#111;padding:12px;border-radius:10px;text-align:left'>🤖 Hola jefe M5...</p><button onclick=\"ej('m5 oro)')\" style='background:#FF00FF;color:#fff'>📊 M5 ORO PEGADO</button><button onclick=\"ej('bybit)')\" style='background:#FFD700'>🟡 BYBIT</button><button onclick=\"ej('robot)')\" style='background:#00FF88'>🤖 ROBOT</button></div>")
+H.append("<div class='box'><h2>💶 DIVISAS M5 EN VIVO</h2><p id='divisas'></p></div>")
+H.append("<div class='box'><h2>₿ BITCOIN M5 EN VIVO</h2><p id='crypto'></p></div>")
+H.append("<div class='box'><h2>📈 ACCIONES M5 EN VIVO</h2><p id='acciones'></p></div>")
+H.append("<div class='box'><h2>🏦 8 PLATAFORMAS M5 EN VIVO</h2><p id='plats'></p></div>")
+H.append("<div class='box sl'><h2>🛑 CALCULADORA M5 LOTE 0.01</h2><select id='selAct'><option value='ORO'>ORO M5</option><option value='BTC'>BITCOIN M5</option><option value='EURUSD'>EUR/USD M5</option><option value='AAPL'>APPLE M5</option><option value='TSLA'>TESLA M5</option></select><input id='lote' type='number' value='0.01' step='0.01'><input id='ganar' type='number' value='5'><input id='perder' type='number' value='2'><input id='entrada' type='number' value='3910'><button onclick='calcLote()' style='background:#FF4444;color:#fff'>🛑 CALCULAR TP SL M5</button><p id='loteR' style='background:#111;padding:12px;border-radius:10px'></p></div>")
+H.append("<div class='box'><h2>👑 JEFE 100 M5 - RAUDY ORO</h2><p id='j1'></p><p id='j2'></p></div>")
+H.append("<h2>🧠 LOS 100 CEREBROS M5 PEGADOS</h2><div class='grid' id='grid'></div><p>RAUDY VIP M5 2026 - WhatsApp 0767574050</p>")
+H.append("<script>")
+H.append("let g=document.getElementById('grid');")
+H.append("for(let i=1;i<=100;i++){let d=document.createElement('div');d.className='robot';let rol='M5 ZONA';if(i>15 && i<=30) rol='M5 DIVISAS';if(i>30 && i<=45) rol='M5 BITCOIN';if(i>45 && i<=60) rol='M5 BINANCE BYBIT';if(i>60 && i<=70) rol='M5 MT5 PEGADO';if(i>70 && i<=80) rol='M5 XTB COINBASE';if(i>80 && i<=90) rol='M5 APPLE TESLA';if(i>90 && i<100) rol='M5 CAPITAL T212';if(i==100) rol='JEFE RAUDY ORO M5';d.innerHTML='<div class=luz></div><b>Cerebro '+i+' M5</b><br>'+rol+'<br><span id=m'+i+'>VIVO M5</span>';g.appendChild(d)}")
+H.append("function hablar(t){try{let u=new SpeechSynthesisUtterance(t);u.lang='es-ES';speechSynthesis.speak(u)}catch(e){}}")
+H.append("async function enviarChat(){let t=document.getElementById('chat').value;if(!t){document.getElementById('chatR').innerHTML='Escribe algo jefe';return}document.getElementById('chatR').innerHTML='🤖 Pensando M5...';let r=await fetch('/api/chat?msg='+encodeURIComponent(t));let d=await r.json();document.getElementById('chatR').innerHTML='🤖 '+d.respuesta;hablar(d.respuesta)}")
+H.append("function ej(t){document.getElementById('chat').value=t;enviarChat()}")
+H.append("async function calcLote(){let lote=parseFloat(document.getElementById('lote').value);let ganar=parseFloat(document.getElementById('ganar').value);let perder=parseFloat(document.getElementById('perder').value);let ent=parseFloat(document.getElementById('entrada').value);let act=document.getElementById('selAct').value;let r=await fetch('/api/lote?lote='+lote+'&ganar='+ganar+'&perder='+perder+'&entrada='+ent+'&activo='+act);let d=await r.json();document.getElementById('loteR').innerHTML=d.respuesta;hablar(d.respuesta)}")
+H.append("async function toggleAuto(){try{let r=await fetch('/api/robot_auto');let d=await r.json();document.getElementById('autoEstado').innerHTML='Robot AUTO: '+(d.auto?'🟢 PRENDIDO - opera solo':'🔴 APAGADO - solo mira');hablar('Robot '+(d.auto?'prendido':'apagado'))}catch(e){document.getElementById('autoEstado').innerHTML='Error, espera 10 seg y dale otra vez'}}")
+H.append("async function probarBybit(){document.getElementById('bybitRes').innerHTML='Probando Bybit...';let r=await fetch('/api/bybit_test');let d=await r.json();document.getElementById('bybitRes').innerHTML=JSON.stringify(d).substring(0,800);document.getElementById('bybitEstado').innerHTML=d.mensaje||'Revisado';hablar(d.mensaje||'Bybit revisado')}")
+H.append("async function verBalance(){document.getElementById('bybitRes').innerHTML='Buscando balance...';let r=await fetch('/api/bybit_balance');let d=await r.json();document.getElementById('bybitRes').innerHTML=JSON.stringify(d).substring(0,1000)}")
+H.append("function dibujaGrafico(velas,ops){let c=document.getElementById('graf');if(!c||!velas||velas.length<2)return;let x=c.getContext('2d');x.clearRect(0,0,360,220);let solo=velas.filter(v=>v.a=='ORO');if(solo.length<2)solo=velas;let precios=solo.map(v=>v.p);let mn=Math.min(...precios)-5;let mx=Math.max(...precios)+5;if(mx==mn)mx=mn+1;x.strokeStyle='#FFD700';x.beginPath();solo.forEach((v,i)=>{let px=i/(solo.length-1)*340+10;let py=210-(v.p-mn)/(mx-mn)*190;if(i==0)x.moveTo(px,py);else x.lineTo(px,py)});x.stroke();x.fillStyle='#00FF88';x.fillText('COMPRA ZONA 3910',10,210);x.fillStyle='#FF4444';x.fillText('VENTA ZONA 3970',10,20);if(ops)ops.forEach(o=>{if(o.activo!='ORO')return;let py=210-(o.entrada-mn)/(mx-mn)*190;x.fillStyle=o.lado=='COMPRA'?'#00FF88':'#FF4444';x.beginPath();x.arc(340,py,7,0,7);x.fill();x.fillText(o.lado+' $'+o.entrada,200,py)});}")
+H.append("async function up(){try{let r=await fetch('/api/satelite_usa?v='+Date.now());let d=await r.json();document.getElementById('vivo').innerHTML='🟢 EN VIVO M5 '+d.hora+' - ORO $'+d.ORO+' BTC $'+d.BTC;document.getElementById('vivo2').innerHTML='ORO $'+d.ORO+' BTC $'+d.BTC+' EUR $'+d.EURUSD+' M5 PEGADO';document.getElementById('m5Zona').innerHTML=d.m5.mensaje;document.getElementById('m5Dir').innerHTML=d.m5.direccion_m5+' | MT5 M5 | Señales M5: '+d.m5_senales;document.getElementById('m5TP').innerHTML='TP M5 $'+d.m5.tp_m5+' SL M5 $'+d.m5.sl_m5+' - Accion: '+d.m5.accion;document.getElementById('m5Velas').innerHTML='Velas M5: '+JSON.stringify(d.m5.velas_m5);if(d.bybit)document.getElementById('bybitEstado').innerHTML=d.bybit;if(d.robot){document.getElementById('robotEstado').innerHTML=d.robot.mensaje;document.getElementById('robotOps').innerHTML='Abiertas: '+d.robot.abiertas.length+' | Cerradas: '+d.robot.cerradas.length+' | Ganado $'+d.robot.ganado+' | Perdido $'+d.robot.perdido+' | AUTO: '+(d.robot.auto?'🟢 ON':'🔴 OFF');let html='<table><tr><th>Hora</th><th>Activo</th><th>Lado</th><th>Entrada</th><th>TP</th><th>SL</th><th>Bybit</th><th>Resultado</th></tr>';d.robot.abiertas.forEach(o=>{html+='<tr><td>'+o.hora+'</td><td>'+o.activo+'</td><td>'+o.lado+'</td><td>'+o.entrada+'</td><td>'+o.tp+'</td><td>'+o.sl+'</td><td>'+(o.bybit||'')+'</td><td>🟢 ABIERTA</td></tr>'});d.robot.cerradas.slice(-5).forEach(o=>{html+='<tr><td>'+o.hora+'</td><td>'+o.activo+'</td><td>'+o.lado+'</td><td>'+o.entrada+'</td><td>'+o.tp+'</td><td>'+o.sl+'</td><td>'+(o.bybit||'')+'</td><td>'+(o.resultado||'')+'</td></tr>'});html+='</table>';document.getElementById('tablaOps').innerHTML=html;dibujaGrafico(d.grafico_velas,d.robot.abiertas);}let z=d.zonas.ORO;document.getElementById('zonaOro').innerHTML=z.mensaje;document.getElementById('barraZona').style.width=z.posicion+'%';document.getElementById('zonaPos').innerHTML='Posicion ZONA M5: '+z.posicion+'% - Abajo $'+z.zona_abajo+' Arriba $'+z.zona_arriba;document.getElementById('zonaTP').innerHTML='TP ZONA $'+z.tp_zona+' SL ZONA $'+z.sl_zona;document.getElementById('divisas').innerHTML='EUR $'+d.EURUSD+' '+d.zonas.EURUSD.accion+' | GBP $'+d.GBPUSD+' '+d.zonas.GBPUSD.accion+' | JPY $'+d.USDJPY+' '+d.zonas.USDJPY.accion;document.getElementById('crypto').innerHTML='BTC $'+d.BTC+' '+d.zonas.BTC.mensaje+' | ETH $'+d.ETH+' '+d.zonas.ETH.accion;document.getElementById('acciones').innerHTML='APPLE $'+d.AAPL+' '+d.zonas.AAPL.accion+' | TESLA $'+d.TSLA+' '+d.zonas.TSLA.accion+' | NVDA $'+d.NVDA+' '+d.zonas.NVDA.accion;document.getElementById('plats').innerHTML='MT5 M5 ORO $'+d.ORO+' | BYBIT BTC $'+d.BTC_BYBIT+' | BINANCE BTC $'+d.BTC_BINANCE+' | COINBASE BTC $'+d.BTC_COINBASE;document.getElementById('j1').innerHTML=d.jefe.orden;document.getElementById('j2').innerHTML=d.jefe.mensaje;for(let i=1;i<=100;i++){let el=document.getElementById('m'+i);if(el)el.innerHTML='M5 VIVO $'+d.ORO+' - '+d.jefe.orden}}catch(e){console.log('esperando server...')}}")
+H.append("setInterval(up,10000);up();")
+H.append("</script></body></html>")
+HTML = "".join(H)
 
 @app.route("/")
 def home():
-    return HTML_FINAL
-
-@app.route("/api/bybit_status")
-def api_bybit_status():
-    return jsonify(check_bybit_conectado())
-
+    return HTML
+@app.route("/api/ping")
+def ping():
+    return jsonify({"ok": True, "hora": datetime.now().strftime("%H:%M:%S"), "auto": OPS.get("auto", True), "bybit": "CONECTADO " + ("TESTNET" if BYBIT_TESTNET else "REAL") if BYBIT_KEY else "SIN LLAVE - SIMULACION"})
+@app.route("/api/bybit_test")
+def bybit_test():
+    if not BYBIT_KEY:
+        return jsonify({"ok": False, "mensaje": "❌ SIN LLAVE - Ve a Render > Environment y pon BYBIT_API_KEY y BYBIT_API_SECRET. Mientras, robot en SIMULACION."})
+    b = bybit_balance()
+    if b.get("ok"):
+        return jsonify({"ok": True, "mensaje": "✅ BYBIT CONECTADO - " + ("TESTNET dinero falso" if BYBIT_TESTNET else "⚠️ REAL dinero real"), "balance": b})
+    return jsonify({"ok": False, "mensaje": "❌ Llave mal o sin permiso Spot. Revisa en Bybit que tenga Spot Trade.", "detalle": b})
+@app.route("/api/bybit_balance")
+def bybit_bal():
+    return jsonify(bybit_balance())
+@app.route("/api/qr")
+def api_qr():
+    return jsonify({"link": LINK_BROKER, "nombre": NOMBRE_BROKER_QR, "qr_url": qr_url()})
+@app.route("/api/m5")
+def api_m5():
+    precios = todos_precios(); activo = request.args.get("activo", "ORO")
+    if activo not in ZONAS: activo = "ORO"
+    m5 = m5_zona_analiza(activo, precios.get(activo, 4088))
+    return jsonify({"m5": m5, "config": M5_CONFIG})
+@app.route("/api/operaciones")
+def api_ops():
+    return jsonify({"robot": OPS, "grafico": GRAFICO["velas"]})
+@app.route("/api/robot_auto")
+def api_auto():
+    OPS["auto"] = not OPS.get("auto", True); save("ops.json", OPS)
+    return jsonify({"auto": OPS["auto"], "mensaje": OPS["u"]})
 @app.route("/api/satelite_usa")
-def satelite_usa():
+def sat():
     try:
-        r = requests.get('https://api.gold-api.com/price/XAU', timeout=4)
-        oro = float(r.json().get('price', 4088))
-    except:
-        oro = get_precio_yahoo('GC=F', 4088)
-    datos = {
-        "ORO": oro,
-        "NVDA": get_precio_yahoo('NVDA', 185.20),
-        "AAPL": get_precio_yahoo('AAPL', 262.10),
-        "TSLA": get_precio_yahoo('TSLA', 340.50),
-        "MSFT": get_precio_yahoo('MSFT', 495.30),
-        "AMZN": get_precio_yahoo('AMZN', 235.40),
-        "META": get_precio_yahoo('META', 645.20),
-        "GOOGL": get_precio_yahoo('GOOGL', 282.10),
-    }
-    motor_txt = motor_fuerza_total(oro, "ORO")
-    buscador_txt = buscador_nada_se_escape(datos)
-    robots_conectados = conectar_todos_los_robots(datos)
-    bancos_info = get_info_bancaria()
-    extra_info = get_mercado_extra()
-    jefe_orden = jefe_manda_orden(bancos_info, datos, extra_info)
-    return jsonify({
-        **datos,
-        "motor": motor_txt,
-        "velocidad": "TURBO 5 SEG - SATELITE USA ACTIVO",
-        "buscador": buscador_txt,
-        "nyse": "ABIERTO - WALL STREET",
-        "nasdaq": "ABIERTO - USA",
-        "robots_conectados": robots_conectados,
-        "origen_oro": "gold-api.com + Yahoo Finance USA",
-        "origen_acciones": "Yahoo Finance USA - NYSE / NASDAQ",
-        "bancos": bancos_info,
-        "jefe": jefe_orden,
-        "extra": extra_info,
-        "equipo_40": ROBOTS_EQUIPO_COMPLETO,
-        "total_robots": 40,
-        "bybit": check_bybit_conectado(),
-        "bybit_qr": BYBIT_QR_URL,
-        "bybit_link": BYBIT_LINK_DEPOSITO
-    })
-
-@app.route("/api/bancos")
-def api_bancos():
-    return jsonify(get_info_bancaria())
-
-@app.route("/api/extra")
-def api_extra():
-    return jsonify(get_mercado_extra())
-
-@app.route("/api/jefe")
-def api_jefe():
+        d = todos_precios(); oro = d["ORO"]; btc = d["BTC"]; zonas = zona_todos(d); m5_dato = m5_zona_analiza("ORO", oro)
+        robot_msgs = []
+        for act_robot in ["ORO", "EURUSD", "BTC"]:
+            precio_robot = d.get(act_robot, oro); m5_robot = m5_zona_analiza(act_robot, precio_robot); msg_robot = robot_decide_y_opera(act_robot, precio_robot, m5_robot); robot_msgs.append(act_robot + ": " + msg_robot)
+        robot_msg = " | ".join(robot_msgs)
+        if oro <= 3910: orden = "COMPRA"
+        elif oro >= 3970: orden = "VENTA"
+        else: orden = "ESPERA"
+        aprende(oro, orden); m5_aprende(oro)
+        plat_aprende("CAPITAL", oro, oro, "Capital.com", "cap.json"); plat_aprende("T212", oro, oro, "Trading 212", "t212.json"); plat_aprende("BINANCE", btc, btc, "Binance", "bin.json"); plat_aprende("ETORO", oro, oro, "eToro", "eto.json"); plat_aprende("MT5", oro, oro, "MT5 M5", "mt5.json"); plat_aprende("XTB", oro, oro, "XTB", "xtb.json"); plat_aprende("COINBASE", d["BTC_COINBASE"], btc, "Coinbase", "coin.json"); plat_aprende("BYBIT", d["BTC_BYBIT"], btc, "Bybit", "bybit.json")
+        jefe = {"orden": "🟢 PERMISO M5" if orden != "ESPERA" else "🟡 ESPERA M5", "mensaje": "JEFE RAUDY ORO DICE M5: " + m5_dato["mensaje"]}
+        plats_out = {}
+        for k in PLATS: plats_out[k] = {"mensaje": k + " - " + str(len(PLATS[k]["h"])) + " jugadas", "leccion": PLATS[k]["u"]}
+        bybit_estado = "✅ BYBIT " + ("TESTNET" if BYBIT_TESTNET else "REAL") + " CONECTADO" if BYBIT_KEY else "🟡 BYBIT SIMULACION - sin llave, pon llave en Render"
+        return jsonify({**d, "hora": datetime.now().strftime("%H:%M:%S"), "zonas": zonas, "zona_oro": zonas["ORO"], "m5": m5_dato, "m5_senales": M5_ZONA["senales"], "m5_config": M5_CONFIG, "bybit": bybit_estado, "qr": {"link": LINK_BROKER, "nombre": NOMBRE_BROKER_QR, "qr_url": qr_url()}, "cerebro": {"mensaje": "100 cerebros M5 recuerdan " + str(MEM["c"] + MEM["v"] + MEM["e"]) + " jugadas", "leccion": MEM["l"]}, "cerebro_m5": {"mensaje": "M5 - " + str(len(M5["v"])) + " velas", "leccion": M5["u"], "velas": M5["v"][-5:]}, "plats": plats_out, "jefe": jefe, "cerebros": CEREBROS, "total_cerebros": 100, "robot": {"mensaje": robot_msg, "abiertas": OPS["abiertas"], "cerradas": OPS["cerradas"], "ganado": OPS["ganado"], "perdido": OPS["perdido"], "auto": OPS.get("auto", True)}, "grafico_velas": GRAFICO["velas"]})
+    except Exception as e:
+        return jsonify({"ORO": 4070, "BTC": 98000, "EURUSD": 1.1140, "GBPUSD": 1.2750, "USDJPY": 149.5, "USDCHF": 0.8850, "AUDUSD": 0.6550, "ETH": 3400, "AAPL": 262, "TSLA": 340, "NVDA": 185, "MSFT": 495, "AMZN": 235, "META": 645, "GOOGL": 282, "NFLX": 765, "AMD": 125, "BTC_COINBASE": 98000, "BTC_BINANCE": 98000, "BTC_BYBIT": 98000, "hora": datetime.now().strftime("%H:%M:%S"), "error": str(e), "zonas": {"ORO": {"mensaje": "Error, reintentando", "posicion": 50, "zona_abajo": 3910, "zona_arriba": 3970, "tp_zona": 3910, "sl_zona": 3970, "accion": "ESPERA"}, "EURUSD": {"accion": "ESPERA"}, "GBPUSD": {"accion": "ESPERA"}, "USDJPY": {"accion": "ESPERA"}, "BTC": {"mensaje": "BTC", "accion": "ESPERA"}, "ETH": {"accion": "ESPERA"}, "AAPL": {"accion": "ESPERA"}, "TSLA": {"accion": "ESPERA"}, "NVDA": {"accion": "ESPERA"}}, "m5": {"mensaje": "Reintentando...", "direccion_m5": "ESPERA", "tp_m5": 3910, "sl_m5": 3970, "accion": "ESPERA", "velas_m5": []}, "m5_senales": 0, "bybit": "Reintentando", "robot": {"mensaje": "Robot esperando server...", "abiertas": OPS["abiertas"], "cerradas": OPS["cerradas"], "ganado": OPS["ganado"], "perdido": OPS["perdido"], "auto": OPS.get("auto", True)}, "grafico_velas": GRAFICO["velas"], "jefe": {"orden": "ESPERA", "mensaje": "Reintentando"}, "cerebros": CEREBROS})
+@app.route("/api/chat")
+def api_chat():
+    msg = request.args.get("msg", ""); precios = todos_precios(); zonas = zona_todos(precios); activo = busca_activo(msg.lower()); m5_dato = m5_zona_analiza(activo, precios.get(activo, 4088)); r = chat_robot(msg, precios, zonas, m5_dato); return jsonify({"respuesta": r})
+@app.route("/api/lote")
+def api_lote():
     try:
-        r = requests.get('https://api.gold-api.com/price/XAU', timeout=4)
-        oro = float(r.json().get('price', 4088))
-    except:
-        oro = 4088
-    bancos = get_info_bancaria()
-    extra = get_mercado_extra()
-    return jsonify(jefe_manda_orden(bancos, {"ORO": oro}, extra))
-
+        lote = float(request.args.get("lote", 0.01)); ganar = float(request.args.get("ganar", 5)); perder = float(request.args.get("perder", 2)); entrada = float(request.args.get("entrada", 3910)); activo = request.args.get("activo", "ORO"); precios = todos_precios(); precio = precios.get(activo, entrada); z = ZONAS.get(activo, {"c": entrada, "v": entrada})
+        if precio <= z["c"] + (z["v"] - z["c"]) * 0.15: lado = "COMPRA"
+        elif precio >= z["v"] - (z["v"] - z["c"]) * 0.15: lado = "VENTA"
+        else: lado = "COMPRA"
+        tp, sl, dt, ds = calc_lote(lote, ganar, perder, entrada, lado, activo); r = "Lote " + str(lote) + " " + activo + " " + lado + " Entrada $" + str(entrada) + " TP $" + str(round(tp, 4)) + " ganas $" + str(ganar) + " SL $" + str(round(sl, 4)) + " pierdes $" + str(perder); return jsonify({"respuesta": r, "tp": tp, "sl": sl, "lado": lado})
+    except Exception as e:
+        return jsonify({"respuesta": "Error lote: " + str(e)})
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    app.run(host="0.0.0.0", port=5000)
