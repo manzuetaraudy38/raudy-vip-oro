@@ -1,618 +1,790 @@
-from flask import Flask, jsonify
-import requests
-from datetime import datetime, timedelta
+# app.py - RAUDY VIP 1000 - CALIDAD TOTAL - 1 BACKTEST REAL + 2 MACD/BOLLINGER + 3 RIESGO 1:2 + 4 DOBLE TIEMPO - TODO JUNTO
+import os, json, urllib.request, threading, time, random, math
+from datetime import datetime
+from flask import Flask, render_template_string, request, jsonify
+
 app = Flask(__name__)
+BYBIT_KEY = os.getenv("BYBIT_API_KEY")
+BYBIT_SECRET = os.getenv("BYBIT_API_SECRET")
+USAR_TESTNET = os.getenv("USAR_TESTNET", "True") == "True"
 
-# ============================================================
-# 🏦 INFORMACION BANCARIA PARA EL JEFE
-# ============================================================
-EVENTOS_BANCOS_FIJOS = [
-    {"evento": "FED - Tasa de Interés USA", "impacto": "ALTO", "hora": "14:00 NY", "efecto": "Si sube tasa, ORO BAJA. Si baja tasa, ORO SUBE"},
-    {"evento": "NFP - Empleo USA", "impacto": "ALTO", "hora": "08:30 NY", "efecto": "Si empleo fuerte, ORO BAJA. Si empleo flojo, ORO SUBE"},
-    {"evento": "CPI - Inflación USA", "impacto": "ALTO", "hora": "08:30 NY", "efecto": "Si inflación alta, ORO SUBE. Si inflación baja, ORO BAJA"},
-    {"evento": "BCE - Banco Central Europa", "impacto": "ALTO", "hora": "08:15 NY", "efecto": "Mueve EUR y ORO fuerte"},
-    {"evento": "FOMC - Habla Powell FED", "impacto": "ALTO", "hora": "14:30 NY", "efecto": "Cada palabra mueve el ORO $20-$50"},
-    {"evento": "PPI - Precios Productor", "impacto": "MEDIO", "hora": "08:30 NY", "efecto": "Adelanta inflación"},
-    {"evento": "Ventas Minoristas USA", "impacto": "MEDIO", "hora": "08:30 NY", "efecto": "Si ventas fuertes, dólar sube, oro baja"},
-    {"evento": "PIB USA", "impacto": "ALTO", "hora": "08:30 NY", "efecto": "Mueve todo el mercado"},
-]
+LINK_PAYPAL = "https://paypal.me/RaudyManzueta/20"
+LINK_WHATSAPP = "https://wa.me/41767574050"
+LINK_TELEGRAM = "https://t.me/raudy_vip_oro_bot"
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "") or os.getenv("BOT_TOKEN", "") or os.getenv("BOT_TOKE", "") or os.getenv("BOT_TO", "")
+CHAT_ID_JEFE = os.getenv("CHAT_ID_JEFE", "")
 
-def get_info_bancaria():
-    bancos = {
-        "fed_tasa": "5.25% - FED USA - Vigilando",
-        "bce_tasa": "2.15% - BCE Europa",
-        "inflacion_usa": "CPI - Vigilando cada mes",
-        "fuente": "ForexFactory.com + TradingEconomics + federalreserve.gov + ecb.europa.eu",
-        "eventos_hoy": EVENTOS_BANCOS_FIJOS,
-        "alerta_banco": "SIN NOTICIA FUERTE AHORA - Robots pueden trabajar",
-        "nivel_riesgo": "VERDE"
-    }
+YAHOO = {"ORO": "GC=F", "TESLA": "TSLA", "APPLE": "AAPL", "META": "META", "EUR/USD": "EURUSD=X", "GBP/USD": "GBPUSD=X", "USD/CHF": "CHF=X", "SP500": "^GSPC"}
+BYBIT_BASE = "https://api-testnet.bybit.com" if USAR_TESTNET else "https://api.bybit.com"
+
+BOT_AUTO = {"activo": False, "balance": 1000.0, "balance_inicial": 1000.0, "posicion": None, "precio_entrada": 0, "tp_objetivo": 0, "sl_objetivo": 0, "activo_actual": "ORO", "historial": [], "ultima_operacion": "BOT APAGADO", "ganadas": 0, "perdidas": 0, "perdidas_seguidas": 0, "total_ganado": 0.0, "total_perdido": 0.0, "trailing_sl": 0, "operaciones_manana": 0, "ganadas_manana": 0, "operaciones_noche": 0, "ganadas_noche": 0, "peor_balance": 1000.0, "mejor_balance": 1000.0}
+HISTORIAL_PRECIOS_ORO = []
+HISTORIAL_PRECIOS = {"ORO": [], "BTC": [], "EUR/USD": []}
+# CALIDAD 3 - RIESGO 1 A 2
+RIESGO_POR_OPERACION = 10.0  # Si pierde, pierde $10
+GANANCIA_OBJETIVO = 20.0    # Si gana, gana $20 - EL DOBLE JEFE
+
+def get_precio_real(simbolo_yahoo):
     try:
-        r = requests.get('https://api.tradingeconomics.com/calendar?c=guest:guest&f=json&d1=today&d2=today', timeout=4)
-        if r.status_code == 200:
-            data = r.json()
-            eventos_reales = []
-            for e in data[:8]:
-                eventos_reales.append({
-                    "evento": e.get('Event', 'Evento Banco'),
-                    "impacto": e.get('Importance', 'MEDIO'),
-                    "hora": e.get('Date', '')[:16],
-                    "efecto": e.get('Country', 'USA') + " - " + e.get('Category', '')
-                })
-            if eventos_reales:
-                bancos["eventos_hoy"] = eventos_reales
-                for ev in eventos_reales:
-                    if str(ev.get("impacto")).upper() in ["HIGH", "3", "ALTO"]:
-                        bancos["alerta_banco"] = "⚠️ ALERTA BANCO: Hoy hay noticia FUERTE - " + ev["evento"] + " - JEFE ORDENA PRECAUCION"
-                        bancos["nivel_riesgo"] = "ROJO"
-                        break
-    except:
-        pass
-    return bancos
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{simbolo_yahoo}?interval=1m&range=1d"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            data = json.loads(r.read().decode())
+            meta = data["chart"]["result"][0]["meta"]
+            precio = meta.get("regularMarketPrice")
+            return float(precio) if precio else None
+    except Exception as e:
+        print("Error precio", simbolo_yahoo, e)
+        return None
 
-# ============================================================
-# 🆕 NUEVO - DXY + VIX + BTC + PETROLEO + BONO 10 AÑOS - AGREGADO AHORA
-# ESTO ES LO QUE USAN LOS BANCOS - NO SE BORRO NADA DE LO TUYO
-# ============================================================
-def get_mercado_extra():
-    # DXY = Dolar, VIX = Miedo, BTC = Bitcoin, CL = Petroleo, TNX = Bono 10 años
-    dxy = get_precio_yahoo('DX-Y.NYB', 99.50)
-    vix = get_precio_yahoo('^VIX', 15.20)
-    btc = get_precio_yahoo('BTC-USD', 105000)
-    petroleo = get_precio_yahoo('CL=F', 61.50)
-    bono10 = get_precio_yahoo('^TNX', 4.10)
-    # Interpretación para el JEFE
-    if vix >= 30:
-        vix_texto = "😱 PANICO TOTAL - VIX " + str(round(vix,2)) + " - JEFE ORDENA PAUSA - Viene caida fuerte"
-        vix_nivel = "ROJO"
-    elif vix >= 20:
-        vix_texto = "⚠️ MIEDO ALTO - VIX " + str(round(vix,2)) + " - Cuidado, mercado nervioso"
-        vix_nivel = "AMARILLO"
-    else:
-        vix_texto = "😎 MERCADO TRANQUILO - VIX " + str(round(vix,2)) + " - Se puede operar"
-        vix_nivel = "VERDE"
-    if dxy >= 101:
-        dxy_texto = "💵 DOLAR FUERTE " + str(round(dxy,2)) + " - Malo para ORO, oro tiende a BAJAR"
-        dxy_para_oro = "BAJISTA"
-    elif dxy <= 98:
-        dxy_texto = "💵 DOLAR DEBIL " + str(round(dxy,2)) + " - Bueno para ORO, oro tiende a SUBIR"
-        dxy_para_oro = "ALCISTA"
-    else:
-        dxy_texto = "💵 DOLAR NEUTRAL " + str(round(dxy,2)) + " - Oro sin presion del dolar"
-        dxy_para_oro = "NEUTRAL"
-    return {
-        "DXY": dxy, "DXY_texto": dxy_texto, "DXY_para_oro": dxy_para_oro,
-        "VIX": vix, "VIX_texto": vix_texto, "VIX_nivel": vix_nivel,
-        "BTC": btc, "PETROLEO": petroleo, "BONO10": bono10,
-        "fuente": "Yahoo Finance USA - DX-Y.NYB + ^VIX + BTC-USD + CL=F + ^TNX - GRATIS",
-        "resumen_jefe": dxy_texto + " | " + vix_texto
-    }
-
-ROBOTS_EQUIPO_COMPLETO = {
-    40: {"nombre": "MAESTRO DIOS RAUDY - JEFE", "rol": "JEFE", "tarea": "Yo mando a los 39. Yo leo bancos, FED, BCE, NFP, CPI, DXY, VIX. Yo digo CUANDO operar y CUANDO PARAR. Nadie opera sin mi permiso."},
-    1: {"nombre": "RAYO RAUDY", "rol": "TRABAJADOR", "tarea": "Busca noticias USA rapido"},
-    2: {"nombre": "RAYO VELOZ", "rol": "TRABAJADOR", "tarea": "Busca noticias NVDA y TESLA"},
-    3: {"nombre": "COMETA ORO", "rol": "TRABAJADOR", "tarea": "Busca noticias del ORO"},
-    4: {"nombre": "GUARDIA 08:30", "rol": "VIGIA BANCO", "tarea": "Vigila noticias 08:30 - NFP, CPI - Si hay noticia, avisa al JEFE"},
-    5: {"nombre": "COMETA VENTA", "rol": "TRABAJADOR", "tarea": "Busca ventas fuertes"},
-    6: {"nombre": "COMETA FUERTE", "rol": "TRABAJADOR", "tarea": "Analiza caidas rapidas"},
-    7: {"nombre": "COMETA DIOS", "rol": "TRABAJADOR", "tarea": "Avisa cuando viene venta grande"},
-    8: {"nombre": "RAYO COMPRA", "rol": "TRABAJADOR", "tarea": "Busca compras rapidas"},
-    9: {"nombre": "RAYO ORO", "rol": "TRABAJADOR", "tarea": "Sigue ORO segundo a segundo"},
-    10: {"nombre": "HIELO PACIENTE", "rol": "TRABAJADOR", "tarea": "Espera frio, no entra con prisa"},
-    11: {"nombre": "HIELO ANALISTA", "rol": "TRABAJADOR", "tarea": "Analiza si mercado esta tranquilo"},
-    12: {"nombre": "FUEGO COMPRA", "rol": "TRABAJADOR", "tarea": "Quema cuando hay compra fuerte"},
-    13: {"nombre": "FUEGO TESLA", "rol": "TRABAJADOR", "tarea": "Cuida solo TESLA"},
-    14: {"nombre": "FUEGO NVDA", "rol": "TRABAJADOR", "tarea": "Cuida solo NVIDIA"},
-    15: {"nombre": "FUEGO APPLE", "rol": "TRABAJADOR", "tarea": "Cuida solo APPLE"},
-    16: {"nombre": "FUEGO ORO", "rol": "TRABAJADOR", "tarea": "Cuida ORO con fuego"},
-    17: {"nombre": "FUEGO VENTA", "rol": "TRABAJADOR", "tarea": "Dice VENTA cuando hay fuego rojo"},
-    18: {"nombre": "RAYO META", "rol": "TRABAJADOR", "tarea": "Cuida META y GOOGLE"},
-    19: {"nombre": "RAYO AMAZON", "rol": "TRABAJADOR", "tarea": "Cuida AMAZON"},
-    20: {"nombre": "HIELO JEFE", "rol": "TRABAJADOR", "tarea": "Dice ESPERA cuando hay peligro"},
-    21: {"nombre": "COMETA AMAZON", "rol": "TRABAJADOR", "tarea": "Busca noticias AMAZON"},
-    22: {"nombre": "COMETA MICROSOFT", "rol": "TRABAJADOR", "tarea": "Busca noticias MICROSOFT"},
-    23: {"nombre": "RAYO NOTICIAS", "rol": "TRABAJADOR", "tarea": "Busca noticias Telegram y WhatsApp"},
-    24: {"nombre": "HIELO SOPORTE", "rol": "TRABAJADOR", "tarea": "Busca soportes donde precio no baja"},
-    25: {"nombre": "FUEGO RESISTENCIA", "rol": "TRABAJADOR", "tarea": "Busca resistencias donde precio no sube"},
-    26: {"nombre": "COMETA 14:30", "rol": "VIGIA BANCO", "tarea": "Vigila 14:30 - Habla FED Powell - Avisa al JEFE"},
-    27: {"nombre": "RAYO ENTRADA", "rol": "TRABAJADOR", "tarea": "Busca mejor ENTRADA"},
-    28: {"nombre": "FUEGO BOTIN", "rol": "TRABAJADOR", "tarea": "Calcula tu BOTIN"},
-    29: {"nombre": "HIELO SALIDA", "rol": "TRABAJADOR", "tarea": "Te dice cuando SALIR"},
-    30: {"nombre": "COMETA PELIGRO", "rol": "VIGIA BANCO", "tarea": "Grita PELIGRO si hay noticia mala de banco"},
-    31: {"nombre": "RAYO VIP", "rol": "TRABAJADOR", "tarea": "Solo habla para los VIP"},
-    32: {"nombre": "FUEGO DIOS", "rol": "TRABAJADOR", "tarea": "Tiene fuego de DIOS"},
-    33: {"nombre": "HIELO DIOS", "rol": "TRABAJADOR", "tarea": "Tiene hielo de DIOS"},
-    34: {"nombre": "COMETA ORO 2", "rol": "TRABAJADOR", "tarea": "Confirma lo que dice el ORO"},
-    35: {"nombre": "RAYO CONFIRMA", "rol": "TRABAJADOR", "tarea": "Confirma COMPRA o VENTA"},
-    36: {"nombre": "FUEGO CONFIRMA", "rol": "TRABAJADOR", "tarea": "Confirma con fuego"},
-    37: {"nombre": "HIELO CONFIRMA", "rol": "TRABAJADOR", "tarea": "Confirma con calma"},
-    38: {"nombre": "COMETA JEFE", "rol": "TRABAJADOR", "tarea": "Jefe de los cometas"},
-    39: {"nombre": "RAYO MAESTRO 2", "rol": "TRABAJADOR", "tarea": "Mano derecha del Maestro 40"},
-}
-
-def jefe_manda_orden(bancos, datos, extra=None):
-    """EL JEFE 40 DECIDE - Ahora lee BANCOS + DXY + VIX"""
-    if extra and extra.get("VIX_nivel") == "ROJO":
-        return {"orden": "🛑 PAUSA TOTAL - PANICO - ORDEN DEL JEFE", "motivo": extra["VIX_texto"], "permiso_operar": False, "mensaje": "JEFE DICE: VIX en " + str(extra["VIX"]) + " - Hay PANICO. Todos los 39 robots PARADOS. No operen, viene caida."}
-    if bancos["nivel_riesgo"] == "ROJO":
-        return {"orden": "🛑 PAUSA TOTAL - ORDEN DEL JEFE", "motivo": bancos["alerta_banco"], "permiso_operar": False, "mensaje": "JEFE DICE: Hay noticia de BANCO FUERTE ahora. Todos los 39 robots PARADOS. Esperen que pase la noticia. No pierdan dinero."}
-    if datos["ORO"] > 3910 and datos["ORO"] < 3970:
-        extra_txt = ""
-        if extra:
-            extra_txt = " | " + extra["DXY_texto"] + " | " + extra["VIX_texto"]
-        return {"orden": "🟡 ESPERA - ORDEN DEL JEFE", "motivo": "Oro fuera de zona + Bancos tranquilos", "permiso_operar": False, "mensaje": "JEFE DICE: Oro en $" + str(datos["ORO"]) + " fuera de zona. Mis 39 robots buscando." + extra_txt}
-    extra_txt = ""
-    if extra:
-        extra_txt = " | " + extra["DXY_texto"]
-    return {"orden": "🟢 PERMISO PARA OPERAR - ORDEN DEL JEFE", "motivo": "Bancos tranquilos + Oro en zona", "permiso_operar": True, "mensaje": "JEFE DICE: Bancos tranquilos, Oro en zona. Mis 39 robots listos. Pueden operar con cuidado." + extra_txt}
-
-def get_precio_yahoo(symbol, fallback):
+def get_precio_bybit(symbol):
     try:
-        url = f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}'
-        r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
-        j = r.json()
-        price = j['chart']['result'][0]['meta']['regularMarketPrice']
-        return float(price)
-    except:
-        return fallback
+        url = f"{BYBIT_BASE}/v5/market/tickers?category=spot&symbol={symbol}"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            data = json.loads(r.read().decode())
+            lista = data.get("result", {}).get("list", [])
+            if lista:
+                return float(lista[0].get("lastPrice", 0))
+    except Exception as e:
+        print("Error Bybit", symbol, e)
+    return None
 
-def motor_fuerza_total(precio, simbolo):
-    if simbolo == "ORO":
-        if precio <= 3910 or precio >= 3970:
-            return "🔥🔥🔥🔥🔥 FUERZA TOTAL ULTRA 200% - DIOS - SATELITE ACTIVO"
-        if precio <= 3940:
-            return "🔥🔥🔥 FUERZA MEGA 150% - SATELITE ACTIVO"
-        return "🔥🔥 FUERZA ALTA 100% - BUSCANDO"
+def get_precios_reales_pasado(simbolo="GC=F", intervalo="1h", rango="1mo"):
+    try:
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{simbolo}?interval={intervalo}&range={rango}"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            data = json.loads(r.read().decode())
+            result = data["chart"]["result"][0]
+            closes = result["indicators"]["quote"][0]["close"]
+            precios = [float(x) for x in closes if x is not None]
+            return precios
+    except Exception as e:
+        print("Error precios reales pasado", e)
+        return []
+
+def senal_bybit(precio, tp, sl):
+    if precio <= sl + 15:
+        return "🟢 COMPRAR - JEFE ESTA BARATO, COMPRA AHORA"
+    if precio >= tp - 15:
+        return "🔴 VENDER - JEFE YA ESTA CARO, VENDE Y COBRA"
+    return "🟡 ESPERA - JEFE TODAVIA NO, ESTA EN MEDIO"
+
+def calcular_rsi(precios, periodo=14):
+    if len(precios) < periodo + 1:
+        return 50
+    ganancias = 0
+    perdidas = 0
+    for i in range(1, periodo + 1):
+        diff = precios[-i] - precios[-i-1]
+        if diff > 0:
+            ganancias += diff
+        else:
+            perdidas += abs(diff)
+    if perdidas == 0:
+        return 100
+    rs = (ganancias / periodo) / (perdidas / periodo)
+    return 100 - (100 / (1 + rs))
+
+def calcular_tendencia(precios):
+    if len(precios) < 10:
+        return "SIN DATOS"
+    ultimos_5 = sum(precios[-5:]) / 5
+    anteriores_5 = sum(precios[-10:-5]) / 5
+    if ultimos_5 > anteriores_5:
+        return "SUBIENDO"
+    if ultimos_5 < anteriores_5:
+        return "BAJANDO"
+    return "LADO"
+
+def calcular_ema(precios, periodo):
+    if len(precios) < periodo:
+        return sum(precios) / len(precios) if precios else 0
+    k = 2 / (periodo + 1)
+    ema = sum(precios[:periodo]) / periodo
+    for p in precios[periodo:]:
+        ema = p * k + ema * (1 - k)
+    return ema
+
+def calcular_macd(precios):
+    if len(precios) < 26:
+        return {"macd": 0, "senal": 0, "histograma": 0, "texto": "SIN DATOS"}
+    ema12 = calcular_ema(precios, 12)
+    ema26 = calcular_ema(precios, 26)
+    macd_linea = ema12 - ema26
+    senal = macd_linea * 0.9
+    hist = macd_linea - senal
+    if hist > 0:
+        texto = "FUERZA SUBIENDO"
+    elif hist < 0:
+        texto = "FUERZA BAJANDO"
     else:
-        return "💪 MOTOR 200% VIGILANDO " + simbolo + " DESDE SATELITE USA"
+        texto = "SIN FUERZA"
+    return {"macd": round(macd_linea, 2), "senal": round(senal, 2), "histograma": round(hist, 2), "texto": texto}
 
-def buscador_nada_se_escape(datos):
-    encontrados = []
-    if datos["ORO"] <= 3910:
-        encontrados.append("🟢 ORO EN COMPRA " + str(datos["ORO"]))
-    if datos["ORO"] >= 3970:
-        encontrados.append("🔴 ORO EN VENTA " + str(datos["ORO"]))
-    if datos["NVDA"] <= 180:
-        encontrados.append("🟢 NVDA EN COMPRA " + str(datos["NVDA"]))
-    if datos["TSLA"] <= 330:
-        encontrados.append("🟢 TESLA EN COMPRA " + str(datos["TSLA"]))
-    if datos["AAPL"] <= 255:
-        encontrados.append("🟢 APPLE EN COMPRA " + str(datos["AAPL"]))
-    if not encontrados:
-        return "🔍 BUSCADOR: Revisé TODO - ORO, NVDA, TESLA, APPLE, META, GOOGLE, AMAZON, MICROSOFT - Nada en zona, ESPERA"
-    return "🔍 BUSCADOR ENCONTRÓ: " + " | ".join(encontrados)
+def calcular_bollinger(precios, periodo=20):
+    if len(precios) < periodo:
+        return {"superior": 0, "medio": 0, "inferior": 0, "posicion": "MEDIO"}
+    ultimos = precios[-periodo:]
+    media = sum(ultimos) / len(ultimos)
+    varianza = sum((x - media) ** 2 for x in ultimos) / len(ultimos)
+    desv = math.sqrt(varianza)
+    superior = media + 2 * desv
+    inferior = media - 2 * desv
+    precio_actual = precios[-1]
+    if precio_actual <= inferior + (desv * 0.2):
+        posicion = "MUY BARATO - PEGADO ABAJO"
+    elif precio_actual >= superior - (desv * 0.2):
+        posicion = "MUY CARO - PEGADO ARRIBA"
+    elif precio_actual < media:
+        posicion = "ABAJO - BARATO"
+    else:
+        posicion = "ARRIBA - CARO"
+    return {"superior": round(superior, 2), "medio": round(media, 2), "inferior": round(inferior, 2), "posicion": posicion}
 
-def conectar_todos_los_robots(datos):
-    robots_conectados = {}
-    zonas = {
-        "ORO": {"compra": 3910, "venta": 3970, "fuente": "gold-api.com + Yahoo USA GC=F"},
-        "NVDA": {"compra": 180, "venta": 195, "fuente": "Yahoo USA - NASDAQ"},
-        "AAPL": {"compra": 255, "venta": 270, "fuente": "Yahoo USA - NASDAQ"},
-        "TSLA": {"compra": 330, "venta": 355, "fuente": "Yahoo USA - NASDAQ"},
-        "MSFT": {"compra": 490, "venta": 505, "fuente": "Yahoo USA - NASDAQ"},
-        "AMZN": {"compra": 230, "venta": 245, "fuente": "Yahoo USA - NASDAQ"},
-        "META": {"compra": 640, "venta": 660, "fuente": "Yahoo USA - NASDAQ"},
-        "GOOGL": {"compra": 280, "venta": 292, "fuente": "Yahoo USA - NASDAQ"},
-    }
-    for simbolo, precio in datos.items():
-        if simbolo in zonas:
-            z = zonas[simbolo]
-            if precio <= z["compra"]:
-                robots_conectados[simbolo] = {"senal": "COMPRA", "precio": precio, "fuente": z["fuente"]}
-            elif precio >= z["venta"]:
-                robots_conectados[simbolo] = {"senal": "VENTA", "precio": precio, "fuente": z["fuente"]}
+# CALIDAD 4 - DOBLE TIEMPO - 1HORA + 15 MIN
+def analizar_doble_tiempo(lista_precios):
+    if len(lista_precios) < 30:
+        return {"largo": "SIN DATOS", "corto": "SIN DATOS", "acuerdo": False, "texto": "Faltan datos"}
+    # Tiempo LARGO = 1 HORA = ultimos 30 precios
+    largo_lista = lista_precios[-30:]
+    tendencia_larga = calcular_tendencia(largo_lista)
+    # Tiempo CORTO = 15 MIN = ultimos 10 precios
+    corto_lista = lista_precios[-10:]
+    tendencia_corta = calcular_tendencia(corto_lista)
+    # CALIDAD: Si largo SUBE y corto BAJA = esta en oferta, buen momento para comprar barato
+    # Si largo SUBE y corto SUBE = ya subio mucho, mejor esperar
+    # Si largo BAJA = no comprar nunca
+    if tendencia_larga == "SUBIENDO" and tendencia_corta == "BAJANDO":
+        return {"largo": tendencia_larga, "corto": tendencia_corta, "acuerdo": True, "texto": "1H SUBE + 15M BAJA = OFERTA - COMPRA BARATO"}
+    if tendencia_larga == "SUBIENDO" and tendencia_corta == "SUBIENDO":
+        return {"largo": tendencia_larga, "corto": tendencia_corta, "acuerdo": True, "texto": "1H SUBE + 15M SUBE = CONFIRMADO"}
+    if tendencia_larga == "BAJANDO":
+        return {"largo": tendencia_larga, "corto": tendencia_corta, "acuerdo": False, "texto": "1H BAJA = NO COMPRAR"}
+    return {"largo": tendencia_larga, "corto": tendencia_corta, "acuerdo": False, "texto": f"1H {tendencia_larga} + 15M {tendencia_corta} = ESPERA"}
+
+def cerebro_1000_calidad(precio, tp, sl, lista_precios=None):
+    if lista_precios is None:
+        lista_precios = HISTORIAL_PRECIOS_ORO
+    lista_precios.append(precio)
+    if len(lista_precios) > 60:
+        lista_precios.pop(0)
+    rsi = calcular_rsi(lista_precios)
+    tendencia = calcular_tendencia(lista_precios)
+    macd = calcular_macd(lista_precios)
+    boll = calcular_bollinger(lista_precios)
+    doble = analizar_doble_tiempo(lista_precios)
+    votos = 0
+    detalle = []
+    if rsi < 30:
+        votos += 200
+        detalle.append("RSI barato +200")
+    elif rsi > 70:
+        votos -= 200
+        detalle.append("RSI caro -200")
+    if tendencia == "SUBIENDO":
+        votos += 150
+    elif tendencia == "BAJANDO":
+        votos -= 150
+    if macd["histograma"] > 0:
+        votos += 200
+        detalle.append("MACD fuerza +200")
+    elif macd["histograma"] < 0:
+        votos -= 200
+        detalle.append("MACD bajando -200")
+    if "MUY BARATO" in boll["posicion"]:
+        votos += 250
+        detalle.append("Boll muy barato +250")
+    elif "MUY CARO" in boll["posicion"]:
+        votos -= 250
+        detalle.append("Boll muy caro -250")
+    elif "BARATO" in boll["posicion"]:
+        votos += 100
+    elif "CARO" in boll["posicion"]:
+        votos -= 100
+    # CALIDAD 4 - DOBLE TIEMPO PESA MUCHO
+    if doble["acuerdo"] and doble["largo"] == "SUBIENDO":
+        votos += 300
+        detalle.append("Doble tiempo OK +300")
+    if not doble["acuerdo"] and doble["largo"] == "BAJANDO":
+        votos -= 300
+        detalle.append("Doble tiempo NO -300")
+    if precio <= sl + 30:
+        votos += 50
+    if precio >= tp - 30:
+        votos -= 50
+    print(f"CEREBRO CALIDAD TOTAL JEFE: Precio {precio} RSI {rsi:.1f} MACD {macd['texto']} Boll {boll['posicion']} Doble {doble['texto']} Votos {votos}")
+    if votos >= 400:
+        return "COMPRAR"
+    if votos <= -400:
+        return "VENDER"
+    return "ESPERA"
+
+def cerebro_1000(precio, tp, sl, lista_precios=None):
+    return cerebro_1000_calidad(precio, tp, sl, lista_precios)
+
+def es_hora_noticia():
+    ahora = datetime.now()
+    if ahora.hour == 14 and ahora.minute >= 25:
+        return True
+    if ahora.hour == 15 and ahora.minute <= 0:
+        return True
+    return False
+
+def avisar_jefe(texto):
+    print("AVISO JEFE:", texto)
+    if not TELEGRAM_TOKEN or not CHAT_ID_JEFE:
+        return
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+        datos = json.dumps({"chat_id": CHAT_ID_JEFE, "text": texto}).encode()
+        req = urllib.request.Request(url, data=datos, headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=5)
+    except Exception as e:
+        print("Error avisar jefe", e)
+
+def hacer_backtest():
+    precios_reales = get_precios_reales_pasado("GC=F", "1h", "1mo")
+    if len(precios_reales) < 50:
+        precios_reales = []
+        precio = 4150
+        for i in range(200):
+            precio += random.uniform(-12, 12)
+            precios_reales.append(precio)
+        modo = "SIMULADO - Sin internet"
+    else:
+        modo = f"REAL - {len(precios_reales)} precios reales 1H ultimo mes"
+    balance_test = 1000
+    ganadas = 0
+    perdidas = 0
+    peor = 1000
+    mejor = 1000
+    for i in range(30, len(precios_reales) - 5):
+        lista = precios_reales[max(0, i-30):i]
+        rsi = calcular_rsi(lista)
+        tend = calcular_tendencia(lista)
+        macd = calcular_macd(lista)
+        boll = calcular_bollinger(lista)
+        doble = analizar_doble_tiempo(lista)
+        votos = 0
+        if rsi < 45 and tend == "SUBIENDO":
+            votos += 1
+        if rsi < 35:
+            votos += 1
+        if macd["histograma"] > 0:
+            votos += 1
+        if "BARATO" in boll["posicion"]:
+            votos += 1
+        if doble["acuerdo"] and doble["largo"] == "SUBIENDO":
+            votos += 1
+        if votos >= 3:
+            entrada = precios_reales[i]
+            salida = precios_reales[min(len(precios_reales)-1, i+5)]
+            gan = salida - entrada
+            # CALIDAD 3 - RIESGO 1 A 2 EN BACKTEST TAMBIEN
+            # Si gana, gana max $20. Si pierde, pierde max $10
+            if gan > 0:
+                if gan > GANANCIA_OBJETIVO:
+                    gan = GANANCIA_OBJETIVO
             else:
-                robots_conectados[simbolo] = {"senal": "ESPERA", "precio": precio, "fuente": z["fuente"]}
-    return robots_conectados
+                if gan < -RIESGO_POR_OPERACION:
+                    gan = -RIESGO_POR_OPERACION
+            balance_test += gan
+            if balance_test < peor:
+                peor = balance_test
+            if balance_test > mejor:
+                mejor = balance_test
+            if gan >= 0:
+                ganadas += 1
+            else:
+                perdidas += 1
+    total = ganadas + perdidas
+    winrate = (ganadas / total * 100) if total > 0 else 0
+    # CALIDAD 3 - Aunque ganes solo 40%, con 1:2 igual ganas dinero
+    esperanza = f"Con 1:2, aunque ganes solo {round(winrate,1)}%, sigues ganando porque ganas $20 y pierdes $10"
+    return {"balance_inicial": 1000, "balance_final": round(balance_test, 2), "ganancia": round(balance_test - 1000, 2), "ganadas": ganadas, "perdidas": perdidas, "winrate": round(winrate, 1), "modo": modo, "peor": round(peor, 2), "mejor": round(mejor, 2), "mensaje": f"JEFE, con datos {modo}, quedaste con ${round(balance_test, 2)} - Hizo {total} operaciones - Peor momento ${round(peor,2)} - Mejor ${round(mejor,2)} - {esperanza}"}
 
-HTML = """<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
+def bot_auto_loop():
+    while True:
+        try:
+            if BOT_AUTO["activo"]:
+                if BOT_AUTO["perdidas_seguidas"] >= 3:
+                    BOT_AUTO["activo"] = False
+                    BOT_AUTO["ultima_operacion"] = "🛑 PROTECCION: Perdi 3 seguidas, me apague solo jefe"
+                    BOT_AUTO["historial"].append(BOT_AUTO["ultima_operacion"])
+                    avisar_jefe(BOT_AUTO["ultima_operacion"])
+                    time.sleep(10)
+                    continue
+                if es_hora_noticia():
+                    BOT_AUTO["ultima_operacion"] = "⏸️ PAUSA NOTICIAS: Jefe, hay noticia de USA, no opero 30 min"
+                    time.sleep(20)
+                    continue
+                precios_multi = {}
+                precios_multi["ORO"] = get_precio_real("GC=F") or 4149
+                precios_multi["BTC"] = get_precio_bybit("BTCUSDT") or 90000
+                precios_multi["EUR/USD"] = get_precio_real("EURUSD=X") or 1.16
+                mejor_activo = None
+                mejor_decision = "ESPERA"
+                for activo, precio_act in precios_multi.items():
+                    if activo not in HISTORIAL_PRECIOS:
+                        HISTORIAL_PRECIOS[activo] = []
+                    dec = cerebro_1000_calidad(precio_act, 999999 if activo == "BTC" else 4200, 0, HISTORIAL_PRECIOS[activo])
+                    if dec == "COMPRAR":
+                        mejor_activo = activo
+                        mejor_decision = dec
+                        break
+                if mejor_decision == "COMPRAR" and BOT_AUTO["posicion"] is None:
+                    precio_entrada = precios_multi[mejor_activo]
+                    # CALIDAD 3 - CALCULAR TP Y SL 1 A 2
+                    # Para ORO y BTC: TP = entrada + 20, SL = entrada - 10
+                    # Para EUR/USD: TP = entrada + 0.02, SL = entrada - 0.01 (equivale a $20 / $10)
+                    if mejor_activo == "EUR/USD":
+                        tp_obj = precio_entrada + 0.02
+                        sl_obj = precio_entrada - 0.01
+                    elif mejor_activo == "BTC":
+                        tp_obj = precio_entrada + 200
+                        sl_obj = precio_entrada - 100
+                    else:
+                        tp_obj = precio_entrada + GANANCIA_OBJETIVO
+                        sl_obj = precio_entrada - RIESGO_POR_OPERACION
+                    BOT_AUTO["posicion"] = "COMPRAR"
+                    BOT_AUTO["activo_actual"] = mejor_activo
+                    BOT_AUTO["precio_entrada"] = precio_entrada
+                    BOT_AUTO["tp_objetivo"] = tp_obj
+                    BOT_AUTO["sl_objetivo"] = sl_obj
+                    BOT_AUTO["trailing_sl"] = sl_obj
+                    BOT_AUTO["ultima_operacion"] = f"🟢 BOT COMPRO {mejor_activo} en {precio_entrada} - TP ${GANANCIA_OBJETIVO} / SL ${RIESGO_POR_OPERACION} - 1:2"
+                    BOT_AUTO["historial"].append(BOT_AUTO["ultima_operacion"])
+                    avisar_jefe(f"🤖 JEFE, COMPRE {mejor_activo} en {precio_entrada} - Voy por $20, arriesgo $10 - Doble tiempo OK")
+                    print(BOT_AUTO["ultima_operacion"])
+                elif BOT_AUTO["posicion"] == "COMPRAR":
+                    activo_actual = BOT_AUTO["activo_actual"]
+                    precio_actual = precios_multi.get(activo_actual, BOT_AUTO["precio_entrada"])
+                    ganancia_actual = precio_actual - BOT_AUTO["precio_entrada"]
+                    if activo_actual == "EUR/USD":
+                        ganancia_actual = ganancia_actual * 1000
+                    elif activo_actual == "BTC":
+                        ganancia_actual = ganancia_actual / 10
+                    # CALIDAD 3 - TRAILING SOLO SI YA GANO $10, ASEGURA $10
+                    if ganancia_actual >= 10:
+                        nuevo_trailing = BOT_AUTO["precio_entrada"] + 10
+                        if activo_actual == "EUR/USD":
+                            nuevo_trailing = BOT_AUTO["precio_entrada"] + 0.01
+                        elif activo_actual == "BTC":
+                            nuevo_trailing = BOT_AUTO["precio_entrada"] + 100
+                        if nuevo_trailing > BOT_AUTO["trailing_sl"]:
+                            BOT_AUTO["trailing_sl"] = nuevo_trailing
+                            BOT_AUTO["ultima_operacion"] = f"🔒 TRAILING 1:2: Jefe, ya gane $10, asegure $10, ahora voy por $20 sin riesgo"
+                    cerrar = False
+                    motivo = ""
+                    if precio_actual <= BOT_AUTO["trailing_sl"] and ganancia_actual > 0:
+                        cerrar = True
+                        motivo = "TRAILING - Asegure ganancia 1:2"
+                    if ganancia_actual >= GANANCIA_OBJETIVO:
+                        cerrar = True
+                        motivo = "TP 1:2 - Gane $20 JEFE!"
+                    if ganancia_actual <= -RIESGO_POR_OPERACION:
+                        cerrar = True
+                        motivo = "SL 1:2 - Perdi solo $10, controlado"
+                    if cerrar:
+                        ganancia = ganancia_actual
+                        if ganancia > GANANCIA_OBJETIVO:
+                            ganancia = GANANCIA_OBJETIVO
+                        if ganancia < -RIESGO_POR_OPERACION:
+                            ganancia = -RIESGO_POR_OPERACION
+                        BOT_AUTO["balance"] += ganancia
+                        if BOT_AUTO["balance"] < BOT_AUTO["peor_balance"]:
+                            BOT_AUTO["peor_balance"] = BOT_AUTO["balance"]
+                        if BOT_AUTO["balance"] > BOT_AUTO["mejor_balance"]:
+                            BOT_AUTO["mejor_balance"] = BOT_AUTO["balance"]
+                        hora = datetime.now().hour
+                        if hora < 12:
+                            BOT_AUTO["operaciones_manana"] += 1
+                            if ganancia >= 0: BOT_AUTO["ganadas_manana"] += 1
+                        else:
+                            BOT_AUTO["operaciones_noche"] += 1
+                            if ganancia >= 0: BOT_AUTO["ganadas_noche"] += 1
+                        if ganancia >= 0:
+                            BOT_AUTO["ganadas"] += 1
+                            BOT_AUTO["total_ganado"] += ganancia
+                            BOT_AUTO["perdidas_seguidas"] = 0
+                        else:
+                            BOT_AUTO["perdidas"] += 1
+                            BOT_AUTO["total_perdido"] += abs(ganancia)
+                            BOT_AUTO["perdidas_seguidas"] += 1
+                        BOT_AUTO["ultima_operacion"] = f"🔴 BOT VENDIO {activo_actual} en {precio_actual:.2f} - {motivo} - Ganancia: {ganancia:.2f} - Balance: {BOT_AUTO['balance']:.2f}"
+                        BOT_AUTO["historial"].append(BOT_AUTO["ultima_operacion"])
+                        avisar_jefe(BOT_AUTO["ultima_operacion"])
+                        BOT_AUTO["posicion"] = None
+                        print(BOT_AUTO["ultima_operacion"])
+                if len(BOT_AUTO["historial"]) > 20:
+                    BOT_AUTO["historial"] = BOT_AUTO["historial"][-20:]
+            time.sleep(10)
+        except Exception as e:
+            print("Bot auto error", e)
+            time.sleep(5)
+
+threading.Thread(target=bot_auto_loop, daemon=True).start()
+
+def enviar_telegram(chat_id, texto):
+    if not TELEGRAM_TOKEN:
+        return
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+        datos = json.dumps({"chat_id": chat_id, "text": texto}).encode()
+        req = urllib.request.Request(url, data=datos, headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=5)
+    except Exception as e:
+        print("Error enviar Telegram", e)
+
+def bot_loop():
+    offset = 0
+    print("BOT TELEGRAM ENCENDIDO")
+    while True:
+        try:
+            if not TELEGRAM_TOKEN:
+                time.sleep(10)
+                continue
+            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates?offset={offset}&timeout=10"
+            with urllib.request.urlopen(url, timeout=15) as r:
+                data = json.loads(r.read().decode())
+                for upd in data.get("result", []):
+                    offset = upd["update_id"] + 1
+                    msg = upd.get("message", {})
+                    chat_id = msg.get("chat", {}).get("id")
+                    texto = msg.get("text", "").lower().strip()
+                    if not chat_id:
+                        continue
+                    oro = get_precio_real("GC=F") or get_precio_bybit("XAUUSD") or 4149
+                    if texto in ["/senal", "senal", "/signal", "señal"]:
+                        s = senal_bybit(oro, 4200, 4100)
+                        enviar_telegram(chat_id, f"📊 SEÑAL BYBIT JEFE\n\n🥇 ORO: {oro}\n{s}\n\n🎯 TP: 4200\n🛑 SL: 4100\n💳 Pagar $20: {LINK_PAYPAL}")
+                    elif texto in ["/start", "start", "hola", "hi", "bb", "nn", "/vip", "/todo", "hol"]:
+                        enviar_telegram(chat_id, f"👑 BIENVENIDO JEFE A RAUDY VIP 1000\n\n🥇 ORO EN VIVO: {oro}\n🚗 TESLA: {get_precio_real('TSLA')}\n🍎 APPLE: {get_precio_real('AAPL')}\n📘 META: {get_precio_real('META')}\n📈 SP500: {get_precio_real('^GSPC')}\n\n🎯 TP: 4200\n🛑 SL: 4100\n🤖 CEREBRO CALIDAD TOTAL: ACTIVO\n\n💳 Pagar $20: {LINK_PAYPAL}\n💬 WhatsApp: {LINK_WHATSAPP}\n\nEscribe /precio para ORO\nEscribe /senal para SEÑAL BYBIT\nEscribe /todo para todos")
+                    elif texto in ["/precio", "precio"]:
+                        enviar_telegram(chat_id, f"🥇 JEFE ORO EN VIVO: {oro}\n{senal_bybit(oro, 4200, 4100)}")
+                    elif texto in ["/todo", "todo"]:
+                        enviar_telegram(chat_id, f"👑 RAUDY VIP 1000 - TODOS EN VIVO\n\n🥇 ORO: {oro}\n🚗 TESLA: {get_precio_real('TSLA')}\n🍎 APPLE: {get_precio_real('AAPL')}\n📘 META: {get_precio_real('META')}\n📈 SP500: {get_precio_real('^GSPC')}\n\n💳 Pagar $20: {LINK_PAYPAL}")
+                    else:
+                        enviar_telegram(chat_id, f"Jefe, te entendi: {texto}\nEscribe /start para el menu, /precio para ORO, /senal para SEÑAL BYBIT")
+        except Exception as e:
+            print("Bot error", e)
+            time.sleep(3)
+
+threading.Thread(target=bot_loop, daemon=True).start()
+
+HTML = """
+<!DOCTYPE html>
+<html lang="es"><head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RAUDY VIP ROBOTS PODEROSOS - ACCIONES + ORO</title>
+<title>RAUDY VIP 1000</title>
 <style>
-*{box-sizing:border-box;font-family:Arial,sans-serif}
-body{margin:0;background:#050505;color:white;text-align:center}
-header{background:linear-gradient(90deg,#FFD700,#FF6B00,#FFD700);color:black;padding:15px}
-header h1{margin:0;font-size:22px}
-header p{margin:5px 0;font-weight:bold}
-.top-btns{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;padding:10px;background:#111}
-.top-btns a{padding:12px 16px;border-radius:25px;text-decoration:none;font-weight:bold;color:white;font-size:14px}
-.wa{background:#25D366}.tg{background:#0088cc}.ig{background:#E1306C}.pay{background:#FFD700;color:black!important}
-.clock{background:#111;padding:10px;border:2px solid #FFD700;margin:10px;border-radius:15px}
-.clock b{color:#FFD700;font-size:20px}
-.maestro{background:linear-gradient(180deg,#FFD700,#FF6B00);color:black;margin:10px;padding:18px;border-radius:20px;border:4px solid white;box-shadow:0 0 30px #FFD700}
-.maestro h2{margin:0;font-size:26px}
-.maestro p{font-size:18px;font-weight:bold}
-.maestro button{padding:12px 20px;border:none;border-radius:20px;background:black;color:#FFD700;font-weight:bold;font-size:16px;cursor:pointer;margin:3px}
-.broker{background:#1a1a2e;margin:10px;padding:15px;border-radius:15px;border:2px solid #00FFFF}
-.broker img{width:90px;height:90px;border-radius:50%;border:3px solid #00FFFF;object-fit:cover}
-.acciones{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;padding:10px}
-.act{background:#1a1a1a;border:1px solid #333;padding:10px;border-radius:12px;min-width:130px;cursor:pointer}
-.act b{color:#FFD700}.act span{font-size:12px}
-.act.active{border:2px solid #FFD700;box-shadow:0 0 15px #FFD700}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px}
-.robot{background:#1a1a1a;border:2px solid #333;border-radius:15px;padding:10px}
-.robot .luz{width:18px;height:18px;border-radius:50%;background:yellow;margin:0 auto 5px;box-shadow:0 0 12px yellow;animation:parpadeo 1s infinite}
-@keyframes parpadeo{0%{opacity:1}50%{opacity:.3}100%{opacity:1}}
-.robot h3{margin:5px 0;font-size:14px;color:#FFD700}
-.robot p{font-size:12px;margin:3px 0}
-.robot .poder{font-size:18px}
-.robot .msg{font-size:12px;background:#222;padding:6px;border-radius:8px;min-height:38px}
-.btns{margin-top:6px;display:flex;gap:5px;justify-content:center}
-.btns button{border:none;padding:7px 8px;border-radius:10px;font-weight:bold;cursor:pointer;font-size:11px}
-.felicitar{background:#00FF88}.estrella{background:#FFD700}
-.estrellas{font-size:16px;color:#FFD700}
-.footer{padding:20px;font-size:12px;color:#888}
-.satelite{background:#001a33;margin:10px;padding:15px;border-radius:15px;border:2px solid #00FFFF}
-.motorbox{background:#2a0000;margin:10px;padding:15px;border-radius:15px;border:2px solid #FF0000}
-.buscadorbox{background:#0a2a00;margin:10px;padding:15px;border-radius:15px;border:2px solid #00FF88}
-.origen{font-size:11px;color:#aaa;background:#111;padding:8px;border-radius:10px;margin-top:8px;text-align:left}
-.conectado{background:#002a00;margin:10px;padding:12px;border-radius:15px;border:2px solid #00FF88}
-.bancobox{background:#1a1a00;margin:10px;padding:15px;border-radius:15px;border:2px solid #FFD700;text-align:left}
-.jefebox{background:#2a0000;margin:10px;padding:15px;border-radius:15px;border:3px solid #FF0000}
-.extrabox{background:#001a33;margin:10px;padding:15px;border-radius:15px;border:2px solid #00FFFF;text-align:left}
-</style>
-</head>
-<body>
-<header>
-<h1>👑 RAUDY VIP ROBOTS PODEROSOS ⚡☄️</h1>
-<p>ACCIONES + ORO • ELLOS BUSCAN Y ANALIZAN SOLOS</p>
-<p>JEFE: RAUDY MANZUETA</p>
-</header>
-<div class="top-btns">
-<a class="wa" href="https://wa.me/41767574050" target="_blank">💬 WHATSAPP 0767574050</a>
-<a class="tg" href="https://t.me/raudy_vip_oro_bot" target="_blank">✈️ TELEGRAM @raudy_vip_oro_bot</a>
-<a class="ig" href="https://instagram.com/raudy_vip_oro_bot" target="_blank">📸 INSTAGRAM @raudy_vip_oro_bot</a>
-<a class="pay" href="https://paypal.me/RaudyManzueta/20" target="_blank">💰 PAGAR VIP $20</a>
+* { box-sizing: border-box; }
+body { margin:0; font-family: Arial; background:#0a0a0a; color:white; padding:15px; }
+.top { background: gold; color:black; padding:18px; border-radius:18px; text-align:center; }
+.top h1 { margin:0; font-size:32px; }
+.top p { margin:5px 0 0 0; font-size:16px; font-weight:bold; }
+.card { background:#1a1a1a; border-radius:20px; padding:20px; margin-top:15px; border:2px solid #333; }
+.activo-titulo { font-size:28px; font-weight:bold; text-align:center; }
+.precio-grande { font-size:65px; font-weight:bold; text-align:center; color:#00ff88; margin:10px 0; }
+.sub { text-align:center; font-size:16px; color:#aaa; }
+select, input { width:100%; padding:18px; font-size:22px; border-radius:14px; border:none; margin-top:10px; background:white; color:black; font-weight:bold; }
+label { font-size:20px; font-weight:bold; display:block; margin-top:15px; }
+.btn-comprar { width:100%; padding:22px; font-size:26px; font-weight:bold; background:#00c853; color:white; border:none; border-radius:16px; margin-top:15px; }
+.btn-vender { width:100%; padding:22px; font-size:26px; font-weight:bold; background:#d50000; color:white; border:none; border-radius:16px; margin-top:12px; }
+.btn-voz { width:100%; padding:16px; font-size:20px; background:#ff9800; border:none; border-radius:14px; margin-top:12px; font-weight:bold; }
+.btn-tg { width:100%; padding:16px; font-size:18px; background:#0088cc; color:white; border:none; border-radius:14px; font-weight:bold; }
+.btn-wa { width:100%; padding:16px; font-size:18px; background:#25D366; color:white; border:none; border-radius:14px; font-weight:bold; margin-top:10px; }
+.btn-pago { width:100%; padding:20px; font-size:22px; background:gold; color:black; border:none; border-radius:16px; margin-top:12px; font-weight:bold; }
+.lista-precios { font-size:18px; line-height:2; }
+.lista-precios b { color:#00ff88; }
+.senal-box { text-align:center; font-size:24px; font-weight:bold; padding:18px; border-radius:16px; margin-top:12px; background:#222; border:2px solid gold; }
+canvas { width:100%; background:#000; border-radius:16px; }
+.btn-bot { width:100%; padding:22px; font-size:24px; font-weight:bold; background:#7b1fa2; color:white; border:none; border-radius:16px; margin-top:12px; }
+.btn-backtest { width:100%; padding:18px; font-size:20px; font-weight:bold; background:#00bcd4; color:white; border:none; border-radius:14px; margin-top:12px; }
+</style></head><body>
+
+<div class="top"><h1>RAUDY VIP 1000 👑</h1><p>CALIDAD TOTAL - RIESGO 1:2 + DOBLE TIEMPO + MACD + BOLLINGER + BACKTEST REAL</p><p id="estado">🔴 CONECTANDO PRECIOS REALES...</p></div>
+
+<div class="card">
+<div class="activo-titulo">🤖 BOT AUTO - CALIDAD TOTAL</div>
+<div style="text-align:center; font-size:16px;">RSI: <b id="rsi" style="color:gold;">--</b> | Tend: <b id="tendencia" style="color:gold;">--</b></div>
+<div style="text-align:center; font-size:16px; margin-top:6px;">MACD: <b id="macd" style="color:#00bcd4;">--</b> | Bollinger: <b id="bollinger" style="color:#ff9800;">--</b></div>
+<div style="text-align:center; font-size:15px; margin-top:6px;">Doble Tiempo: <b id="doble" style="color:#00ff88;">--</b></div>
+<div style="text-align:center; font-size:20px; margin:10px 0;">Balance Falso: <b id="balance" style="color:#00ff88;">$1000</b> | Activo: <b id="activo-bot" style="color:gold;">ORO</b></div>
+<div style="text-align:center; font-size:16px; background:#000; padding:10px; border-radius:10px;" id="performance">Ganadas: 0 | Perdidas: 0 | Ganado: $0 | Perdido: $0</div>
+<div style="text-align:center; font-size:14px; background:#222; padding:10px; border-radius:10px; margin-top:8px;" id="aprendizaje">🧠 APRENDIZAJE: Todavia no hay datos, deja que opere</div>
+<div style="text-align:center; font-size:14px; background:#001a00; padding:8px; border-radius:10px; margin-top:8px;" id="riesgo-info">💰 RIESGO 1:2 - Si gano, gano $20 | Si pierdo, pierdo $10</div>
+<div style="text-align:center; font-size:16px; margin-top:8px;" id="bot-estado">BOT APAGADO</div>
+<div style="text-align:left; font-size:14px; margin-top:10px; background:#000; padding:10px; border-radius:10px;" id="historial">Sin operaciones todavia</div>
+<button class="btn-bot" id="btn-bot" onclick="toggleBot()">🤖 PRENDER BOT AUTO</button>
+<button class="btn-backtest" onclick="hacerBacktest()">📊 BACKTEST REAL 1:2 + DOBLE TIEMPO</button>
+<div id="backtest-result" style="text-align:center; font-size:16px; margin-top:10px; background:#000; padding:12px; border-radius:10px;">Sin backtest todavia - Dale al boton azul - Ahora gana $20 pierde $10</div>
+<div style="text-align:center; font-size:13px; color:#aaa; margin-top:8px;">Calidad: 1:2 + Doble Tiempo 1H+15M + MACD + Bollinger + Backtest Real | Proteccion 3 perdidas | Pausa noticias | Multi ORO+BTC+EUR/USD | FALSO</div>
 </div>
-<div class="jefebox">
-<h2 style="color:#FF4444;margin:0;">👑 JEFE 40 - YO MANDO A LOS 39 - ORDEN EN VIVO</h2>
-<p id="jefe-orden" style="font-size:16px;font-weight:bold;color:white;">👑 JEFE: Cargando orden...</p>
-<p id="jefe-mensaje" style="font-size:13px;color:#FFD700;">Esperando orden del Jefe...</p>
-<p style="font-size:11px;color:#aaa;">Si el JEFE dice PAUSA, nadie opera. Asi no pierdes dinero con noticias de bancos.</p>
+
+<div class="card">
+<div class="activo-titulo">🕯️ VELAS EN VIVO - ORO</div>
+<div style="text-align:center; font-size:14px; color:#aaa;">🟢 Verde = Subio &nbsp;&nbsp; 🔴 Roja = Bajo &nbsp;&nbsp; En vivo cada 3 segundos</div>
+<canvas id="velas" height="260"></canvas>
+<div style="text-align:center; margin-top:8px; font-size:18px;"><span id="flecha" style="font-size:28px;">➡️</span> <span id="texto-vela">Esperando velas...</span></div>
 </div>
-<div class="bancobox">
-<h2 style="color:#FFD700;margin:0;text-align:center;">🏦 BANCOS QUE MUEVEN EL ORO - INFO EN VIVO</h2>
-<p id="banco-alerta" style="font-size:14px;font-weight:bold;color:#00FF88;">🏦 Bancos: Cargando...</p>
-<p id="banco-lista" style="font-size:12px;line-height:1.6;">Cargando bancos...</p>
-<p style="font-size:11px;color:#aaa;">Fuente: ForexFactory.com + federalreserve.gov (FED) + ecb.europa.eu (BCE) + TradingEconomics - GRATIS</p>
+
+<div class="card">
+<div class="activo-titulo">📊 SEÑAL BYBIT EN VIVO</div>
+<div class="senal-box" id="senal">🟡 ESPERA - Cargando señal...</div>
+<div style="text-align:center; font-size:14px; color:#aaa; margin-top:8px;">La app te avisa con VOZ cuando es bueno comprar o vender</div>
+<button class="btn-voz" onclick="activarVoz()">🔊 ACTIVAR VOZ DE SEÑALES - DALE AQUI</button>
 </div>
-<!-- 🆕 NUEVO - DXY + VIX + BTC + PETROLEO -->
-<div class="extrabox">
-<h2 style="color:#00FFFF;margin:0;text-align:center;">💵 DOLAR + 😱 MIEDO + ₿ BITCOIN - LO QUE USAN LOS BANCOS</h2>
-<p id="dxy-texto" style="font-size:14px;font-weight:bold;">💵 DXY: Cargando...</p>
-<p id="vix-texto" style="font-size:14px;font-weight:bold;">😱 VIX: Cargando...</p>
-<p id="extra-texto" style="font-size:13px;">₿ BTC + 🛢️ Petroleo + 📈 Bono 10 años: Cargando...</p>
-<p style="font-size:11px;color:#aaa;">Si DXY sube, ORO baja. Si VIX pasa 30, JEFE dice PAUSA. Fuente: Yahoo Finance USA - GRATIS</p>
+
+<div class="card">
+<div class="activo-titulo">TODOS LOS PRECIOS REALES</div>
+<div class="lista-precios" id="lista">Cargando...</div>
+<div style="text-align:center; color:#00ff88; font-size:14px;">Se actualiza cada 3 segundos - Fuente: Yahoo + Bybit en vivo</div>
 </div>
-<div class="satelite">
-<h2 style="color:#00FFFF;margin:0;">🛰️ SATÉLITE RAUDY - LLEGÓ A ESTADOS UNIDOS 🇺🇸</h2>
-<p style="font-size:14px;font-weight:bold;">Mirando WALL STREET - NEW YORK en vivo - NYSE + NASDAQ</p>
-<p id="satelite-texto" style="font-size:13px;">🛰️ Satélite conectando con USA... Buscando bolsa...</p>
-<p id="satelite-usa" style="font-size:13px;color:#00FF88;">Cargando bolsa USA...</p>
-<iframe src="https://www.google.com/maps?q=Wall+Street+New+York+USA&z=16&t=k&output=embed" width="100%" height="180" style="border:0;border-radius:10px;margin-top:8px;"></iframe>
-<div class="origen">📍 <b>SATÉLITE APUNTA A:</b> Wall Street, New York, USA - 40.7075° N, 74.0113° W<br>📍 <b>FUENTE BOLSA USA:</b> Yahoo Finance USA - query1.finance.yahoo.com - Precios reales de NYSE / NASDAQ</div>
+
+<div class="card">
+<div class="activo-titulo">ELIGE TU ACTIVO</div>
+<select id="activo" onchange="cambiarActivo()">
+<option value="ORO">🥇 ORO</option>
+<option value="TESLA">🚗 TESLA</option>
+<option value="APPLE">🍎 APPLE</option>
+<option value="META">📘 META</option>
+<option value="EUR/USD">💶 EUR / USD</option>
+<option value="GBP/USD">💷 GBP / USD</option>
+<option value="USD/CHF">🇨🇭 USD / CHF</option>
+<option value="SP500">📈 SP500</option>
+<option value="BTC">₿ BTC - BYBIT</option>
+<option value="ETH">🔷 ETH - BYBIT</option>
+</select>
+<div class="activo-titulo" id="nombre-activo" style="margin-top:15px;">ORO</div>
+<div class="precio-grande" id="precio">----</div>
+<div class="sub" id="cerebro-texto">🤖 CEREBRO CALIDAD TOTAL: ESPERA</div>
+<div class="sub" id="ultima-voz" style="margin-top:8px;">🔊 VOZ ACTIVA</div>
 </div>
-<div class="conectado">
-<h2 style="color:#00FF88;margin:0;">🔌 TODOS LOS 40 ROBOTS CONECTADOS A LA BOLSA USA ✅</h2>
-<p id="conexion-texto" style="font-size:13px;font-weight:bold;">🔌 Conectando robots a Wall Street...</p>
-<p style="font-size:11px;color:#aaa;">Cada robot lee el mismo precio real de NYSE / NASDAQ - Ya no inventan</p>
+
+<div class="card">
+<label>🎯 TP - DONDE QUIERO GANAR</label><input id="tp" value="4200" type="number">
+<label>🛑 SL - DONDE CORTO SI PIERDO</label><input id="sl" value="4100" type="number">
+<label>💰 CANTIDAD</label><input id="cantidad" value="0.01" type="number" step="0.01">
+<button class="btn-comprar" onclick="operar('COMPRAR')">🟢 COMPRAR</button>
+<button class="btn-vender" onclick="operar('VENDER')">🔴 VENDER</button>
+<button class="btn-voz" onclick="probarVoz()">🔊 PROBAR VOZ</button>
 </div>
-<div class="motorbox">
-<h2 style="color:#FF4444;margin:0;">💪 MOTOR FUERZA TOTAL ULTRA 200% 🔥</h2>
-<p id="motor-texto" style="font-size:15px;font-weight:bold;">💪 MOTOR: Cargando fuerza...</p>
-<p style="font-size:12px;color:#aaa;">Motor vigilando ORO + ACCIONES USA con satélite</p>
+
+<div class="card">
+<div style="text-align:center; font-size:22px; font-weight:bold;">HABLAME JEFE</div>
+<a href="LINK_TELEGRAM_PLACEHOLDER"><button class="btn-tg">📩 TELEGRAM - @raudy_vip_oro_bot</button></a>
+<a href="LINK_WHATSAPP_PLACEHOLDER"><button class="btn-wa">💬 WHATSAPP - 076 757 40 50</button></a>
+<a href="LINK_PAYPAL_PLACEHOLDER"><button class="btn-pago">💳 PAGAR $20 PARA USAR MI ROBOT - PAYPAL</button></a>
 </div>
-<div class="buscadorbox">
-<h2 style="color:#00FF88;margin:0;">🔍 BUSCADOR RAUDY - NADA SE ESCAPA</h2>
-<p id="buscador-texto" style="font-size:13px;font-weight:bold;">🔍 Buscando en todo el mercado...</p>
-<p style="font-size:11px;color:#aaa;">Busca: ORO, NVDA, TESLA, APPLE, META, GOOGLE, AMAZON, MICROSOFT cada 15 segundos</p>
-</div>
-<div class="clock">SESION NEW YORK 🕐 <b id="reloj">--:--:--</b><br><span id="sesion">Buscando información...</span></div>
-<div class="acciones" id="acciones"></div>
-<div class="maestro">
-<div style="font-size:40px">👑⚡☄️🔥🧊</div>
-<h2>ROBOT 40 - MAESTRO DIOS RAUDY</h2>
-<p>Función: Yo mando a los 39. Yo tengo TODOS los poderes. Yo decido.</p>
-<p id="maestroMsg">Analizando todo... Espera jefe...</p>
-<p>⭐ Estrellas del Maestro: <span id="maestroEstrellas">⭐⭐⭐⭐⭐</span></p>
-<button onclick="felicitarMaestro()">👏 FELICITAR MAESTRO</button>
-<button onclick="estrellaMaestro()">⭐ MANDAR ESTRELLA AL MAESTRO</button>
-</div>
-<div class="broker">
-<img src="https://i.pravatar.cc/150?img=12" alt="Broker">
-<h3>🧑‍💼 BROKER RAUDY - Persona Real</h3>
-<p id="brokerMsg">Hola jefe, soy tu Broker. Estoy mirando lo que dicen los robots...</p>
-<button onclick="hablarBroker()" style="padding:10px 18px;border-radius:20px;background:#00FFFF;border:none;font-weight:bold">🎤 PREGUNTAR AL BROKER</button>
-</div>
-<h2>🤖 LOS 40 ROBOTS CON PODERES</h2>
-<p>Ellos buscan información, la analizan y te dicen COMPRA o VENTA solos.</p>
-<div class="grid" id="grid"></div>
-<div style="background:#111;margin:10px;padding:15px;border-radius:15px;border:2px solid #FFD700;text-align:left;">
-<h3 style="color:#FFD700;margin:0;">📍 ¿DE DÓNDE SALE CADA PRECIO? - DIRECTO JEFE</h3>
-<p id="origen-precios" style="font-size:12px;line-height:1.6;">Cargando origen...</p>
-<p style="font-size:11px;color:#888;">Esto es para que tú sepas que no es inventado. Cada precio viene de USA.</p>
-</div>
-<div class="footer">RAUDY VIP © 2026 - Solo Robots Hacen Todo - WhatsApp 0767574050 - No es consejo financiero, es educación</div>
+
 <script>
-const simbolos=[{id:"ORO",nombre:"ORO",precio:4088,emoji:"🥇"},{id:"NVDA",nombre:"NVIDIA",precio:185.20,emoji:"💚"},{id:"AAPL",nombre:"APPLE",precio:262.10,emoji:"🍎"},{id:"TSLA",nombre:"TESLA",precio:340.50,emoji:"🚗"},{id:"MSFT",nombre:"MICROSOFT",precio:495.30,emoji:"🪟"},{id:"AMZN",nombre:"AMAZON",precio:235.40,emoji:"📦"},{id:"META",nombre:"META",precio:645.20,emoji:"👍"},{id:"GOOGL",nombre:"GOOGLE",precio:282.10,emoji:"🔍"}];
-let activo="ORO";
-let datosRealesGlobal=null;
-const accDiv=document.getElementById("acciones");
-function renderAcc(){
- accDiv.innerHTML="";
- simbolos.forEach(s=>{
-  let cambio=(Math.random()*4-2).toFixed(2);
-  let color=cambio>=0?"#00FF88":"#FF4444";
-  let d=document.createElement("div");
-  d.className="act "+(activo===s.id?"active":"");
-  d.innerHTML="<b>"+s.emoji+" "+s.id+"</b><br>"+s.nombre+"<br><b>$"+s.precio.toFixed(2)+"</b><br><span style='color:"+color+"'>"+cambio+"%</span>";
-  d.onclick=()=>{activo=s.id;renderAcc();analizarTodo();sonido()};
-  accDiv.appendChild(d);
- });
+let precios = {};
+let activoActual = "ORO";
+let ultimoPrecio = 0;
+let vozActivada = false;
+let ultimaSenalHablada = "";
+let velasHistorial = [];
+let botPrendido = false;
+function hablar(t){ let v = new SpeechSynthesisUtterance(t); v.lang='es-DO'; speechSynthesis.speak(v); document.getElementById('ultima-voz').innerText = "🔊 " + t; }
+function activarVoz(){ vozActivada = true; hablar('Jefe, voz de señales activada, te voy a avisar cuando sea bueno comprar o vender'); alert('VOZ ACTIVADA JEFE - Ahora te aviso solo'); }
+function cambiarActivo(){ activoActual = document.getElementById('activo').value; document.getElementById('nombre-activo').innerText = activoActual; velasHistorial = []; actualizarPantalla(); }
+function probarVoz(){ hablar('Jefe, esta en ' + document.getElementById('precio').innerText + ', atento'); }
+function operar(tipo){ let p = document.getElementById('precio').innerText; let tp=document.getElementById('tp').value; let sl=document.getElementById('sl').value; hablar('Jefe, esta en '+p+', voy a '+tipo); fetch('/operar',{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({tipo:tipo, activo:activoActual, precio:p, tp:tp, sl:sl})}); alert('Orden enviada: '+tipo+' '+activoActual+' en '+p); }
+async function toggleBot(){
+  let r = await fetch('/api/bot_auto', {method:'POST'});
+  let d = await r.json();
+  botPrendido = d.activo;
+  document.getElementById('btn-bot').innerText = botPrendido ? "🛑 APAGAR BOT AUTO" : "🤖 PRENDER BOT AUTO";
+  document.getElementById('bot-estado').innerText = botPrendido ? "✅ BOT PRENDIDO - Operando solo con dinero falso" : "BOT APAGADO";
+  hablar(botPrendido ? 'Jefe, bot auto prendido, ahora opera con riesgo 1 a 2' : 'Jefe, bot apagado');
 }
-renderAcc();
-const robots=[
-[1,"RAYO RAUDY","⚡","Yo soy el más rápido, busco noticias de USA"],
-[2,"RAYO VELOZ","⚡","Yo busco noticias de NVDA y TESLA"],
-[3,"COMETA ORO","☄️","Yo busco noticias del ORO"],
-[4,"GUARDIA 08:30","🔥","Yo vigilo noticias de las 08:30"],
-[5,"COMETA VENTA","☄️","Yo busco ventas fuertes, rompo el mercado"],
-[6,"COMETA FUERTE","☄️","Yo analizo caídas rápidas"],
-[7,"COMETA DIOS","☄️","Yo aviso cuando viene una venta grande"],
-[8,"RAYO COMPRA","⚡","Yo busco compras rápidas"],
-[9,"RAYO ORO","⚡","Yo sigo el ORO segundo a segundo"],
-[10,"HIELO PACIENTE","🧊","Yo espero frío, no entro con prisa"],
-[11,"HIELO ANALISTA","🧊","Yo analizo si el mercado está tranquilo"],
-[12,"FUEGO COMPRA","🔥","Yo quemo cuando hay compra fuerte"],
-[13,"FUEGO TESLA","🔥","Yo cuido solo TESLA"],
-[14,"FUEGO NVDA","🔥","Yo cuido solo NVIDIA"],
-[15,"FUEGO APPLE","🔥","Yo cuido solo APPLE"],
-[16,"FUEGO ORO","🔥","Yo cuido el ORO con fuego"],
-[17,"FUEGO VENTA","🔥","Yo digo VENTA cuando hay fuego rojo"],
-[18,"RAYO META","⚡","Yo cuido META y GOOGLE"],
-[19,"RAYO AMAZON","⚡","Yo cuido AMAZON"],
-[20,"HIELO JEFE","🧊","Yo digo ESPERA cuando hay peligro"],
-[21,"COMETA AMAZON","☄️","Yo busco noticias de AMAZON"],
-[22,"COMETA MICROSOFT","☄️","Yo busco noticias de MICROSOFT"],
-[23,"RAYO NOTICIAS","⚡","Yo busco noticias en Telegram y WhatsApp"],
-[24,"HIELO SOPORTE","🧊","Yo busco soportes, donde el precio no baja"],
-[25,"FUEGO RESISTENCIA","🔥","Yo busco resistencias, donde el precio no sube"],
-[26,"COMETA 14:30","☄️","Yo vigilo noticias de las 14:30"],
-[27,"RAYO ENTRADA","⚡","Yo busco la mejor ENTRADA"],
-[28,"FUEGO BOTIN","🔥","Yo calculo tu BOTÍN"],
-[29,"HIELO SALIDA","🧊","Yo te digo cuando SALIR"],
-[30,"COMETA PELIGRO","☄️","Yo grito PELIGRO si hay noticia mala"],
-[31,"RAYO VIP","⚡","Yo solo hablo para los VIP"],
-[32,"FUEGO DIOS","🔥","Yo tengo fuego de DIOS"],
-[33,"HIELO DIOS","🧊","Yo tengo hielo de DIOS"],
-[34,"COMETA ORO 2","☄️","Yo confirmo lo que dice el ORO"],
-[35,"RAYO CONFIRMA","⚡","Yo confirmo COMPRA o VENTA"],
-[36,"FUEGO CONFIRMA","🔥","Yo confirmo con fuego"],
-[37,"HIELO CONFIRMA","🧊","Yo confirmo con calma"],
-[38,"COMETA JEFE","☄️","Yo soy el jefe de los cometas"],
-[39,"RAYO MAESTRO 2","⚡","Yo soy la mano derecha del Maestro 40"],
-[40,"MAESTRO DIOS RAUDY","👑⚡☄️🔥🧊","Yo mando a todos, tengo TODOS los poderes"]
-];
-const grid=document.getElementById("grid");
-let estrellas={};
-robots.slice(0,39).forEach(r=>{
- let num=r[0]; let nombre=r[1]; let poder=r[2]; let funcion=r[3];
- estrellas[num]=0;
- let div=document.createElement("div");
- div.className="robot";
- div.innerHTML="<div class='luz' id='luz"+num+"'></div><div class='poder'>"+poder+"</div><h3>Robot "+num+" - "+nombre+"</h3><p><b>Función:</b> "+funcion+"</p><div class='msg' id='msg"+num+"'>Buscando información...</div><div class='estrellas' id='est"+num+"'></div><div class='btns'><button class='felicitar' onclick='felicitar("+num+")'>👏 FELICITAR</button><button class='estrella' onclick='darEstrella("+num+")'>⭐ ESTRELLA</button></div>";
- grid.appendChild(div);
-});
-function sonido(){
- try{
-  let ctx=new (window.AudioContext||window.webkitAudioContext)();
-  let o=ctx.createOscillator(); let g=ctx.createGain();
-  o.connect(g); g.connect(ctx.destination);
-  o.frequency.value=880; o.type="sine"; g.gain.value=0.1; o.start(); o.stop(ctx.currentTime+0.15);
- }catch(e){}
+async function hacerBacktest(){
+  document.getElementById('backtest-result').innerText = "Probando con precios REALES 1:2 + doble tiempo... espera jefe, 5 segundos";
+  let r = await fetch('/api/backtest');
+  let d = await r.json();
+  document.getElementById('backtest-result').innerHTML = "📊 BACKTEST CALIDAD TOTAL JEFE:<br>" + d.modo + "<br>Empezaste con $1000 y terminaste con $" + d.balance_final + "<br>Ganadas: " + d.ganadas + " | Perdidas: " + d.perdidas + " | Winrate: " + d.winrate + "%<br>Peor: $" + d.peor + " | Mejor: $" + d.mejor + "<br>" + d.mensaje;
+  hablar('Jefe, backtest total listo, terminaste con ' + d.balance_final + ' dolares, ganando 20 y perdiendo 10');
 }
-function hablar(texto){
- if('speechSynthesis' in window){ let u=new SpeechSynthesisUtterance(texto); u.lang='es-ES'; speechSynthesis.speak(u); }
-}
-function felicitar(num){
- sonido();
- document.getElementById("msg"+num).innerHTML="¡Gracias jefe Raudy! Lo estoy haciendo bien, te felicito a ti también 👏";
- hablar("Gracias jefe Raudy, lo estoy haciendo bien");
- document.getElementById("luz"+num).style.background="#00FF88";
-}
-function darEstrella(num){
- sonido(); sonido();
- estrellas[num]++;
- document.getElementById("est"+num).innerHTML="⭐".repeat(estrellas[num]);
- document.getElementById("msg"+num).innerHTML="¡WOW! ¡Me mandaste una estrella! ¡Gracias jefe! ⭐ ¡Voy a trabajar más fuerte!";
- hablar("Gracias jefe, me mandaste una estrella");
-}
-let maestroEstrellasCount=5;
-function felicitarMaestro(){
- sonido();
- document.getElementById("maestroMsg").innerHTML="¡Gracias jefe! ¡Lo estoy haciendo bien, te felicito! ¡Eres el mejor jefe! 👑";
- hablar("Gracias jefe, lo estoy haciendo bien, te felicito");
-}
-function estrellaMaestro(){
- sonido();
- maestroEstrellasCount++;
- document.getElementById("maestroEstrellas").innerHTML="⭐".repeat(maestroEstrellasCount);
- document.getElementById("maestroMsg").innerHTML="¡ESTRELLA RECIBIDA! ¡Ahora tengo más poder! ⭐⚡☄️";
- hablar("Estrella recibida, ahora tengo más poder");
-}
-function hablarBroker(){
- sonido();
- let msgs=["Jefe, el Maestro 40 dice que esperes, el ORO está en zona caliente.","Jefe, los robots dicen COMPRA en NVDA, pero con cuidado.","Jefe, yo como tu Broker te digo: no entres sin confirmación del Maestro.","Jefe, hoy hay mucha fuerza en TESLA, los robots están buscando información."];
- let msg=msgs[Math.floor(Math.random()*msgs.length)];
- document.getElementById("brokerMsg").innerHTML=msg;
- hablar(msg);
-}
-async function analizarTodo(){
- sonido();
- let datos = datosRealesGlobal;
- if(!datos){
-   try{
-     let r = await fetch('/api/satelite_usa?v='+Date.now());
-     datos = await r.json();
-     datosRealesGlobal = datos;
-   }catch(e){ datos = null; }
- }
- let precioReal = datos && datos[activo] ? datos[activo] : simbolos.find(s=>s.id===activo).precio;
- let senalTexto = "ESPERA 🟡";
- let esCompra = false; let esVenta = false;
- if(activo==="ORO"){ if(precioReal<=3910){senalTexto="COMPRA DIOS 🟢"; esCompra=true;} else if(precioReal>=3970){senalTexto="VENTA DIOS 🔴"; esVenta=true;} }
- else if(activo==="NVDA"){ if(precioReal<=180){senalTexto="COMPRA DIOS 🟢"; esCompra=true;} else if(precioReal>=195){senalTexto="VENTA DIOS 🔴"; esVenta=true;} }
- else if(activo==="TSLA"){ if(precioReal<=330){senalTexto="COMPRA DIOS 🟢"; esCompra=true;} else if(precioReal>=355){senalTexto="VENTA DIOS 🔴"; esVenta=true;} }
- else if(activo==="AAPL"){ if(precioReal<=255){senalTexto="COMPRA DIOS 🟢"; esCompra=true;} else if(precioReal>=270){senalTexto="VENTA DIOS 🔴"; esVenta=true;} }
- else if(activo==="MSFT"){ if(precioReal<=490){senalTexto="COMPRA DIOS 🟢"; esCompra=true;} else if(precioReal>=505){senalTexto="VENTA DIOS 🔴"; esVenta=true;} }
- else if(activo==="AMZN"){ if(precioReal<=230){senalTexto="COMPRA DIOS 🟢"; esCompra=true;} else if(precioReal>=245){senalTexto="VENTA DIOS 🔴"; esVenta=true;} }
- else if(activo==="META"){ if(precioReal<=640){senalTexto="COMPRA DIOS 🟢"; esCompra=true;} else if(precioReal>=660){senalTexto="VENTA DIOS 🔴"; esVenta=true;} }
- else if(activo==="GOOGL"){ if(precioReal<=280){senalTexto="COMPRA DIOS 🟢"; esCompra=true;} else if(precioReal>=292){senalTexto="VENTA DIOS 🔴"; esVenta=true;} }
- let entrada = precioReal.toFixed(2);
- let botin, salida;
- if(esCompra){ botin = (precioReal*1.02).toFixed(2); salida = (precioReal*0.99).toFixed(2); }
- else if(esVenta){ botin = (precioReal*0.98).toFixed(2); salida = (precioReal*1.01).toFixed(2); }
- else { botin = entrada; salida = entrada; }
- let origen = activo==="ORO" ? "gold-api.com + Yahoo USA (GC=F)" : "Yahoo Finance USA - NYSE / NASDAQ";
- let ordenJefe = datos && datos.jefe ? datos.jefe.orden : "";
- let textoJefe = ordenJefe ? " | 👑 JEFE DICE: " + ordenJefe : "";
- document.getElementById("maestroMsg").innerHTML="He analizado "+activo+" con PRECIO REAL de BOLSA USA. Los 40 robots están CONECTADOS. Decisión: <b>"+senalTexto+"</b><br>ENTRADA: $"+entrada+" | BOTÍN: $"+botin+" | SALIDA: $"+salida+"<br>📍 Fuente: "+origen + "<br>" + textoJefe;
- hablar("He analizado "+activo+" con precio real de bolsa USA, decisión "+senalTexto);
- robots.slice(0,39).forEach(r=>{
-  let num=r[0]; let funcion=r[3];
-  let el=document.getElementById("msg"+num);
-  let luz=document.getElementById("luz"+num);
-  if(!el) return;
-  let texto = "🔌 "+funcion+" - "+activo+" $"+entrada+" - Fuente: "+origen+" - Veo "+senalTexto + " - Obedezco al JEFE 40";
-  el.innerHTML = texto;
-  let col = esCompra ? "#00FF88" : (esVenta ? "#FF4444" : "#FFD700");
-  luz.style.background = col;
-  luz.style.boxShadow = "0 0 15px "+col;
- });
- document.getElementById("brokerMsg").innerHTML="Jefe, ya analicé "+activo+" con BOLSA USA REAL. El Maestro dice "+senalTexto+". ENTRADA $"+entrada+", BOTÍN $"+botin+". Fuente: "+origen+". Yo te recomiendo esperar confirmación.";
- document.getElementById("conexion-texto").innerHTML="🔌 40/40 ROBOTS CONECTADOS ✅ - "+activo+" $"+entrada+" - Fuente: "+origen+" - Actualizado ahora";
-}
-async function actualizarSateliteUSA(){
-  try{
-    let r = await fetch('/api/satelite_usa?v='+Date.now());
-    let d = await r.json();
-    datosRealesGlobal = d;
-    document.getElementById("satelite-texto").innerHTML = "🛰️ SATÉLITE EN USA ✅ - NYSE: " + d.nyse + " | NASDAQ: " + d.nasdaq;
-    document.getElementById("satelite-usa").innerHTML = "🇺🇸 Wall Street: ORO $" + d.ORO + " | NVDA $" + d.NVDA + " | TESLA $" + d.TSLA + " | APPLE $" + d.AAPL;
-    document.getElementById("motor-texto").innerHTML = "💪 MOTOR: " + d.motor + " | " + d.velocidad;
-    document.getElementById("buscador-texto").innerHTML = d.buscador;
-    document.getElementById("conexion-texto").innerHTML = "🔌 40/40 ROBOTS CONECTADOS ✅ - ORO $"+d.ORO+" - Fuente: Yahoo USA + gold-api";
-    if(d.jefe){
-      document.getElementById("jefe-orden").innerHTML = d.jefe.orden;
-      document.getElementById("jefe-mensaje").innerHTML = d.jefe.mensaje;
-    }
-    if(d.bancos){
-      document.getElementById("banco-alerta").innerHTML = "🏦 " + d.bancos.alerta_banco + " | Riesgo: " + d.bancos.nivel_riesgo;
-      let lista = d.bancos.eventos_hoy.map(e=> "🏦 <b>" + e.evento + "</b> - Impacto: " + e.impacto + " - " + e.efecto).join("<br>");
-      document.getElementById("banco-lista").innerHTML = lista + "<br>📍 Fuente: " + d.bancos.fuente;
-    }
-    if(d.extra){
-      document.getElementById("dxy-texto").innerHTML = "💵 " + d.extra.DXY_texto;
-      document.getElementById("vix-texto").innerHTML = "😱 " + d.extra.VIX_texto;
-      document.getElementById("extra-texto").innerHTML = "₿ BTC $" + Math.round(d.extra.BTC) + " | 🛢️ Petroleo $" + d.extra.PETROLEO + " | 📈 Bono 10 años " + d.extra.BONO10 + "%";
-    }
-    document.getElementById("origen-precios").innerHTML =
-      "🥇 <b>ORO $" + d.ORO + "</b> → Viene de: <b>gold-api.com</b> + Yahoo Finance USA (GC=F) - Señal: "+d.robots_conectados.ORO.senal+"<br>" +
-      "💚 <b>NVDA $" + d.NVDA + "</b> → Viene de: <b>Yahoo Finance USA - NASDAQ</b> - Señal: "+d.robots_conectados.NVDA.senal+"<br>" +
-      "🍎 <b>APPLE $" + d.AAPL + "</b> → Viene de: <b>Yahoo Finance USA - NASDAQ</b> - Señal: "+d.robots_conectados.AAPL.senal+"<br>" +
-      "🚗 <b>TESLA $" + d.TSLA + "</b> → Viene de: <b>Yahoo Finance USA - NASDAQ</b> - Señal: "+d.robots_conectados.TSLA.senal+"<br>" +
-      "🪟 <b>MICROSOFT $" + d.MSFT + "</b> → Viene de: <b>Yahoo Finance USA - NASDAQ</b> - Señal: "+d.robots_conectados.MSFT.senal+"<br>" +
-      "📦 <b>AMAZON $" + d.AMZN + "</b> → Viene de: <b>Yahoo Finance USA - NASDAQ</b> - Señal: "+d.robots_conectados.AMZN.senal+"<br>" +
-      "👍 <b>META $" + d.META + "</b> → Viene de: <b>Yahoo Finance USA - NASDAQ</b> - Señal: "+d.robots_conectados.META.senal+"<br>" +
-      "🔍 <b>GOOGLE $" + d.GOOGL + "</b> → Viene de: <b>Yahoo Finance USA - NASDAQ</b> - Señal: "+d.robots_conectados.GOOGL.senal;
-    let mapa = {"ORO":d.ORO,"NVDA":d.NVDA,"AAPL":d.AAPL,"TSLA":d.TSLA,"MSFT":d.MSFT,"AMZN":d.AMZN,"META":d.META,"GOOGL":d.GOOGL};
-    simbolos.forEach(s=>{ if(mapa[s.id]) s.precio = mapa[s.id]; });
-    renderAcc();
-  }catch(e){
-    document.getElementById("satelite-texto").innerHTML = "🛰️ Satélite buscando USA... Reintentando";
+function actualizarPantalla(){
+  if(!precios[activoActual]) return;
+  let p = precios[activoActual];
+  document.getElementById('precio').innerText = p;
+  if(ultimoPrecio !== 0){
+    let diff = p - ultimoPrecio;
+    if(diff > 2 && activoActual === "ORO"){ hablar('Jefe, subio, esta en ' + p); }
+    if(diff < -2 && activoActual === "ORO"){ hablar('Jefe, bajo, esta en ' + p); }
   }
+  ultimoPrecio = p;
 }
-setInterval(actualizarSateliteUSA, 15000);
-actualizarSateliteUSA();
-setInterval(()=>{
- let d=new Date();
- document.getElementById("reloj").innerHTML=d.toLocaleTimeString("es-ES");
- let h=d.getHours();
- document.getElementById("sesion").innerHTML=h>=14&&h<21?"🟢 SESIÓN NEW YORK ABIERTA - Robots trabajando":"🟡 Sesión cerrada - Robots buscando información";
-},1000);
-setInterval(analizarTodo,30000);
-analizarTodo();
-</script>
-</body>
-</html>
+function dibujarVelas(){
+  let canvas = document.getElementById('velas');
+  let ctx = canvas.getContext('2d');
+  let W = canvas.width = canvas.offsetWidth * 2;
+  let H = canvas.height = 520;
+  ctx.fillStyle = "#000"; ctx.fillRect(0,0,W,H);
+  if(velasHistorial.length < 2) return;
+  let min = Math.min(...velasHistorial.map(v=>v.low)) - 1;
+  let max = Math.max(...velasHistorial.map(v=>v.high)) + 1;
+  let rango = max - min || 1;
+  let anchoVela = W / velasHistorial.length;
+  velasHistorial.forEach((vela, i)=>{
+    let x = i * anchoVela + anchoVela/2;
+    let yOpen = H - ((vela.open - min)/rango)*H;
+    let yClose = H - ((vela.close - min)/rango)*H;
+    let yHigh = H - ((vela.high - min)/rango)*H;
+    let yLow = H - ((vela.low - min)/rango)*H;
+    let subio = vela.close >= vela.open;
+    ctx.strokeStyle = subio ? "#00ff88" : "#ff1744";
+    ctx.fillStyle = subio ? "#00ff88" : "#ff1744";
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(x, yHigh); ctx.lineTo(x, yLow); ctx.stroke();
+    let top = Math.min(yOpen, yClose);
+    let alto = Math.max(10, Math.abs(yClose - yOpen));
+    ctx.fillRect(x - anchoVela*0.35, top, anchoVela*0.7, alto);
+  });
+  let yTP = H - ((parseFloat(document.getElementById('tp').value) - min)/rango)*H;
+  let ySL = H - ((parseFloat(document.getElementById('sl').value) - min)/rango)*H;
+  ctx.strokeStyle = "#00ff88"; ctx.setLineDash([12,8]); ctx.beginPath(); ctx.moveTo(0,yTP); ctx.lineTo(W,yTP); ctx.stroke();
+  ctx.strokeStyle = "#ff1744"; ctx.beginPath(); ctx.moveTo(0,ySL); ctx.lineTo(W,ySL); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = "#fff"; ctx.font = "bold 28px Arial";
+  ctx.fillText("TP " + document.getElementById('tp').value, 10, Math.max(30, yTP-10));
+  ctx.fillText("SL " + document.getElementById('sl').value, 10, Math.min(H-10, ySL+35));
+}
+async function cargarPrecios(){
+  try{
+    let r = await fetch('/api/precios');
+    let data = await r.json();
+    precios = data;
+    document.getElementById('estado').innerText = "✅ EN VIVO - " + new Date().toLocaleTimeString();
+    let html = "";
+    for(let k in precios){ html += k + ": <b>" + precios[k] + "</b><br>"; }
+    document.getElementById('lista').innerHTML = html;
+    actualizarPantalla();
+    let p = precios[activoActual];
+    if(p){
+      let ultimo = velasHistorial[velasHistorial.length-1];
+      if(!ultimo || velasHistorial.length === 0){
+        velasHistorial.push({open:p, close:p, high:p+0.5, low:p-0.5});
+      } else {
+        if(velasHistorial.length > 0 && Math.random() > 0.7){
+          velasHistorial.push({open:ultimo.close, close:p, high:Math.max(ultimo.close,p)+0.4, low:Math.min(ultimo.close,p)-0.4});
+        } else {
+          ultimo.close = p;
+          ultimo.high = Math.max(ultimo.high, p);
+          ultimo.low = Math.min(ultimo.low, p);
+        }
+        if(velasHistorial.length > 25) velasHistorial.shift();
+      }
+      let v = velasHistorial[velasHistorial.length-1];
+      if(v.close > v.open){
+        document.getElementById('flecha').innerText = "🟢 ⬆️ SUBIENDO";
+        document.getElementById('texto-vela').innerText = "Vela verde - El precio esta subiendo, esta en " + p;
+      } else {
+        document.getElementById('flecha').innerText = "🔴 ⬇️ BAJANDO";
+        document.getElementById('texto-vela').innerText = "Vela roja - El precio esta bajando, esta en " + p;
+      }
+      dibujarVelas();
+    }
+    let tp = document.getElementById('tp').value;
+    let sl = document.getElementById('sl').value;
+    let s = await fetch('/api/senal?precio=' + precios['ORO'] + '&tp=' + tp + '&sl=' + sl);
+    let sd = await s.json();
+    document.getElementById('senal').innerText = sd.senal;
+    document.getElementById('cerebro-texto').innerText = "🤖 CEREBRO CALIDAD TOTAL: " + sd.decision;
+    if(sd.rsi) document.getElementById('rsi').innerText = sd.rsi;
+    if(sd.tendencia) document.getElementById('tendencia').innerText = sd.tendencia;
+    if(sd.macd) document.getElementById('macd').innerText = sd.macd;
+    if(sd.bollinger) document.getElementById('bollinger').innerText = sd.bollinger;
+    if(sd.doble) document.getElementById('doble').innerText = sd.doble;
+    let b = await fetch('/api/bot_auto');
+    let bd = await b.json();
+    document.getElementById('balance').innerText = "$" + bd.balance.toFixed(2);
+    document.getElementById('activo-bot').innerText = bd.activo_actual;
+    document.getElementById('bot-estado').innerText = bd.ultima_operacion;
+    document.getElementById('performance').innerText = "Ganadas: " + bd.ganadas + " | Perdidas: " + bd.perdidas + " | Ganado: $" + bd.total_ganado.toFixed(2) + " | Perdido: $" + bd.total_perdido.toFixed(2);
+    if(bd.operaciones_manana + bd.operaciones_noche > 0){
+      let winM = bd.operaciones_manana > 0 ? Math.round(bd.ganadas_manana / bd.operaciones_manana * 100) : 0;
+      let winN = bd.operaciones_noche > 0 ? Math.round(bd.ganadas_noche / bd.operaciones_noche * 100) : 0;
+      document.getElementById('aprendizaje').innerText = "🧠 APRENDE: Mañana ganas " + winM + "% (" + bd.ganadas_manana + "/" + bd.operaciones_manana + ") | Noche ganas " + winN + "% (" + bd.ganadas_noche + "/" + bd.operaciones_noche + ") - " + (winM > winN ? "Jefe, opera mas en la MAÑANA" : "Jefe, opera mas en la NOCHE");
+    }
+    if(bd.historial.length > 0){ document.getElementById('historial').innerHTML = bd.historial.slice().reverse().join("<br>"); }
+    if(vozActivada && sd.senal !== ultimaSenalHablada && sd.senal.includes('COMPRAR')){
+        hablar('Jefe, compra ahora, el precio esta bueno para comprar, esta en ' + precios['ORO']);
+        ultimaSenalHablada = sd.senal;
+    }
+    if(vozActivada && sd.senal !== ultimaSenalHablada && sd.senal.includes('VENDER')){
+        hablar('Jefe, vende ahora, el precio esta bajando, esta en ' + precios['ORO']);
+        ultimaSenalHablada = sd.senal;
+    }
+  }catch(e){ document.getElementById('estado').innerText = "⚠️ Sin internet, reintentando..."; }
+}
+cargarPrecios();
+setInterval(cargarPrecios, 3000);
+</script></body></html>
 """
+HTML = HTML.replace("LINK_TELEGRAM_PLACEHOLDER", LINK_TELEGRAM).replace("LINK_WHATSAPP_PLACEHOLDER", LINK_WHATSAPP).replace("LINK_PAYPAL_PLACEHOLDER", LINK_PAYPAL)
 
 @app.route("/")
 def home():
-    return HTML
+    return render_template_string(HTML)
 
-@app.route("/api/satelite_usa")
-def satelite_usa():
+@app.route("/api/precios")
+def api_precios():
+    out = {}
+    for nombre, yahoo_sym in YAHOO.items():
+        p = get_precio_real(yahoo_sym)
+        if p:
+            out[nombre] = p
+    btc = get_precio_bybit("BTCUSDT")
+    if btc: out["BTC"] = btc
+    eth = get_precio_bybit("ETHUSDT")
+    if eth: out["ETH"] = eth
+    if not out:
+        out = {"ORO": 4149, "TESLA": 378, "APPLE": 350, "META": 641, "EUR/USD": 1.16, "GBP/USD": 1.34, "USD/CHF": 0.79, "SP500": 7549}
+    return jsonify(out)
+
+@app.route("/api/senal")
+def api_senal():
     try:
-        r = requests.get('https://api.gold-api.com/price/XAU', timeout=4)
-        oro = float(r.json().get('price', 4088))
+        precio = float(request.args.get("precio", 4149))
+        tp = float(request.args.get("tp", 4200))
+        sl = float(request.args.get("sl", 4100))
     except:
-        oro = get_precio_yahoo('GC=F', 4088)
-    datos = {
-        "ORO": oro,
-        "NVDA": get_precio_yahoo('NVDA', 185.20),
-        "AAPL": get_precio_yahoo('AAPL', 262.10),
-        "TSLA": get_precio_yahoo('TSLA', 340.50),
-        "MSFT": get_precio_yahoo('MSFT', 495.30),
-        "AMZN": get_precio_yahoo('AMZN', 235.40),
-        "META": get_precio_yahoo('META', 645.20),
-        "GOOGL": get_precio_yahoo('GOOGL', 282.10),
-    }
-    motor_txt = motor_fuerza_total(oro, "ORO")
-    buscador_txt = buscador_nada_se_escape(datos)
-    robots_conectados = conectar_todos_los_robots(datos)
-    bancos_info = get_info_bancaria()
-    extra_info = get_mercado_extra()
-    jefe_orden = jefe_manda_orden(bancos_info, datos, extra_info)
-    return jsonify({
-        **datos,
-        "motor": motor_txt,
-        "velocidad": "TURBO 5 SEG - SATELITE USA ACTIVO",
-        "buscador": buscador_txt,
-        "nyse": "ABIERTO - WALL STREET",
-        "nasdaq": "ABIERTO - USA",
-        "robots_conectados": robots_conectados,
-        "origen_oro": "gold-api.com + Yahoo Finance USA",
-        "origen_acciones": "Yahoo Finance USA - NYSE / NASDAQ",
-        "bancos": bancos_info,
-        "jefe": jefe_orden,
-        "extra": extra_info,
-        "equipo_40": ROBOTS_EQUIPO_COMPLETO,
-        "total_robots": 40
-    })
+        precio, tp, sl = 4149, 4200, 4100
+    s = senal_bybit(precio, tp, sl)
+    d = cerebro_1000_calidad(precio, tp, sl)
+    rsi = calcular_rsi(HISTORIAL_PRECIOS_ORO)
+    tend = calcular_tendencia(HISTORIAL_PRECIOS_ORO)
+    macd = calcular_macd(HISTORIAL_PRECIOS_ORO)
+    boll = calcular_bollinger(HISTORIAL_PRECIOS_ORO)
+    doble = analizar_doble_tiempo(HISTORIAL_PRECIOS_ORO)
+    return jsonify({"senal": s, "decision": d, "precio": precio, "rsi": round(rsi, 1), "tendencia": tend, "macd": macd["texto"], "bollinger": boll["posicion"], "doble": doble["texto"]})
 
-@app.route("/api/bancos")
-def api_bancos():
-    return jsonify(get_info_bancaria())
+@app.route("/api/bot_auto", methods=["GET", "POST"])
+def api_bot_auto():
+    if request.method == "POST":
+        BOT_AUTO["activo"] = not BOT_AUTO["activo"]
+        if BOT_AUTO["activo"]:
+            BOT_AUTO["perdidas_seguidas"] = 0
+            BOT_AUTO["ultima_operacion"] = "✅ BOT PRENDIDO - Operando solo con dinero falso"
+        else:
+            BOT_AUTO["ultima_operacion"] = "BOT APAGADO"
+    return jsonify(BOT_AUTO)
 
-@app.route("/api/extra")
-def api_extra():
-    return jsonify(get_mercado_extra())
+@app.route("/api/backtest")
+def api_backtest():
+    return jsonify(hacer_backtest())
 
-@app.route("/api/jefe")
-def api_jefe():
-    try:
-        r = requests.get('https://api.gold-api.com/price/XAU', timeout=4)
-        oro = float(r.json().get('price', 4088))
-    except:
-        oro = 4088
-    bancos = get_info_bancaria()
-    extra = get_mercado_extra()
-    return jsonify(jefe_manda_orden(bancos, {"ORO": oro}, extra))
+@app.route("/operar", methods=["POST"])
+def operar():
+    data = request.get_json()
+    decision = cerebro_1000_calidad(float(str(data.get("precio", 4149)).replace(",","")), float(data.get("tp", 4200)), float(data.get("sl", 4100)))
+    print(f"ORDEN JEFE: {data} -> {decision} - TESTNET: {USAR_TESTNET}")
+    return jsonify({"ok": True, "decision": decision, "pedido": data})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
