@@ -10,7 +10,7 @@ def home():
 <head>
 <meta charset='UTF-8'>
 <meta name='viewport' content='width=device-width, initial-scale=1'>
-<title>RAUDY VIP ROBOT PRO</title>
+<title>RAUDY VIP ROBOT 2 CONFIRMACIONES</title>
 <style>
 body{background:#000;color:#fff;font-family:Arial;text-align:center}
 h1{color:#FFD700}
@@ -25,9 +25,9 @@ button{background:#FFD700;border:none;padding:15px 25px;font-size:18px;border-ra
 </head>
 <body>
 <h1>👑 RAUDY VIP ROBOT PRO</h1>
-<h3 style='color:#00FF00'>● EN VIVO - ORO REAL - BANCO</h3>
+<h3 style='color:#00FF00'>● EN VIVO - ORO REAL - 2 CONFIRMACIONES</h3>
 <p>Precio Oro: <span class='precio' id='precio'>Cargando...</span></p>
-<div id='final'>Esperando 3 confirmaciones...</div>
+<div id='final'>Esperando 2 confirmaciones...</div>
 <div class='box'>
 <h2>5 MINUTOS</h2>
 <div class='vela' id='vela5'></div>
@@ -49,7 +49,7 @@ button{background:#FFD700;border:none;padding:15px 25px;font-size:18px;border-ra
 <br>
 <button onclick='hablar()'>🔊 ACTIVAR VOZ</button>
 <button onclick='cargar()'>🔄 VER SEÑAL</button>
-<p>Raudy VIP - 3 Confirmaciones</p>
+<p>Raudy VIP - 2 Confirmaciones</p>
 <script>
 let vozOn=false;
 let ultimaSenal='';
@@ -60,7 +60,7 @@ speechSynthesis.speak(u);
 }
 function hablar(){
 vozOn=true;
-hablarTexto('Robot Raudy activado. Te aviso cuando haya compra o venta');
+hablarTexto('Robot Raudy activado. Con dos confirmaciones te aviso compra o venta');
 }
 async function getVela(tf){
 let res=await fetch('https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval='+tf+'&limit=2');
@@ -83,23 +83,24 @@ let c5=pintar('vela5','t5','d5',v5);
 let c15=pintar('vela15','t15','d15',v15);
 let c1h=pintar('vela1h','t1h','d1h',v1h);
 let final=document.getElementById('final');
+let verdes=[c5,c15,c1h].filter(x=>x=='VERDE').length;
+let rojas=[c5,c15,c1h].filter(x=>x=='ROJA').length;
 let senal='';
-if(c5=='VERDE' && c15=='VERDE' && c1h=='VERDE'){
-final.innerHTML='🟢🟢🟢 COMPRA - 3 CONFIRMACIONES VERDES';
+if(verdes>=2){
+final.innerHTML='🟢🟢 COMPRA - '+verdes+' DE 3 VERDES';
 final.style.background='#00FF00';final.style.color='#000';
 senal='COMPRA';
-}else if(c5=='ROJA' && c15=='ROJA' && c1h=='ROJA'){
-final.innerHTML='🔴🔴🔴 VENTA - 3 CONFIRMACIONES ROJAS';
+}else if(rojas>=2){
+final.innerHTML='🔴🔴 VENTA - '+rojas+' DE 3 ROJAS';
 final.style.background='#FF0000';final.style.color='#fff';
 senal='VENTA';
 }else{
-let verdes=[c5,c15,c1h].filter(x=>x=='VERDE').length;
-final.innerHTML='🟡 ESPERA - '+verdes+' de 3 VERDES';
+final.innerHTML='🟡 ESPERA - '+verdes+' VERDES';
 final.style.background='#333';final.style.color='#FFD700';
 senal='ESPERA';
 }
 if(vozOn && senal!=ultimaSenal && (senal=='COMPRA' || senal=='VENTA')){
-hablarTexto(senal+'. Compra o venta confirmada. Oro. Tres confirmaciones');
+hablarTexto(senal+'. Dos confirmaciones. Oro');
 ultimaSenal=senal;
 }
 if(senal=='ESPERA'){ultimaSenal='ESPERA';}
