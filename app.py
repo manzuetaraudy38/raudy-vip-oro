@@ -1,81 +1,318 @@
-from flask import Flask
+import os, json, urllib.request
+import threading, time, random, math
+from datetime import datetime
+from flask import Flask, request, jsonify
 app = Flask(__name__)
+BOT = {"activo": False, "balance": 1000.0}
+BOT["ganadas"] = 0
+BOT["perdidas"] = 0
+BOT["hist"] = []
+BOT["ult"] = "BOT APAGADO"
+HIST = []
+TP_GAN = 20.0
+SL_PER = 10.0
 
-@app.route('/')
-def home():
-    return """
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RAUDY VIP ORO - SENAL ROBOT</title>
+def precio(sym):
+    try:
+        u = "https://query1.finance.yahoo.com"
+        u += "/v8/finance/chart/" + sym
+        u += "?interval=1m&range=1d"
+        req = urllib.request.Request(
+            u, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            d = json.loads(r.read().decode())
+            m = d["chart"]["result"][0]["meta"]
+            return float(m.get("regularMarketPrice"))
+    except:
+        return None
+
+def precios_pasado():
+    try:
+        u = "https://query1.finance.yahoo.com"
+        u += "/v8/finance/chart/GC=F"
+        u += "?interval=1h&range=1mo"
+        req = urllib.request.Request(
+            u, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            d = json.loads(r.read().decode())
+            res = d["chart"]["result"][0]
+            cl = res["indicators"]["quote"][0]["close"]
+            return [float(x) for x in cl if x is not None]
+    except:
+        return []
+
+def rsi(pr, n=14):
+    if len(pr) < n + 1:
+        return 50
+    g = 0
+    p = 0
+    for i in range(1, n + 1):
+        diff = pr[-i] - pr[-i-1]
+        if diff > 0:
+            g += diff
+        else:
+            p += abs(diff)
+    if p == 0:
+        return 100
+    rs = (g / n) / (p / n)
+    return 100 - (100 / (1 + rs))
+
+def ema(pr, n):
+    if len(pr) < n:
+        return sum(pr) / len(pr)
+    k = 2 / (n + 1)
+    e = sum(pr[:n]) / n
+    for x in pr[n:]:
+        e = x * k + e * (1 - k)
+    return e
+
+def macd(pr):
+    if len(pr) < 26:
+        return 0
+    return ema(pr, 12) - ema(pr, 26)
+
+def boll(pr):
+    if len(pr) < 20:
+        return "MEDIO"
+    ult = pr[-20:]
+    med = sum(ult) / len(ult)
+    var = sum((x - med) ** 2 for x in ult) / len(ult)
+    dv = math.sqrt(var)
+    sup = med + 2 * dv
+    inf = med - 2 * dv
+    act = pr[-1]
+    if act <= inf + dv * 0.2:
+        return "BARATO"
+    if act >= sup - dv * 0.2:
+        return "CARO"
+    if act < med:
+        return "BARATO"
+    return "CARO"
+
+def tendencia(pr):
+    if len(pr) < 10:
+        return "LADO"
+    a = sum(pr[-5:]) / 5
+    b = sum(pr[-10:-5]) / 5
+    if a > b:
+        return "SUBIENDO"
+    if a < b:
+        return "BAJANDO"
+    return "LADO"
+
+def doble(pr):
+    if len(pr) < 30:
+        return False
+    largo = tendencia(pr[-30:])
+    if largo == "SUBIENDO":
+        return True
+    return False
+
+def cerebro(precio, lista):
+    lista.append(precio)
+    if len(lista) > 60:
+        lista.pop(0)
+    v = 0
+    r = rsi(lista)
+    t = tendencia(lista)
+    mc = macd(lista)
+    b = boll(lista)
+    d = doble(lista)
+    if r < 30:
+        v += 200
+    if r > 70:
+        v -= 200
+    if t == "SUBIENDO":
+        v += 150
+    if t == "BAJANDO":
+        v -= 150
+    if mc > 0:
+        v += 200
+    if mc < 0:
+        v -= 200
+    if b == "BARATO":
+        v += 250
+    if b == "CARO":
+        v -= 250
+    if d:
+        v += 300
+    if v >= 400:
+        return "COMPRAR"
+    if v <= -400:
+        return "VENDER"
+    return "ESPERA"
+
+def backtest():
+    pr = precios_pasado()
+    if len(pr) < 50:
+        pr = []
+        p = 4150
+        for i in range(200):
+            p += random.uniform(-12, 12)
+            pr.append(p)
+        modo = "SIMULADO"
+    else:
+        modo = "REAL"
+    bal = 1000
+    g = 0
+    pe = 0
+    for i in range(30, len(pr) - 5):
+        lista = pr[max(0, i-30):i]
+        votos = 0
+        if rsi(lista) < 45:
+            votos += 1
+        if macd(lista) > 0:
+            votos += 1
+        if boll(lista) == "BARATO":
+            votos += 1
+        if doble(lista):
+            votos += 1
+        if votos >= 3:
+            ent = pr[i]
+            sal = pr[min(len(pr)-1, i+5)]
+            gan = sal - ent
+            if gan > 0 and gan > TP_GAN:
+                gan = TP_GAN
+            if gan < 0 and gan < -SL_PER:
+                gan = -SL_PER
+            bal += gan
+            if gan >= 0:
+                g += 1
+            else:
+                pe += 1
+    tot = g + pe
+    wr = (g / tot * 100) if tot > 0 else 0
+    return {
+        "modo": modo,
+        "balance_final": round(bal, 2),
+        "ganadas": g,
+        "perdidas": pe,
+        "winrate": round(wr, 1),
+        "mensaje": "Gana 20 pierde 10"
+    }
+
+HTML = """<html><head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RAUDY VIP 1000</title>
 <style>
-body{background:#000;color:#fff;font-family:Arial;text-align:center;margin:0}
-.top{background:#FFD700;color:#000;padding:12px;font-weight:bold}
-h1{font-size:38px;color:#FFD700}
-.box{border:2px solid #FFD700;border-radius:20px;margin:15px;padding:15px}
-.luces{display:flex;justify-content:center;gap:15px}
-.luz{width:70px;height:70px;border-radius:50%;background:#333;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;border:3px solid #555}
-.on1{background:#FFD700;color:#000;box-shadow:0 0 25px #FFD700}
-.on2{background:#FF8800;color:#fff;box-shadow:0 0 25px #FF8800}
-.on3{background:#00FF00;color:#000;box-shadow:0 0 25px #00FF00}
-button{background:#222;color:#fff;border:2px solid #FFD700;padding:12px;border-radius:30px;margin:5px;font-weight:bold}
-.activo{background:#FFD700;color:#000}
-.btn-ws{display:inline-block;background:#25D366;color:#fff;padding:18px 30px;font-size:20px;font-weight:bold;border-radius:50px;text-decoration:none;margin:15px}
-</style>
-</head>
-<body>
-<div class="top">PLATAFORMA GRATIS - RAUDY VIP ORO</div>
-<h1>RAUDY VIP ORO</h1>
-<p style="color:#00FF00;font-weight:bold">ROBOT DE ULTIMA TECNOLOGIA - ALTA DEMANDA</p>
-<div class="box">
-<div style="font-size:60px">🤖</div>
-<p><b>ROBOT RAUDY ACTIVO</b><br>Operando: 5M - 15M - 1H</p>
-<button onclick="cambiar(this,'5 MINUTOS')">5 MINUTOS</button>
-<button onclick="cambiar(this,'15 MINUTOS')" class="activo">15 MINUTOS</button>
-<button onclick="cambiar(this,'1 HORA')">1 HORA</button>
-<p id="tiempo">Tiempo: <b>15 MINUTOS</b></p>
+body{margin:0;font-family:Arial;background:#0a0a0a;color:#fff;padding:12px}
+.top{background:gold;color:#000;padding:16px;border-radius:16px;text-align:center}
+.top h1{margin:0;font-size:30px}
+.card{background:#1a1a1a;border-radius:18px;padding:16px;margin-top:12px;border:2px solid #333}
+.big{font-size:55px;font-weight:bold;text-align:center;color:#00ff88}
+.cen{text-align:center;font-size:16px}
+.btn{width:100%;padding:18px;font-size:22px;font-weight:bold;border:none;border-radius:14px;margin-top:10px}
+.verde{background:#00c853;color:#fff}
+.rojo{background:#d50000;color:#fff}
+.morado{background:#7b1fa2;color:#fff}
+.azul{background:#00bcd4;color:#fff}
+.naranja{background:#ff9800;color:#000}
+.oro{background:gold;color:#000}
+input,select{width:100%;padding:14px;font-size:20px;border-radius:12px;border:none;margin-top:8px}
+</style></head><body>
+<div class="top"><h1>RAUDY VIP 1000</h1><p>CALIDAD TOTAL - EN VIVO</p><p id="estado">CONECTANDO...</p></div>
+<div class="card">
+<h2 style="text-align:center">BOT AUTO - CALIDAD TOTAL</h2>
+<p class="cen">RSI: <b id="rsi" style="color:gold">--</b> | MACD: <b id="macd" style="color:#00bcd4">--</b></p>
+<p class="cen">Bollinger: <b id="boll" style="color:#ff9800">--</b> | Doble: <b id="doble" style="color:#00ff88">--</b></p>
+<p class="cen">Balance: <b id="balance" style="color:#00ff88">$1000</b></p>
+<p class="cen" id="bot-est">BOT APAGADO</p>
+<p class="cen" id="perf">Ganadas: 0 | Perdidas: 0</p>
+<p class="cen" style="background:#000;padding:8px;border-radius:10px">RIESGO 1:2 - Gano $20 | Pierdo $10</p>
+<button class="btn morado" id="btn-bot" onclick="toggleBot()">PRENDER BOT AUTO</button>
+<button class="btn azul" onclick="hacerBack()">BACKTEST REAL</button>
+<p class="cen" id="back-res" style="background:#000;padding:10px;border-radius:10px">Sin backtest todavia</p>
 </div>
-<div class="box">
-<h2>AVISO DE SENAL</h2>
-<div class="luces">
-<div class="luz" id="luz1">LUZ 1</div>
-<div class="luz" id="luz2">LUZ 2</div>
-<div class="luz" id="luz3">LUZ 3</div>
+<div class="card">
+<h2 style="text-align:center">ORO EN VIVO</h2>
+<div class="big" id="precio">----</div>
+<p class="cen" id="cerebro">CEREBRO: ESPERA</p>
+<p class="cen" id="senal">SENAL: ESPERA</p>
+<button class="btn naranja" onclick="activarVoz()">ACTIVAR VOZ</button>
 </div>
-<p id="texto" style="font-size:24px;font-weight:bold">ESPERANDO SENAL...</p>
-<button onclick="generar()" style="background:#00FF00;color:#000;font-size:20px">GENERAR SENAL AHORA</button>
+<div class="card">
+<h2 style="text-align:center">ELIGE ACTIVO</h2>
+<select id="activo" onchange="cambiar()"><option value="ORO">ORO</option><option value="TESLA">TESLA</option><option value="APPLE">APPLE</option><option value="META">META</option><option value="EUR/USD">EUR/USD</option><option value="BTC">BTC</option></select>
+<p class="cen">TP</p><input id="tp" value="4200" type="number">
+<p class="cen">SL</p><input id="sl" value="4100" type="number">
+<button class="btn verde" onclick="operar('COMPRAR')">COMPRAR</button>
+<button class="btn rojo" onclick="operar('VENDER')">VENDER</button>
 </div>
-<div class="box">
-<h2>HISTORIAL - MEMORIA ROBOT</h2>
-<div id="historial" style="text-align:left">✅ 5M - COMPRA - GANADA<br>✅ 15M - COMPRA - GANADA<br>✅ 1H - COMPRA - GANADA<br></div>
+<div class="card">
+<h2 style="text-align:center">PRECIOS</h2>
+<p class="cen" id="lista">Cargando...</p>
 </div>
-<a class="btn-ws" href="https://wa.me/18090000000">HABLAR CON RAUDY</a>
-<p>raudy-vip-oro.onrender.com</p>
+<div class="card">
+<h2 style="text-align:center">HABLAME JEFE</h2>
+<a href="https://t.me/raudy_vip_oro_bot"><button class="btn" style="background:#0088cc;color:#fff">TELEGRAM</button></a>
+<a href="https://wa.me/41767574050"><button class="btn" style="background:#25D366;color:#fff">WHATSAPP</button></a>
+<a href="https://paypal.me/RaudyManzueta/20"><button class="btn oro">PAGAR $20 - PAYPAL</button></a>
+</div>
 <script>
-function cambiar(b,t){document.querySelectorAll('button').forEach(x=>x.classList.remove('activo'));b.classList.add('activo');document.getElementById('tiempo').innerHTML='Tiempo: <b>'+t+'</b>';}
-function generar(){
-document.getElementById('luz1').className='luz';
-document.getElementById('luz2').className='luz';
-document.getElementById('luz3').className='luz';
-document.getElementById('texto').innerHTML='LUZ 1 - ROBOT ANALIZANDO...';
-setTimeout(()=>{
-document.getElementById('luz1').classList.add('on1');
-document.getElementById('texto').innerHTML='LUZ 2 - SEGUNDA SENAL...';
-setTimeout(()=>{
-document.getElementById('luz2').classList.add('on2');
-document.getElementById('texto').innerHTML='LUZ 3 - CONFIRMACION DE COMPRA! COMPRA AHORA!';
-document.getElementById('luz3').classList.add('on3');
-let h=document.getElementById('historial');
-h.innerHTML='✅ '+document.getElementById('tiempo').innerText+' - COMPRA - GANADA '+new Date().toLocaleTimeString()+'<br>'+h.innerHTML;
-},2000);
-},1500);
-}
-</script>
-</body>
-</html>
-    """
+let precios={};let act="ORO";let voz=false;
+function hablar(t){let v=new SpeechSynthesisUtterance(t);v.lang='es-DO';speechSynthesis.speak(v);}
+function activarVoz(){voz=true;hablar('Jefe voz activada');alert('VOZ ACTIVADA');}
+function cambiar(){act=document.getElementById('activo').value;actualizar();}
+function operar(t){hablar('Jefe voy a '+t);alert('Orden '+t+' '+act);}
+async function toggleBot(){let r=await fetch('/api/bot_auto',{method:'POST'});let d=await r.json();document.getElementById('btn-bot').innerText=d.activo?'APAGAR BOT':'PRENDER BOT';document.getElementById('bot-est').innerText=d.ult;hablar(d.activo?'Bot prendido':'Bot apagado');}
+async function hacerBack(){document.getElementById('back-res').innerText='Probando con datos reales...';let r=await fetch('/api/backtest');let d=await r.json();document.getElementById('back-res').innerHTML='Modo '+d.modo+'<br>Final $'+d.balance_final+'<br>Ganadas '+d.ganadas+' Perdidas '+d.perdidas+' Win '+d.winrate+'%';hablar('Backtest listo '+d.balance_final+' dolares');}
+function actualizar(){if(precios[act]){document.getElementById('precio').innerText=precios[act];}}
+async function cargar(){try{let r=await fetch('/api/precios');precios=await r.json();document.getElementById('estado').innerText='EN VIVO '+new Date().toLocaleTimeString();let h='';for(let k in precios){h+=k+': '+precios[k]+'<br>';}document.getElementById('lista').innerHTML=h;actualizar();let s=await fetch('/api/senal');let sd=await s.json();document.getElementById('cerebro').innerText='CEREBRO: '+sd.decision;document.getElementById('senal').innerText='SENAL: '+sd.decision;document.getElementById('rsi').innerText=sd.rsi;document.getElementById('macd').innerText=sd.macd;document.getElementById('boll').innerText=sd.bollinger;document.getElementById('doble').innerText=sd.doble;let b=await fetch('/api/bot_auto');let bd=await b.json();document.getElementById('balance').innerText='$'+bd.balance;document.getElementById('bot-est').innerText=bd.ult;document.getElementById('perf').innerText='Ganadas: '+bd.ganadas+' | Perdidas: '+bd.perdidas;}catch(e){document.getElementById('estado').innerText='Sin internet...';}}
+cargar();setInterval(cargar,3000);
+</script></body></html>
+"""
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+@app.route("/")
+def home():
+    return HTML
+
+@app.route("/api/precios")
+def api_precios():
+    oro = precio("GC=F") or 4149
+    tes = precio("TSLA") or 378
+    apl = precio("AAPL") or 350
+    met = precio("META") or 641
+    eur = precio("EURUSD=X") or 1.16
+    return jsonify({
+        "ORO": oro,
+        "TESLA": tes,
+        "APPLE": apl,
+        "META": met,
+        "EUR/USD": eur,
+        "BTC": 90000
+    })
+
+@app.route("/api/senal")
+def api_senal():
+    oro = precio("GC=F") or 4149
+    dec = cerebro(oro, HIST)
+    rr = rsi(HIST)
+    mc = macd(HIST)
+    bb = boll(HIST)
+    dd = doble(HIST)
+    txt = "CONFIRMADO" if dd else "ESPERA"
+    return jsonify({
+        "precio": oro,
+        "decision": dec,
+        "rsi": round(rr, 1),
+        "macd": "SUBIENDO" if mc > 0 else "BAJANDO",
+        "bollinger": bb,
+        "doble": txt
+    })
+
+@app.route("/api/bot_auto", methods=["GET", "POST"])
+def api_bot():
+    if request.method == "POST":
+        BOT["activo"] = not BOT["activo"]
+        if BOT["activo"]:
+            BOT["ult"] = "BOT PRENDIDO - Dinero falso"
+        else:
+            BOT["ult"] = "BOT APAGADO"
+    return jsonify(BOT)
+
+@app.route("/api/backtest")
+def api_back():
+    return jsonify(backtest())
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
