@@ -157,4 +157,12 @@ function generar(robot){
 // Auto cerebro frase
 setInterval(()=>{
   let frases=['Analizando velas...','Buscando trampa...','Satélite escaneando...','Cerebro calculando...','Detectando vela verde...','Detectando vela roja...'];
- 
+  if(!auto) document.getElementById('cerebroTxt').innerHTML=frases[Math.floor(Math.random()*frases.length)];
+},3000);
+</script>
+</body>
+</html>
+    """
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=10000)
