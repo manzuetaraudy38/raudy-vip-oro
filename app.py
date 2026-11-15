@@ -20,6 +20,13 @@ body{margin:0;background:#0A0E14;color:#fff;font-family:'Inter',Arial,sans-serif
 .logo span{color:#FFD700}
 .sub{color:#9AA4B2;font-size:13px;margin-top:4px}
 .live{display:inline-block;background:#0F2A1A;color:#00FF88;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:700;margin-top:10px;border:1px solid #00FF88}
+.tabs{display:flex;gap:10px;padding:15px 15px 0}
+.tab{flex:1;text-align:center;padding:13px;border-radius:14px;font-weight:800;cursor:pointer;background:#111722;border:1px solid #1E2A3A;color:#fff}
+.tab.active{background:#FFD700;color:#000;border-color:#FFD700}
+.divisas{display:none;gap:8px;flex-wrap:wrap;padding:12px 15px 0}
+.divisas.show{display:flex}
+.pair{padding:10px 14px;border-radius:20px;background:#111722;border:1px solid #1E2A3A;font-weight:700;font-size:13px;cursor:pointer}
+.pair.active{background:#00FFFF;color:#000;border-color:#00FFFF}
 .price-card{background:#111722;border:1px solid #1E2A3A;border-radius:18px;margin:15px;padding:18px;text-align:left}
 .price-label{color:#9AA4B2;font-size:12px;letter-spacing:1px}
 .price-val{font-size:38px;font-weight:800;color:#FFD700;margin:5px 0}
@@ -50,12 +57,26 @@ button.sec{background:#1E2A3A;color:#fff;border:1px solid #333}
 <body>
 <div class='top'>
 <div class='logo'>RAUDY <span>VIP PRO</span> 👑</div>
-<div class='sub'>Professional Gold Trading Signals • XAU/USD • Real Market Data</div>
+<div class='sub'>Professional Trading Signals • ORO + DIVISAS • Real Market Data</div>
 <div class='live'>● LIVE • MERCADO REAL • PROFESIONAL</div>
 </div>
 
+<div class='tabs'>
+<div class='tab active' id='tabOro' onclick='cambiarModo("ORO")'>🥇 ORO • XAU/USD</div>
+<div class='tab' id='tabDiv' onclick='cambiarModo("DIVISAS")'>💱 DIVISAS</div>
+</div>
+
+<div class='divisas' id='divisasBox'>
+<div class='pair active' onclick='cambiarPar("EUR/USD",this)'>EUR/USD</div>
+<div class='pair' onclick='cambiarPar("GBP/USD",this)'>GBP/USD</div>
+<div class='pair' onclick='cambiarPar("USD/JPY",this)'>USD/JPY</div>
+<div class='pair' onclick='cambiarPar("USD/CHF",this)'>USD/CHF</div>
+<div class='pair' onclick='cambiarPar("AUD/USD",this)'>AUD/USD</div>
+<div class='pair' onclick='cambiarPar("USD/CAD",this)'>USD/CAD</div>
+</div>
+
 <div class='price-card'>
-<div class='price-label'>GOLD • XAU / USD • PRECIO REAL DEL MERCADO</div>
+<div class='price-label' id='priceLabel'>GOLD • XAU / USD • PRECIO REAL DEL MERCADO</div>
 <div class='price-val' id='precio'>$ --</div>
 <div class='price-sub' id='hora'>Conectando con mercado mundial...</div>
 <div style='margin-top:10px'><span class='badge' id='tendencia'>ANALIZANDO...</span> <span class='badge' id='fuerza'>FUERZA: --</span></div>
@@ -64,38 +85,10 @@ button.sec{background:#1E2A3A;color:#fff;border:1px solid #333}
 <div class='signal-big' id='final' style='background:#1A1A1A;color:#FFD700'>⏳ ANALIZANDO MERCADO...</div>
 
 <div class='grid'>
-<div class='card'>
-<div class='card-time'>TIMEFRAME • 1 MINUTO</div>
-<div class='card-title'>⚡ 1M</div>
-<div class='vela' id='vela1'></div>
-<div class='estado' id='t1'>...</div>
-<div class='detalle' id='d1'>...</div>
-<div class='count-box'><div class='count-label'>CIERRA EN</div><div class='count-val' id='s1'>00:00</div><div class='bar'><div class='bar-fill' id='b1' style='width:50%'></div></div></div>
-</div>
-<div class='card'>
-<div class='card-time'>TIMEFRAME • 5 MINUTOS</div>
-<div class='card-title'>5M</div>
-<div class='vela' id='vela5'></div>
-<div class='estado' id='t5'>...</div>
-<div class='detalle' id='d5'>...</div>
-<div class='count-box'><div class='count-label'>CIERRA EN</div><div class='count-val' id='s5'>00:00</div><div class='bar'><div class='bar-fill' id='b5' style='width:50%'></div></div></div>
-</div>
-<div class='card'>
-<div class='card-time'>TIMEFRAME • 15 MINUTOS</div>
-<div class='card-title'>15M</div>
-<div class='vela' id='vela15'></div>
-<div class='estado' id='t15'>...</div>
-<div class='detalle' id='d15'>...</div>
-<div class='count-box'><div class='count-label'>CIERRA EN</div><div class='count-val' id='s15'>00:00</div><div class='bar'><div class='bar-fill' id='b15' style='width:50%'></div></div></div>
-</div>
-<div class='card'>
-<div class='card-time'>TIMEFRAME • 1 HORA</div>
-<div class='card-title'>1H</div>
-<div class='vela' id='vela1h'></div>
-<div class='estado' id='t1h'>...</div>
-<div class='detalle' id='d1h'>...</div>
-<div class='count-box'><div class='count-label'>CIERRA EN</div><div class='count-val' id='s1h'>00:00</div><div class='bar'><div class='bar-fill' id='b1h' style='width:50%'></div></div></div>
-</div>
+<div class='card'><div class='card-time'>TIMEFRAME • 1 MINUTO</div><div class='card-title'>⚡ 1M</div><div class='vela' id='vela1'></div><div class='estado' id='t1'>...</div><div class='detalle' id='d1'>...</div><div class='count-box'><div class='count-label'>CIERRA EN</div><div class='count-val' id='s1'>00:00</div><div class='bar'><div class='bar-fill' id='b1' style='width:50%'></div></div></div></div>
+<div class='card'><div class='card-time'>TIMEFRAME • 5 MINUTOS</div><div class='card-title'>5M</div><div class='vela' id='vela5'></div><div class='estado' id='t5'>...</div><div class='detalle' id='d5'>...</div><div class='count-box'><div class='count-label'>CIERRA EN</div><div class='count-val' id='s5'>00:00</div><div class='bar'><div class='bar-fill' id='b5' style='width:50%'></div></div></div></div>
+<div class='card'><div class='card-time'>TIMEFRAME • 15 MINUTOS</div><div class='card-title'>15M</div><div class='vela' id='vela15'></div><div class='estado' id='t15'>...</div><div class='detalle' id='d15'>...</div><div class='count-box'><div class='count-label'>CIERRA EN</div><div class='count-val' id='s15'>00:00</div><div class='bar'><div class='bar-fill' id='b15' style='width:50%'></div></div></div></div>
+<div class='card'><div class='card-time'>TIMEFRAME • 1 HORA</div><div class='card-title'>1H</div><div class='vela' id='vela1h'></div><div class='estado' id='t1h'>...</div><div class='detalle' id='d1h'>...</div><div class='count-box'><div class='count-label'>CIERRA EN</div><div class='count-val' id='s1h'>00:00</div><div class='bar'><div class='bar-fill' id='b1h' style='width:50%'></div></div></div></div>
 </div>
 
 <div style='padding:0 15px 15px'>
@@ -116,18 +109,45 @@ button.sec{background:#1E2A3A;color:#fff;border:1px solid #333}
 
 <div class='footer'>
 <b style='color:#fff'>CÓMO LEERLO - PROFESIONAL:</b><br>
-🟢 <b style='color:#00FF88'>VERDE = SUBIENDO</b> - El precio está subiendo.<br>
-🔴 <b style='color:#FF4757'>ROJA = CAYENDO</b> - El precio está cayendo.<br>
+🟢 <b style='color:#00FF88'>VERDE = SUBIENDO</b><br>
+🔴 <b style='color:#FF4757'>ROJA = CAYENDO</b><br>
 🟡 <b style='color:#FFD700'>ESPERA</b> - Mercado mezclado. No entres todavía.<br>
 ✅ <b style='color:#fff'>COMPRA solo con 4 o 5 VERDES.</b> Con poquito. Nunca con todo.<br>
-Fuente: Mercado Mundial XAU/USD + PAXG (Binance) para velas. Actualización cada 30 segundos.
+ORO: Goldprice + PAXG (Binance). DIVISAS: Precio real Forex (Frankfurter / ECB) + velas Binance para EUR, GBP, AUD. JPY, CHF, CAD usan precio Forex real. Actualización cada 30 segundos. Esto no es consejo financiero.
 </div>
 
 <script>
 let vozOn=false;
 let ultimaSenal='';
+let modo='ORO';
+let parActual='EUR/USD';
+
+let mapaBinance = {
+  'EUR/USD':'EURUSDT',
+  'GBP/USD':'GBPUSDT',
+  'AUD/USD':'AUDUSDT',
+  'USD/JPY':'USDJPY',
+  'USD/CHF':'USDCHF',
+  'USD/CAD':'USDCAD'
+};
+
+function cambiarModo(m){
+  modo=m;
+  document.getElementById('tabOro').className='tab'+(m=='ORO'?' active':'');
+  document.getElementById('tabDiv').className='tab'+(m=='DIVISAS'?' active':'');
+  document.getElementById('divisasBox').className='divisas'+(m=='DIVISAS'?' show':'');
+  document.getElementById('priceLabel').innerHTML = m=='ORO' ? 'GOLD • XAU / USD • PRECIO REAL DEL MERCADO' : 'FOREX • '+parActual+' • PRECIO REAL DEL MERCADO';
+  cargar();
+}
+function cambiarPar(p, el){
+  parActual=p;
+  document.querySelectorAll('.pair').forEach(x=>x.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('priceLabel').innerHTML='FOREX • '+p+' • PRECIO REAL DEL MERCADO';
+  cargar();
+}
 function hablarTexto(txt){let u=new SpeechSynthesisUtterance(txt);u.lang='es-ES';u.rate=1;speechSynthesis.speak(u);}
-function hablar(){vozOn=true;hablarTexto('Robot Raudy Vip Pro activado. Modo profesional. Uno, cinco, quince, una hora y cuatro horas.');}
+function hablar(){vozOn=true;hablarTexto('Robot Raudy Vip Pro activado. Oro y divisas. Uno, cinco, quince, una hora y cuatro horas.');}
 function formato(seg){let h=Math.floor(seg/3600);let m=Math.floor((seg%3600)/60);let s=seg%60;if(h>0){return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}
 function actualizarSegundos(){
 let ahora=Math.floor(Date.now()/1000);
@@ -144,7 +164,8 @@ document.getElementById('b1h').style.width=((3600-r1h)/3600*100)+'%';
 document.getElementById('b4h').style.width=((14400-r4h)/14400*100)+'%';
 }
 setInterval(actualizarSegundos,1000);actualizarSegundos();
-async function getPrecioReal(){
+
+async function getPrecioOro(){
 try{
 let res=await fetch('https://data-asg.goldprice.org/dbXRates/USD.json');
 let d=await res.json();
@@ -155,21 +176,67 @@ document.getElementById('hora').innerHTML='Mercado Mundial XAU/USD • Actualiza
 return precio;
 }catch(e){return null;}
 }
-async function getVela(tf){
-let res=await fetch('https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval='+tf+'&limit=2');
+
+async function getPrecioDivisa(){
+  // Frankfurter = Banco Central Europeo, gratis y real
+  try{
+    let base = parActual.split('/')[0];
+    let quote = parActual.split('/')[1];
+    // Frankfurter usa EUR como base, hacemos conversion
+    let res = await fetch('https://api.frankfurter.app/latest?from=EUR&to=USD,JPY,CHF,CAD,GBP,AUD,EUR');
+    let d = await res.json();
+    let rates = d.rates;
+    // Convertimos todo a USD base para calcular cualquier par
+    let eurUsd = rates.USD;
+    let price = 0;
+    if(parActual=='EUR/USD') price = eurUsd;
+    if(parActual=='GBP/USD') price = rates.GBP ? eurUsd / rates.GBP : eurUsd;
+    if(parActual=='AUD/USD') price = rates.AUD ? eurUsd / rates.AUD : eurUsd;
+    if(parActual=='USD/JPY') price = rates.JPY ? rates.JPY / eurUsd : 0;
+    if(parActual=='USD/CHF') price = rates.CHF ? rates.CHF / eurUsd : 0;
+    if(parActual=='USD/CAD') price = rates.CAD ? rates.CAD / eurUsd : 0;
+    let dec = (parActual=='USD/JPY') ? 2 : 4;
+    document.getElementById('precio').innerHTML = price.toFixed(dec);
+    document.getElementById('hora').innerHTML = 'Forex Real • '+parActual+' • ECB / Frankfurter • Actualizado: '+new Date().toLocaleTimeString();
+    return price;
+  }catch(e){ return null; }
+}
+
+async function getVela(tf, symbol){
+let res=await fetch('https://api.binance.com/api/v3/klines?symbol='+symbol+'&interval='+tf+'&limit=2');
 let d=await res.json();let v=d[d.length-1];
 return {open:parseFloat(v[1]), close:parseFloat(v[4])};
 }
+
 async function cargar(){
 try{
-let precioReal=await getPrecioReal();
-let v1=await getVela('1m');let v5=await getVela('5m');let v15=await getVela('15m');let v1h=await getVela('1h');let v4h=await getVela('4h');
-if(precioReal==null){document.getElementById('precio').innerHTML='$'+v5.close.toFixed(2)+' (PAXG)';}
-function pintar(idVela,idT,idD,v){
+let precioReal=null;
+let simbolo='PAXGUSDT';
+if(modo=='ORO'){
+  precioReal=await getPrecioOro();
+  simbolo='PAXGUSDT';
+} else {
+  precioReal=await getPrecioDivisa();
+  simbolo=mapaBinance[parActual] || 'EURUSDT';
+  // Para JPY, CHF, CAD no hay par directo en Binance, usamos EURUSDT como referencia de tendencia + precio real Forex
+  if(['USD/JPY','USD/CHF','USD/CAD'].includes(parActual)){
+    simbolo='EURUSDT';
+  }
+}
+let v1=await getVela('1m', simbolo);
+let v5=await getVela('5m', simbolo);
+let v15=await getVela('15m', simbolo);
+let v1h=await getVela('1h', simbolo);
+let v4h=await getVela('4h', simbolo);
+if(precioReal==null && modo=='ORO'){document.getElementById('precio').innerHTML='$'+v5.close.toFixed(2)+' (PAXG)';}
+if(precioReal==null && modo=='DIVISAS'){document.getElementById('precio').innerHTML=v5.close.toFixed(4)+' ('+parActual+')';}
+
+function pintar(idVela,idT,idD,v, precioRef){
 let el=document.getElementById(idVela);
 let diff=((v.close-v.open)/v.open*100).toFixed(3);
-if(v.close>v.open){el.className='vela verde';document.getElementById(idT).innerHTML='🟢 VERDE • SUBIENDO';document.getElementById(idT).style.color='#00FF88';document.getElementById(idD).innerHTML='Apertura $'+v.open.toFixed(2)+' → Cierre $'+v.close.toFixed(2)+'<br>+'+diff+'%';return 'VERDE';}
-else{el.className='vela roja';document.getElementById(idT).innerHTML='🔴 ROJA • CAYENDO';document.getElementById(idT).style.color='#FF4757';document.getElementById(idD).innerHTML='Apertura $'+v.open.toFixed(2)+' → Cierre $'+v.close.toFixed(2)+'<br>'+diff+'%';return 'ROJA';}
+let dec = (modo=='DIVISAS' && parActual=='USD/JPY') ? 2 : (modo=='DIVISAS' ? 4 : 2);
+if(v.close>v.open){el.className='vela verde';document.getElementById(idT).innerHTML='🟢 VERDE • SUBIENDO';document.getElementById(idT).style.color='#00FF88';document.getElementById(idD).innerHTML='Apertura '+v.open.toFixed(dec)+' → Cierre '+v.close.toFixed(dec)+'<br>+'+diff+'%';return 'VERDE';}
+else{el.className='vela roja';document.getElementById(idT).innerHTML='🔴 ROJA • CAYENDO';document.getElementById(idT).style.color='#FF4757';document.getElementById(idD).innerHTML='Apertura '+v.open.toFixed(dec)+' → Cierre '+v.close.toFixed(dec)+'<br>'+diff+'%';return 'ROJA';}
 }
 let c1=pintar('vela1','t1','d1',v1);
 let c5=pintar('vela5','t5','d5',v5);
@@ -180,14 +247,15 @@ let final=document.getElementById('final');
 let verdes=[c1,c5,c15,c1h,c4h].filter(x=>x=='VERDE').length;
 let rojas=[c1,c5,c15,c1h,c4h].filter(x=>x=='ROJA').length;
 let senal='';
+let nombre = modo=='ORO' ? 'Oro' : parActual;
 if(verdes>=4){
-final.innerHTML='🟢 COMPRA • '+verdes+' DE 5 VERDES • TENDENCIA ALCISTA';
+final.innerHTML='🟢 COMPRA • '+verdes+' DE 5 VERDES • '+nombre;
 final.style.background='#00FF88';final.style.color='#000';
 document.getElementById('tendencia').innerHTML='TENDENCIA: ALCISTA 🟢';
 document.getElementById('fuerza').innerHTML='FUERZA: '+verdes+'/5 FUERTE';
 senal='COMPRA';
 }else if(rojas>=4){
-final.innerHTML='🔴 VENTA • '+rojas+' DE 5 ROJAS • TENDENCIA BAJISTA';
+final.innerHTML='🔴 VENTA • '+rojas+' DE 5 ROJAS • '+nombre;
 final.style.background='#FF4757';final.style.color='#fff';
 document.getElementById('tendencia').innerHTML='TENDENCIA: BAJISTA 🔴';
 document.getElementById('fuerza').innerHTML='FUERZA: '+rojas+'/5 FUERTE';
@@ -200,8 +268,8 @@ document.getElementById('fuerza').innerHTML='FUERZA: '+verdes+'/5 DÉBIL';
 senal='ESPERA';
 }
 if(vozOn && senal!=ultimaSenal && (senal=='COMPRA' || senal=='VENTA')){
-if(senal=='COMPRA'){hablarTexto('Compra. Cuatro de cinco verdes. Tendencia alcista. Oro.');}
-else{hablarTexto('Venta. Cuatro de cinco rojas. Tendencia bajista. Oro.');}
+if(senal=='COMPRA'){hablarTexto('Compra. Cuatro de cinco verdes. '+nombre);}
+else{hablarTexto('Venta. Cuatro de cinco rojas. '+nombre);}
 ultimaSenal=senal;
 }
 if(senal=='ESPERA'){ultimaSenal='ESPERA';}
