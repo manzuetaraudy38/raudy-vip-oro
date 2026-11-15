@@ -10,105 +10,140 @@ def home():
 <head>
 <meta charset='UTF-8'>
 <meta name='viewport' content='width=device-width, initial-scale=1'>
-<title>RAUDY VIP CON SEGUNDOS</title>
+<title>RAUDY VIP PRO - PROFESSIONAL</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
-body{background:#000;color:#fff;font-family:Arial;text-align:center}
-h1{color:#FFD700}
-.box{border:3px solid #FFD700;border-radius:20px;padding:15px;margin:10px;display:inline-block;width:280px}
-.vela{width:50px;height:110px;margin:10px auto;border-radius:10px;background:#333;border:2px solid #fff}
-.verde{background:#00FF00;box-shadow:0 0 30px #00FF00}
-.roja{background:#FF0000;box-shadow:0 0 30px #FF0000}
-button{background:#FFD700;border:none;padding:15px 25px;font-size:18px;border-radius:10px;font-weight:bold}
-.precio{font-size:32px;color:#FFD700;font-weight:bold}
-#final{font-size:30px;font-weight:bold;padding:20px;border-radius:20px;margin:15px}
-.real{color:#00FFFF;font-size:14px}
-.seg{font-size:22px;color:#00FFFF;font-weight:bold;background:#111;padding:8px;border-radius:10px;margin:5px}
+*{box-sizing:border-box}
+body{margin:0;background:#0A0E14;color:#fff;font-family:'Inter',Arial,sans-serif;padding:0}
+.top{background:linear-gradient(90deg,#0A0E14,#1A2A1A);padding:20px 15px 10px;border-bottom:2px solid #FFD700}
+.logo{font-size:28px;font-weight:800;letter-spacing:1px}
+.logo span{color:#FFD700}
+.sub{color:#9AA4B2;font-size:13px;margin-top:4px}
+.live{display:inline-block;background:#0F2A1A;color:#00FF88;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:700;margin-top:10px;border:1px solid #00FF88}
+.price-card{background:#111722;border:1px solid #1E2A3A;border-radius:18px;margin:15px;padding:18px;text-align:left}
+.price-label{color:#9AA4B2;font-size:12px;letter-spacing:1px}
+.price-val{font-size:38px;font-weight:800;color:#FFD700;margin:5px 0}
+.price-sub{color:#00FFFF;font-size:12px}
+.signal-big{margin:15px;border-radius:18px;padding:22px;text-align:center;font-size:26px;font-weight:800;letter-spacing:0.5px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 15px 15px}
+.card{background:#111722;border:1px solid #1E2A3A;border-radius:18px;padding:16px;text-align:center;position:relative;overflow:hidden}
+.card.prof{border:1px solid #00FFFF}
+.card-time{font-size:11px;color:#9AA4B2;letter-spacing:1px;font-weight:700}
+.card-title{font-size:18px;font-weight:800;margin:8px 0}
+.vela{width:44px;height:95px;margin:12px auto;border-radius:12px;background:#222;border:2px solid #333;transition:0.3s}
+.verde{background:linear-gradient(180deg,#00FF88,#00AA55);box-shadow:0 0 25px #00FF88;border-color:#00FF88}
+.roja{background:linear-gradient(180deg,#FF4757,#AA0000);box-shadow:0 0 25px #FF4757;border-color:#FF4757}
+.estado{font-weight:800;font-size:15px}
+.detalle{font-size:12px;color:#9AA4B2;margin:6px 0}
+.count-box{background:#0A0E14;border:1px solid #1E2A3A;border-radius:12px;padding:8px;margin-top:8px}
+.count-label{font-size:10px;color:#9AA4B2;letter-spacing:1px}
+.count-val{font-size:24px;font-weight:800;color:#00FFFF;font-variant-numeric:tabular-nums}
+.bar{height:6px;background:#222;border-radius:10px;margin-top:10px;overflow:hidden}
+.bar-fill{height:100%;background:#FFD700;transition:width 1s}
+.btn-row{display:flex;gap:10px;padding:0 15px 20px}
+button{flex:1;background:#FFD700;color:#000;border:none;padding:15px;border-radius:14px;font-weight:800;font-size:15px}
+button.sec{background:#1E2A3A;color:#fff;border:1px solid #333}
+.footer{padding:0 15px 25px;color:#6B7280;font-size:11px;line-height:1.5}
+.badge{font-size:10px;padding:4px 8px;border-radius:20px;background:#1E2A3A;color:#FFD700;font-weight:700}
 </style>
 </head>
 <body>
-<h1>👑 RAUDY VIP ROBOT PRO</h1>
-<h3 style='color:#00FF00'>● EN VIVO - PRECIO REAL DEL MERCADO - XAU/USD</h3>
-<p>Precio Real Oro: <span class='precio' id='precio'>Cargando...</span></p>
-<p class='real' id='hora'>Precio real del mercado mundial</p>
-<div id='final'>Esperando...</div>
-<div class='box'>
-<h2>1 MINUTO ⚡</h2>
+<div class='top'>
+<div class='logo'>RAUDY <span>VIP PRO</span> 👑</div>
+<div class='sub'>Professional Gold Trading Signals • XAU/USD • Real Market Data</div>
+<div class='live'>● LIVE • MERCADO REAL • PROFESIONAL</div>
+</div>
+
+<div class='price-card'>
+<div class='price-label'>GOLD • XAU / USD • PRECIO REAL DEL MERCADO</div>
+<div class='price-val' id='precio'>$ --</div>
+<div class='price-sub' id='hora'>Conectando con mercado mundial...</div>
+<div style='margin-top:10px'><span class='badge' id='tendencia'>ANALIZANDO...</span> <span class='badge' id='fuerza'>FUERZA: --</span></div>
+</div>
+
+<div class='signal-big' id='final' style='background:#1A1A1A;color:#FFD700'>⏳ ANALIZANDO MERCADO...</div>
+
+<div class='grid'>
+<div class='card'>
+<div class='card-time'>TIMEFRAME • 1 MINUTO</div>
+<div class='card-title'>⚡ 1M</div>
 <div class='vela' id='vela1'></div>
-<h2 id='t1'>...</h2>
-<p id='d1'>...</p>
-<div class='seg' id='s1'>00:00</div>
-<p>Cierra en</p>
+<div class='estado' id='t1'>...</div>
+<div class='detalle' id='d1'>...</div>
+<div class='count-box'><div class='count-label'>CIERRA EN</div><div class='count-val' id='s1'>00:00</div><div class='bar'><div class='bar-fill' id='b1' style='width:50%'></div></div></div>
 </div>
-<div class='box'>
-<h2>5 MINUTO</h2>
+<div class='card'>
+<div class='card-time'>TIMEFRAME • 5 MINUTOS</div>
+<div class='card-title'>5M</div>
 <div class='vela' id='vela5'></div>
-<h2 id='t5'>...</h2>
-<p id='d5'>...</p>
-<div class='seg' id='s5'>00:00</div>
-<p>Cierra en</p>
+<div class='estado' id='t5'>...</div>
+<div class='detalle' id='d5'>...</div>
+<div class='count-box'><div class='count-label'>CIERRA EN</div><div class='count-val' id='s5'>00:00</div><div class='bar'><div class='bar-fill' id='b5' style='width:50%'></div></div></div>
 </div>
-<div class='box'>
-<h2>15 MINUTO</h2>
+<div class='card'>
+<div class='card-time'>TIMEFRAME • 15 MINUTOS</div>
+<div class='card-title'>15M</div>
 <div class='vela' id='vela15'></div>
-<h2 id='t15'>...</h2>
-<p id='d15'>...</p>
-<div class='seg' id='s15'>00:00</div>
-<p>Cierra en</p>
+<div class='estado' id='t15'>...</div>
+<div class='detalle' id='d15'>...</div>
+<div class='count-box'><div class='count-label'>CIERRA EN</div><div class='count-val' id='s15'>00:00</div><div class='bar'><div class='bar-fill' id='b15' style='width:50%'></div></div></div>
 </div>
-<div class='box'>
-<h2>1 HORA</h2>
+<div class='card'>
+<div class='card-time'>TIMEFRAME • 1 HORA</div>
+<div class='card-title'>1H</div>
 <div class='vela' id='vela1h'></div>
-<h2 id='t1h'>...</h2>
-<p id='d1h'>...</p>
-<div class='seg' id='s1h'>00:00</div>
-<p>Cierra en</p>
+<div class='estado' id='t1h'>...</div>
+<div class='detalle' id='d1h'>...</div>
+<div class='count-box'><div class='count-label'>CIERRA EN</div><div class='count-val' id='s1h'>00:00</div><div class='bar'><div class='bar-fill' id='b1h' style='width:50%'></div></div></div>
 </div>
-<div class='box' style='border-color:#00FFFF'>
-<h2>4 HORAS ⭐</h2>
+</div>
+
+<div style='padding:0 15px 15px'>
+<div class='card prof'>
+<div class='card-time'>TIMEFRAME • 4 HORAS • CONFIRMACIÓN MAESTRA ⭐</div>
+<div class='card-title'>4H - TENDENCIA PRINCIPAL</div>
 <div class='vela' id='vela4h'></div>
-<h2 id='t4h'>...</h2>
-<p id='d4h'>...</p>
-<div class='seg' id='s4h'>00:00</div>
-<p>Cierra en</p>
+<div class='estado' id='t4h'>...</div>
+<div class='detalle' id='d4h'>...</div>
+<div class='count-box'><div class='count-label'>CIERRA EN</div><div class='count-val' id='s4h'>00:00</div><div class='bar'><div class='bar-fill' id='b4h' style='width:50%'></div></div></div>
 </div>
-<br>
+</div>
+
+<div class='btn-row'>
 <button onclick='hablar()'>🔊 ACTIVAR VOZ</button>
-<button onclick='cargar()'>🔄 VER SEÑAL</button>
-<p>Raudy VIP - Precio Real XAU/USD - 1m 5m 15m 1h 4h - CON SEGUNDOS</p>
+<button class='sec' onclick='cargar()'>🔄 ACTUALIZAR</button>
+</div>
+
+<div class='footer'>
+<b style='color:#fff'>CÓMO LEERLO - PROFESIONAL:</b><br>
+🟢 <b style='color:#00FF88'>VERDE = SUBIENDO</b> - El precio está subiendo.<br>
+🔴 <b style='color:#FF4757'>ROJA = CAYENDO</b> - El precio está cayendo.<br>
+🟡 <b style='color:#FFD700'>ESPERA</b> - Mercado mezclado. No entres todavía.<br>
+✅ <b style='color:#fff'>COMPRA solo con 4 o 5 VERDES.</b> Con poquito. Nunca con todo.<br>
+Fuente: Mercado Mundial XAU/USD + PAXG (Binance) para velas. Actualización cada 30 segundos.
+</div>
+
 <script>
 let vozOn=false;
 let ultimaSenal='';
-function hablarTexto(txt){
-let u=new SpeechSynthesisUtterance(txt);
-u.lang='es-ES';u.rate=1;
-speechSynthesis.speak(u);
-}
-function hablar(){
-vozOn=true;
-hablarTexto('Robot Raudy activado. Con segundos en cada vela');
-}
-function formato(seg){
-let h=Math.floor(seg/3600);
-let m=Math.floor((seg%3600)/60);
-let s=seg%60;
-if(h>0){return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}
-return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
-}
+function hablarTexto(txt){let u=new SpeechSynthesisUtterance(txt);u.lang='es-ES';u.rate=1;speechSynthesis.speak(u);}
+function hablar(){vozOn=true;hablarTexto('Robot Raudy Vip Pro activado. Modo profesional. Uno, cinco, quince, una hora y cuatro horas.');}
+function formato(seg){let h=Math.floor(seg/3600);let m=Math.floor((seg%3600)/60);let s=seg%60;if(h>0){return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}
 function actualizarSegundos(){
 let ahora=Math.floor(Date.now()/1000);
-let r1=60 - (ahora % 60);
-let r5=300 - (ahora % 300);
-let r15=900 - (ahora % 900);
-let r1h=3600 - (ahora % 3600);
-let r4h=14400 - (ahora % 14400);
+let r1=60-(ahora%60);let r5=300-(ahora%300);let r15=900-(ahora%900);let r1h=3600-(ahora%3600);let r4h=14400-(ahora%14400);
 document.getElementById('s1').innerHTML=formato(r1);
 document.getElementById('s5').innerHTML=formato(r5);
 document.getElementById('s15').innerHTML=formato(r15);
 document.getElementById('s1h').innerHTML=formato(r1h);
 document.getElementById('s4h').innerHTML=formato(r4h);
+document.getElementById('b1').style.width=((60-r1)/60*100)+'%';
+document.getElementById('b5').style.width=((300-r5)/300*100)+'%';
+document.getElementById('b15').style.width=((900-r15)/900*100)+'%';
+document.getElementById('b1h').style.width=((3600-r1h)/3600*100)+'%';
+document.getElementById('b4h').style.width=((14400-r4h)/14400*100)+'%';
 }
-setInterval(actualizarSegundos,1000);
-actualizarSegundos();
+setInterval(actualizarSegundos,1000);actualizarSegundos();
 async function getPrecioReal(){
 try{
 let res=await fetch('https://data-asg.goldprice.org/dbXRates/USD.json');
@@ -116,29 +151,25 @@ let d=await res.json();
 let precio=parseFloat(d.items[0].pcurr);
 document.getElementById('precio').innerHTML='$'+precio.toFixed(2);
 let fecha=new Date(d.date);
-document.getElementById('hora').innerHTML='Mercado Mundial XAU/USD - Actualizado: '+fecha.toLocaleTimeString();
+document.getElementById('hora').innerHTML='Mercado Mundial XAU/USD • Actualizado: '+fecha.toLocaleTimeString();
 return precio;
 }catch(e){return null;}
 }
 async function getVela(tf){
 let res=await fetch('https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval='+tf+'&limit=2');
-let d=await res.json();
-let v=d[d.length-1];
+let d=await res.json();let v=d[d.length-1];
 return {open:parseFloat(v[1]), close:parseFloat(v[4])};
 }
 async function cargar(){
 try{
 let precioReal=await getPrecioReal();
-let v1=await getVela('1m');
-let v5=await getVela('5m');
-let v15=await getVela('15m');
-let v1h=await getVela('1h');
-let v4h=await getVela('4h');
+let v1=await getVela('1m');let v5=await getVela('5m');let v15=await getVela('15m');let v1h=await getVela('1h');let v4h=await getVela('4h');
 if(precioReal==null){document.getElementById('precio').innerHTML='$'+v5.close.toFixed(2)+' (PAXG)';}
 function pintar(idVela,idT,idD,v){
 let el=document.getElementById(idVela);
-if(v.close>v.open){el.className='vela verde';document.getElementById(idT).innerHTML='🟢 VERDE - SUBIENDO';document.getElementById(idT).style.color='#00FF00';document.getElementById(idD).innerHTML='Apertura $'+v.open.toFixed(2)+' Cierre $'+v.close.toFixed(2);return 'VERDE';}
-else{el.className='vela roja';document.getElementById(idT).innerHTML='🔴 ROJA - CAYENDO';document.getElementById(idT).style.color='#FF0000';document.getElementById(idD).innerHTML='Apertura $'+v.open.toFixed(2)+' Cierre $'+v.close.toFixed(2);return 'ROJA';}
+let diff=((v.close-v.open)/v.open*100).toFixed(3);
+if(v.close>v.open){el.className='vela verde';document.getElementById(idT).innerHTML='🟢 VERDE • SUBIENDO';document.getElementById(idT).style.color='#00FF88';document.getElementById(idD).innerHTML='Apertura $'+v.open.toFixed(2)+' → Cierre $'+v.close.toFixed(2)+'<br>+'+diff+'%';return 'VERDE';}
+else{el.className='vela roja';document.getElementById(idT).innerHTML='🔴 ROJA • CAYENDO';document.getElementById(idT).style.color='#FF4757';document.getElementById(idD).innerHTML='Apertura $'+v.open.toFixed(2)+' → Cierre $'+v.close.toFixed(2)+'<br>'+diff+'%';return 'ROJA';}
 }
 let c1=pintar('vela1','t1','d1',v1);
 let c5=pintar('vela5','t5','d5',v5);
@@ -150,28 +181,33 @@ let verdes=[c1,c5,c15,c1h,c4h].filter(x=>x=='VERDE').length;
 let rojas=[c1,c5,c15,c1h,c4h].filter(x=>x=='ROJA').length;
 let senal='';
 if(verdes>=4){
-final.innerHTML='🟢🟢🟢 COMPRA - '+verdes+' DE 5 VERDES - SUBIENDO';
-final.style.background='#00FF00';final.style.color='#000';
+final.innerHTML='🟢 COMPRA • '+verdes+' DE 5 VERDES • TENDENCIA ALCISTA';
+final.style.background='#00FF88';final.style.color='#000';
+document.getElementById('tendencia').innerHTML='TENDENCIA: ALCISTA 🟢';
+document.getElementById('fuerza').innerHTML='FUERZA: '+verdes+'/5 FUERTE';
 senal='COMPRA';
 }else if(rojas>=4){
-final.innerHTML='🔴🔴🔴 VENTA - '+rojas+' DE 5 ROJAS - CAYENDO';
-final.style.background='#FF0000';final.style.color='#fff';
+final.innerHTML='🔴 VENTA • '+rojas+' DE 5 ROJAS • TENDENCIA BAJISTA';
+final.style.background='#FF4757';final.style.color='#fff';
+document.getElementById('tendencia').innerHTML='TENDENCIA: BAJISTA 🔴';
+document.getElementById('fuerza').innerHTML='FUERZA: '+rojas+'/5 FUERTE';
 senal='VENTA';
 }else{
-final.innerHTML='🟡 ESPERA - '+verdes+' VERDES de 5 - NO COMPRES TODAVIA';
-final.style.background='#333';final.style.color='#FFD700';
+final.innerHTML='🟡 ESPERA • '+verdes+' VERDES DE 5 • NO ENTRES TODAVÍA';
+final.style.background='#1A1A1A';final.style.color='#FFD700';final.style.border='1px solid #FFD700';
+document.getElementById('tendencia').innerHTML='TENDENCIA: NEUTRAL 🟡';
+document.getElementById('fuerza').innerHTML='FUERZA: '+verdes+'/5 DÉBIL';
 senal='ESPERA';
 }
 if(vozOn && senal!=ultimaSenal && (senal=='COMPRA' || senal=='VENTA')){
-if(senal=='COMPRA'){hablarTexto('Compra. Cuatro de cinco verdes. Subiendo. Oro');}
-else{hablarTexto('Venta. Cuatro de cinco rojas. Cayendo. Oro');}
+if(senal=='COMPRA'){hablarTexto('Compra. Cuatro de cinco verdes. Tendencia alcista. Oro.');}
+else{hablarTexto('Venta. Cuatro de cinco rojas. Tendencia bajista. Oro.');}
 ultimaSenal=senal;
 }
 if(senal=='ESPERA'){ultimaSenal='ESPERA';}
 }catch(e){document.getElementById('precio').innerHTML='Sin internet';}
 }
-cargar();
-setInterval(cargar,30000);
+cargar();setInterval(cargar,30000);
 </script>
 </body>
 </html>
