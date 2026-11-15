@@ -1,157 +1,41 @@
-from flask import Flask
-import os, requests, time
-app = Flask(__name__)
+//+------------------------------------------------------------------+
+//|                                     RAUDY ORO BOT V3 - DE VERDAD |
+//+------------------------------------------------------------------+
+#property copyright "RAUDY"
+#property version   "3.00"
+#include <Trade\Trade.mqh>
+CTrade trade;
 
-# =====================================================
-# ROBOT RAUDY VIP PRO - TRANSFORMADO A BOLSA REAL
-# ORO + DIVISAS + BOLSA DE NEW YORK
-# =====================================================
+input double Lote = 0.01;
+input double NivelCompra = 3910;
+input double NivelVenta = 3970;
+input double MetaDiaria = 5.0;   // Si gana $5 hoy, se para
+input double MaxPerdidaDiaria = 2.0; // Si pierde $2 hoy, se para
 
-def get_oro():
-    try:
-        r = requests.get("https://data-asg.goldprice.org/dbXRates/USD.json", timeout=10).json()
-        return float(r['items'][0]['pcurr'])
-    except: return None
+double ganadoHoy = 0;
+datetime diaActual = 0;
 
-def get_binance(symbol, intervalo):
-    try:
-        url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={intervalo}&limit=2"
-        d = requests.get(url, timeout=10).json()
-        v = d[-1]
-        return {"open": float(v[1]), "close": float(v[4])}
-    except: return None
+void OnTick()
+{
+   MqlDateTime dt;
+   TimeToStruct(TimeCurrent(), dt);
+   datetime hoy = StringToTime((string)dt.year+"."+(string)dt.mon+"."+(string)dt.day);
+   if(hoy != diaActual){ diaActual = hoy; ganadoHoy = 0; }
 
-def get_forex(par):
-    try:
-        d = requests.get("https://api.frankfurter.app/latest?from=EUR&to=USD,JPY,CHF,CAD,GBP,AUD", timeout=10).json()
-        rates = d['rates']
-        eur_usd = rates['USD']
-        if par == "EUR/USD": return eur_usd
-        if par == "GBP/USD": return eur_usd / rates['GBP']
-        if par == "AUD/USD": return eur_usd / rates['AUD']
-        if par == "USD/JPY": return rates['JPY'] / eur_usd
-        if par == "USD/CHF": return rates['CHF'] / eur_usd
-        if par == "USD/CAD": return rates['CAD'] / eur_usd
-    except: return None
+   // Si ya gano su meta o ya perdio su maximo, NO opera mas hoy
+   if(ganadoHoy >= MetaDiaria) return;
+   if(ganadoHoy <= -MaxPerdidaDiaria) return;
+   if(PositionsTotal() > 0) return;
 
-# --- NUEVO: COGE INFO DE LA BOLSA REAL (Yahoo Finance) ---
-def get_bolsa(symbol_yahoo):
-    try:
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol_yahoo}?range=1d&interval=5m"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        d = requests.get(url, headers=headers, timeout=10).json()
-        result = d['chart']['result'][0]
-        meta = result['meta']
-        precio = meta['regularMarketPrice']
-        anterior = meta['previousClose']
-        cambio = precio - anterior
-        porc = (cambio / anterior * 100) if anterior else 0
+   double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
 
-        # Velas de la bolsa para señal - ultimos 5 cierres de 5m
-        quotes = result['indicators']['quote'][0]
-        closes = [c for c in quotes['close'] if c is not None]
-        velas = []
-        # Convertimos los ultimos 5 precios en 5 velas simuladas 1M,5M,15M,1H,4H
-        if len(closes) >= 6:
-            for i in range(5):
-                o = closes[-6+i]
-                c = closes[-5+i]
-                velas.append({"open": o, "close": c})
-        else:
-            # Si no hay suficientes datos, usamos precio vs anterior
-            for _ in range(5):
-                velas.append({"open": anterior, "close": precio})
-        return {"precio": precio, "cambio": cambio, "porc": porc, "velas": velas, "max": meta.get('regularMarketDayHigh'), "min": meta.get('regularMarketDayLow')}
-    except Exception as e:
-        return None
+   double distTP = MetaDiaria / (Lote * 100.0);
+   double distSL = MaxPerdidaDiaria / (Lote * 100.0);
 
-def analizar_velas(velas):
-    verdes = sum(1 for v in velas if v and v['close'] > v['open'])
-    rojas = 5 - verdes
-    if verdes >= 4: return f"🟢 COMPRA - {verdes}/5 VERDES"
-    if rojas >= 4: return f"🔴 VENTA - {rojas}/5 ROJAS"
-    return f"🟡 ESPERA - {verdes}/5 VERDES"
+   if(bid <= NivelCompra)
+      trade.Buy(Lote, _Symbol, ask, bid - distSL, bid + distTP, "RAUDY V3 COMPRA");
 
-# MAPA TRANSFORMADO - TODO CON SU FUENTE REAL
-# nombre: (simbolo_binance, tipo, simbolo_bolsa_yahoo)
-ACTIVOS = {
-    "ORO XAU/USD": ("PAXGUSDT", "ORO", None),
-    "EUR/USD": ("EURUSDT", "FOREX", None),
-    "GBP/USD": ("GBPUSDT", "FOREX", None),
-    "USD/JPY": ("EURUSDT", "FOREX", None),
-    "USD/CHF": ("EURUSDT", "FOREX", None),
-    "AUD/USD": ("AUDUSDT", "FOREX", None),
-    "USD/CAD": ("EURUSDT", "FOREX", None),
-    # --- BOLSA REAL ---
-    "META": (None, "BOLSA", "META"),
-    "APPLE": (None, "BOLSA", "AAPL"),
-    "TESLA": (None, "BOLSA", "TSLA"),
-    "NVIDIA": (None, "BOLSA", "NVDA"),
-    "S&P 500": (None, "BOLSA", "^GSPC"),
-    "NASDAQ": (None, "BOLSA", "^IXIC"),
-    "DOW JONES": (None, "BOLSA", "^DJI"),
-    "CAFE": (None, "BOLSA", "KC=F"),
-    "CACAO": (None, "BOLSA", "CC=F"),
-    "ORO BOLSA": (None, "BOLSA", "GC=F"),
+   if(bid >= NivelVenta)
+      trade.Sell(Lote, _Symbol, bid, bid + distSL, bid - distTP, "RAUDY V3 VENTA");
 }
-
-@app.route("/")
-def home():
-    html = "<h1>🤖 ROBOT RAUDY VIP PRO - INFO BOLSA REAL</h1><p>Actualizado: "+time.strftime("%H:%M:%S")+" • LIVE • BOLSA DE NEW YORK + FOREX + ORO</p>"
-    html += "<style>body{background:#0A0E14;color:#fff;font-family:Arial;padding:15px} .c{background:#111722;border:1px solid #333;border-radius:15px;padding:15px;margin:10px 0} .up{color:#00FF88} .down{color:#FF4757} .badge{padding:6px 12px;border-radius:20px;font-weight:800;display:inline-block}</style>"
-
-    for nombre, (simbolo, tipo, yahoo) in ACTIVOS.items():
-        precio_txt = ""
-        extra = ""
-        velas = []
-
-        if tipo == "ORO":
-            p = get_oro()
-            precio_txt = f"${p:.2f}" if p else "Sin datos"
-            for tf in ["1m","5m","15m","1h","4h"]:
-                velas.append(get_binance(simbolo, tf))
-
-        elif tipo == "FOREX":
-            p = get_forex(nombre)
-            precio_txt = f"{p:.4f}" if p else "Sin datos"
-            for tf in ["1m","5m","15m","1h","4h"]:
-                velas.append(get_binance(simbolo, tf))
-
-        elif tipo == "BOLSA":
-            data = get_bolsa(yahoo)
-            if not data:
-                html += f"<div class='c'><h2>{nombre} • {yahoo}</h2><p>Sin conexión con la Bolsa, reintentando...</p></div>"
-                continue
-            velas = data['velas']
-            color = "up" if data['porc'] >= 0 else "down"
-            flecha = "▲" if data['porc'] >= 0 else "▼"
-            precio_txt = f"<span class='{color}'>${data['precio']:,.2f} {flecha} {data['cambio']:+.2f} ({data['porc']:+.2f}%)</span>"
-            extra = f"<p style='color:#9AA4B2;font-size:12px'>Bolsa: {yahoo} • Max: ${data['max']:,.2f} • Min: ${data['min']:,.2f}</p>"
-
-        senal = analizar_velas(velas)
-        detalle = ""
-        for tf, v in zip(["1M","5M","15M","1H","4H"], velas):
-            if v:
-                emoji = "🟢" if v['close'] > v['open'] else "🔴"
-                detalle += f"{emoji} {tf} "
-
-        # Color de la señal
-        if "COMPRA" in senal:
-            bg = "background:#00FF88;color:#000"
-        elif "VENTA" in senal:
-            bg = "background:#FF4757;color:#fff"
-        else:
-            bg = "background:#1A1A1A;color:#FFD700;border:1px solid #FFD700"
-
-        html += f"<div class='c'><h2>{nombre}</h2><h3>{precio_txt}</h3>{extra}<p>{detalle}</p><span class='badge' style='{bg}'>{senal}</span></div>"
-
-    html += "<p style='color:#888;font-size:12px'>Robot de información pública. ORO: Goldprice. DIVISAS: Banco Central Europeo. BOLSA: Yahoo Finance / NYSE. No es consejo financiero. Opera con poquito.</p>"
-    html += "<script>setTimeout(()=>location.reload(),30000)</script>"
-    return html
-
-@app.route("/health")
-def health():
-    return "OK"
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
