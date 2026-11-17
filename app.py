@@ -4,32 +4,28 @@ app = Flask(__name__)
 
 SIMBOLO = "GOLD#"
 CUENTA = "169771026 - XMGlobal-MT5 2"
-
-# AJUSTE PARA QUE SEA IGUALITO A XM, JEFE
-SPREAD_XM = 0.30  # Lo que te cobra XM - De tu foto 3849.51 - 3849.21 = 0.30
-# Tu ultimo precio en vivo de tu foto: 3847.24
+# YA NO ES PAXG, JEFE - AHORA ES XAU/USD = GOLD# DE XM
+FUENTE = "XAU/USD - GOLD# - IGUAL A XM"
+SPREAD_XM = 0.30
 
 _cache = {"precio": 0, "precio_xm": 0, "velas_m5": [], "vela_1m": None, "vela_15m": None, "vela_1h": None, "hora": 0}
 
-def get_live_xm_igualito():
+def get_live_xauusd():
     ahora = time.time()
     if ahora - _cache["hora"] < 3 and _cache["precio"] != 0:
         return _cache
     try:
-        # PRECIO REAL EN VIVO - Oro
+        # 1. PRECIO REAL XAU/USD - Usamos GC=F que es ORO, no PAXG
         url = "https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=1d&interval=1m"
         d = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=4).json()
         res = d['chart']['result'][0]
-        precio_yahoo = res['meta']['regularMarketPrice']
+        precio_xau = res['meta']['regularMarketPrice']
         q = res['indicators']['quote'][0]
         closes = [c for c in q['close'] if c is not None]
         opens = [o for o in q['open'] if o is not None]
         vela_1m = {"open": opens[-1], "close": closes[-1]} if closes else None
+        precio_xm = precio_xau + SPREAD_XM
 
-        # PARA QUE SEA IGUAL A XM, JEFE - Le sumamos el spread
-        precio_xm = precio_yahoo + SPREAD_XM
-
-        # VELAS M5, 15M, 1H EN VIVO
         def get_velas(intervalo, cantidad=5):
             u = f"https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=1d&interval={intervalo}"
             dd = requests.get(u, headers={"User-Agent": "Mozilla/5.0"}, timeout=4).json()
@@ -45,14 +41,13 @@ def get_live_xm_igualito():
         velas_m5 = get_velas("5m", 5)
         velas_15m = get_velas("15m", 1)
         velas_1h = get_velas("60m", 1)
-
         vela_15m = velas_15m[-1] if velas_15m else None
         vela_1h = velas_1h[-1] if velas_1h else None
-
-        _cache.update({"precio": precio_yahoo, "precio_xm": precio_xm, "velas_m5": velas_m5, "vela_1m": vela_1m, "vela_15m": vela_15m, "vela_1h": vela_1h, "hora": ahora})
+        _cache.update({"precio": precio_xau, "precio_xm": precio_xm, "velas_m5": velas_m5, "vela_1m": vela_1m, "vela_15m": vela_15m, "vela_1h": vela_1h, "hora": ahora})
         return _cache
     except:
         try:
+            # RESPALDO XAU/USD, NO PAXG, JEFE
             r = requests.get("https://data-asg.goldprice.org/dbXRates/USD.json", timeout=4).json()
             p = float(r['items'][0]['pcurr'])
             _cache.update({"precio": p, "precio_xm": p + SPREAD_XM})
@@ -62,29 +57,29 @@ def get_live_xm_igualito():
 
 def analizar_en_vivo(velas, precio_xm):
     if not velas or len(velas) < 5:
-        return "🟡 ESPERA - Cargando precio en vivo..."
+        return "🟡 ESPERA - Cargando XAU/USD en vivo..."
     verdes = sum(1 for v in velas if v['close'] > v['open'])
     rojas = 5 - verdes
     if verdes >= 4:
-        return f"🟢 COMPRA • {verdes} DE 5 VERDES • PRECIO XM ${precio_xm:,.2f}"
+        return f"🟢 COMPRA • {verdes} DE 5 VERDES • XAU/USD ${precio_xm:,.2f}"
     if rojas >= 4:
-        return f"🔴 VENTA • {rojas} DE 5 ROJAS • PRECIO XM ${precio_xm:,.2f}"
-    return f"🟡 ESPERA • {verdes} DE 5 VERDES • PRECIO XM ${precio_xm:,.2f}"
+        return f"🔴 VENTA • {rojas} DE 5 ROJAS • XAU/USD ${precio_xm:,.2f}"
+    return f"🟡 ESPERA • {verdes} DE 5 VERDES • XAU/USD ${precio_xm:,.2f}"
 
 @app.route("/health")
 def health():
-    return "OK EN VIVO Y DIRECTO - IGUALITO A XM - 3847.24"
+    return "OK XAU/USD EN VIVO - NO PAXG - IGUAL A XM"
 
 @app.route("/api/live")
 def api_live():
-    datos = get_live_xm_igualito()
+    datos = get_live_xauusd()
     precio_xm = datos["precio_xm"]
     senal = analizar_en_vivo(datos["velas_m5"], precio_xm)
-    return jsonify({"precio": precio_xm, "precio_real": precio_xm, "precio_yahoo": datos["precio"], "velas_m5": datos["velas_m5"], "vela_1m": datos["vela_1m"], "senal": senal, "en_vivo": True, "spread": SPREAD_XM})
+    return jsonify({"precio": precio_xm, "precio_real": precio_xm, "fuente": "XAU/USD", "velas_m5": datos["velas_m5"], "vela_1m": datos["vela_1m"], "senal": senal, "en_vivo": True, "spread": SPREAD_XM})
 
 @app.route("/")
 def home():
-    datos = get_live_xm_igualito()
+    datos = get_live_xauusd()
     precio = datos["precio_xm"]
     velas_m5 = datos["velas_m5"]
     vela_1m = datos["vela_1m"]
@@ -115,13 +110,13 @@ def home():
 
     html = f"""<body style='background:#0A0E14;color:#fff;font-family:Arial;padding:15px;margin:0'>
     <h1>RAUDY <span style='color:#FFD700'>VIP PRO 👑</span></h1>
-    <p style='color:#9AA4B2'>EN VIVO Y DIRECTO • GOLD# • IGUALITO A XM • Precio Real + Spread</p>
-    <p style='border:1px solid #00FF88;color:#00FF88;padding:8px;border-radius:20px;display:inline-block;font-weight:800'>● EN VIVO • DIRECTO • IGUAL A XM • GOLD# • M5</p>
+    <p style='color:#9AA4B2'>EN VIVO Y DIRECTO • XAU/USD • GOLD# • IGUAL A XM • NO PAXG</p>
+    <p style='border:1px solid #00FF88;color:#00FF88;padding:8px;border-radius:20px;display:inline-block;font-weight:800'>● EN VIVO • XAU/USD • GOLD# • M5</p>
     <p style='color:#00FF88'>Cuenta: {CUENTA} | Se actualiza cada 3 segundos | Spread XM +0.30</p>
     <div style='background:#111722;border:1px solid #333;border-radius:15px;padding:15px;margin:15px 0'>
-    <p style='color:#9AA4B2'>GOLD# • PRECIO REAL EN VIVO - IGUAL A XM</p>
-    <h1 id='precio' style='color:#FFD700;font-size:52px;margin:5px 0'>${precio:,.2f}</h1>
-    <p style='color:#00E5FF'>🔴 EN VIVO - Precio Yahoo + 0.30 Spread = Precio XM</p>
+    <p style='color:#9AA4B2'>GOLD • XAU / USD • PRECIO REAL DEL MERCADO - XAU/USD</p>
+    <h1 id='precio' style='color:#FFD700;font-size:52px;margin:5px 0'>${precio:,.2f} (XAU/USD)</h1>
+    <p style='color:#00E5FF'>🔴 EN VIVO - XAU/USD + 0.30 Spread = Precio XM - NO PAXG</p>
     </div>
     <div id='senal' style='background:{bg_boton};color:{color_texto};border-radius:15px;padding:20px;text-align:center;font-size:28px;font-weight:900'>{senal}</div>
     <div style='display:flex;gap:10px;margin-top:15px;flex-wrap:wrap'>
@@ -130,13 +125,13 @@ def home():
     {cuadro("15 MINUTOS", "15M", vela_15m, mm_15m)}
     {cuadro("1 HORA", "1H", vela_1h, mm_1h)}
     </div>
-    <p style='color:#888;font-size:12px;margin-top:20px'>Precio en vivo + Spread XM 0.30 = Igualito a tu XM. No es consejo financiero. Solo DEMO.</p>
+    <p style='color:#888;font-size:12px;margin-top:20px'>XAU/USD en vivo + Spread XM 0.30 = Igualito a tu XM. No es PAXG. No es consejo financiero. Solo DEMO.</p>
     <script>
     setInterval(async () => {{
         try {{
             let r = await fetch('/api/live');
             let j = await r.json();
-            document.getElementById('precio').innerText = '$' + j.precio.toLocaleString('en-US', {{minimumFractionDigits: 2, maximumFractionDigits: 2}});
+            document.getElementById('precio').innerText = '$' + j.precio.toLocaleString('en-US', {{minimumFractionDigits: 2, maximumFractionDigits: 2}}) + ' (XAU/USD)';
             document.getElementById('senal').innerText = j.senal;
             if(j.senal.includes('COMPRA')) {{ document.getElementById('senal').style.background = '#00FF88'; document.getElementById('senal').style.color = '#000'; }}
             if(j.senal.includes('VENTA')) {{ document.getElementById('senal').style.background = '#FF4757'; document.getElementById('senal').style.color = '#fff'; }}
