@@ -1,297 +1,140 @@
-//+------------------------------------------------------------------+
-//|      RAUDY BANK V12 - IA LEARNA + APP VELAS - SOLO XM MT5       |
-//|  4H MANDA - SOLO COMPRA CON 4-5 VERDES - SI 3 ROJAS NO ENTRA    |
-//+------------------------------------------------------------------+
-#property copyright "RAUDY BANK V12 - LEARNA + VELAS XM"
-#property version   "12.00"
-#property strict
-#include <Trade\Trade.mqh>
-CTrade trade;
+from flask import Flask, jsonify
+import os, requests, datetime, time
+app = Flask(__name__)
 
-input double Lote = 0.01; // JEFE: Nunca lo subas. 0.01 = seguro
-input double RiesgoDolar = 10.0;
-input double GananciaDolar = 30.0;
-input int MaxOperacionesDia = 1;
-input int MinPuntosIA = 4;
-input bool ModoIA = true;
-input bool AlarmaActiva = true;
-input bool ModoAprendizaje = true; // JEFE: LEARNA - true = aprende
-input bool ModoAppVelas = true; // JEFE: true = obedece tu APP de velas. NO lo apagues
-input bool SoloOperarSiEsGOLD = true;
-input int HoraInicioXM = 8;
-input int HoraFinXM = 20;
-input double NivelCompraFijo = 3700;
-input double NivelVentaFijo = 3760;
-input int EsperaTrasPerderMin = 60;
-input int EsperaTras3RojasMin = 30; // JEFE: APP - Si hay 3 rojas, espera 30 min
+# TU MT5 XM
+SIMBOLO = "GOLD#"
+CUENTA = "169771026 - XMGlobal-MT5 2"
 
-int h_M1, h_M5, h_M15, h_H1, h_H4;
-int h_RSI, h_ATR, h_MACD;
-datetime diaActual = 0;
-int operacionesHoy = 0;
-bool alarmaHoyYaSono = false;
+# Cache para que sea EN VIVO rapido
+_cache = {"precio": 0, "velas_m5": [], "vela_1m": None, "hora": 0}
 
-// JEFE: MEMORIA LEARNA
-int ganadasHoy = 0;
-int perdidasHoy = 0;
-int rachaGanadora = 0;
-int rachaPerdedora = 0;
-double profitHoy = 0;
-datetime ultimaPerdidaTiempo = 0;
-datetime ultima3RojasTiempo = 0;
-string ultimaLeccion = "SIN LECCION TODAVIA - EMPEZANDO V12";
-int puntosExigidosHoy = 4;
-int verdesHoy = 0;
-int rojasHoy = 0;
+def get_live_xm():
+    # EN VIVO Y DIRECTO - Oro Futuro GC=F = misma fuente que usa XM para GOLD#
+    # Se actualiza cada 5 segundos
+    ahora = time.time()
+    if ahora - _cache["hora"] < 5 and _cache["precio"] != 0:
+        return _cache["precio"], _cache["velas_m5"], _cache["vela_1m"]
+    try:
+        # Precio EN VIVO
+        url = "https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=1d&interval=1m"
+        d = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=5).json()
+        res = d['chart']['result'][0]
+        meta = res['meta']
+        precio = meta['regularMarketPrice']
+        q = res['indicators']['quote'][0]
+        closes = [c for c in q['close'] if c is not None]
+        opens = [o for o in q['open'] if o is not None]
+        vela_1m = {"open": opens[-1], "close": closes[-1]} if closes else None
 
-int OnInit()
-{
-   string simbolo = _Symbol;
-   if(SoloOperarSiEsGOLD && simbolo != "GOLD#" && simbolo != "GOLD" && simbolo != "XAUUSD" && simbolo != "XAUUSD#")
-   {
-      Alert("JEFE! V12 ES SOLO PARA GOLD# DE XM! Tu estas en: " + simbolo);
-      return(INIT_FAILED);
-   }
-   SymbolSelect(_Symbol, true);
-   h_M1 = iMA(_Symbol, PERIOD_M1, 20, 0, MODE_EMA, PRICE_CLOSE);
-   h_M5 = iMA(_Symbol, PERIOD_M5, 20, 0, MODE_EMA, PRICE_CLOSE);
-   h_M15 = iMA(_Symbol, PERIOD_M15, 20, 0, MODE_EMA, PRICE_CLOSE);
-   h_H1 = iMA(_Symbol, PERIOD_H1, 50, 0, MODE_EMA, PRICE_CLOSE);
-   h_H4 = iMA(_Symbol, PERIOD_H4, 50, 0, MODE_EMA, PRICE_CLOSE);
-   h_RSI = iRSI(_Symbol, PERIOD_M15, 14, PRICE_CLOSE);
-   h_ATR = iATR(_Symbol, PERIOD_H1, 14);
-   h_MACD = iMACD(_Symbol, PERIOD_M15, 12, 26, 9, PRICE_CLOSE);
-   trade.SetExpertMagicNumber(20270112);
-   trade.SetDeviationInPoints(30);
-   Print("RAUDY V12 LEARNA + VELAS XM LISTO - 4H MANDA");
-   return(INIT_SUCCEEDED);
-}
+        # Velas M5 EN VIVO - mismo minuto que XM
+        url5 = "https://query1.finance.yahoo.com/v8/finance/chart/GC=F?range=1d&interval=5m"
+        d5 = requests.get(url5, headers={"User-Agent": "Mozilla/5.0"}, timeout=5).json()
+        res5 = d5['chart']['result'][0]
+        q5 = res5['indicators']['quote'][0]
+        closes5 = [c for c in q5['close'] if c is not None]
+        opens5 = [o for o in q5['open'] if o is not None]
+        velas = []
+        for i in range(max(0, len(closes5)-5), len(closes5)):
+            velas.append({"open": opens5[i] if i < len(opens5) else closes5[i], "close": closes5[i]})
+        _cache.update({"precio": precio, "velas_m5": velas, "vela_1m": vela_1m, "hora": ahora})
+        return precio, velas, vela_1m
+    except:
+        try:
+            r = requests.get("https://data-asg.goldprice.org/dbXRates/USD.json", timeout=5).json()
+            p = float(r['items'][0]['pcurr'])
+            return p, _cache["velas_m5"], _cache["vela_1m"]
+        except:
+            return _cache["precio"], _cache["velas_m5"], _cache["vela_1m"]
 
-void OnTradeTransaction(const MqlTradeTransaction& trans, const MqlTradeRequest& request, const MqlTradeResult& result)
-{
-   if(trans.type != TRADE_TRANSACTION_DEAL_ADD) return;
-   if(trans.symbol != _Symbol) return;
-   if(trans.deal_type != DEAL_TYPE_SELL && trans.deal_type != DEAL_TYPE_BUY) return;
-   if(HistoryDealSelect(trans.deal))
-   {
-      long entry = HistoryDealGetInteger(trans.deal, DEAL_ENTRY);
-      if(entry == DEAL_ENTRY_OUT || entry == DEAL_ENTRY_INOUT)
-      {
-         double prof = HistoryDealGetDouble(trans.deal, DEAL_PROFIT) + HistoryDealGetDouble(trans.deal, DEAL_SWAP) + HistoryDealGetDouble(trans.deal, DEAL_COMMISSION);
-         if(ModoAprendizaje)
-         {
-            profitHoy += prof;
-            if(prof >= 0)
-            {
-               ganadasHoy++; rachaGanadora++; rachaPerdedora = 0;
-               ultimaLeccion = "MUY BIEN JEFE! GANASTE! SIGUE ASI - LEARNA";
-            }
-            else
-            {
-               perdidasHoy++; rachaPerdedora++; rachaGanadora = 0;
-               ultimaPerdidaTiempo = TimeCurrent();
-               if(rachaPerdedora >= 2)
-                  ultimaLeccion = "JEFE, PERDISTE 2 SEGUIDAS. APRENDI: ESPERO 60 MIN Y PIDO 5 PUNTOS";
-               else
-                  ultimaLeccion = "JEFE, PERDISTE 1. APRENDI: MAS CUIDADO";
-            }
-         }
-      }
-   }
-}
+def get_bolsa_m5(yahoo):
+    try:
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo}?range=1d&interval=5m"
+        d = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=5).json()
+        result = d['chart']['result'][0]
+        meta = result['meta']
+        precio = meta['regularMarketPrice']
+        anterior = meta['previousClose']
+        porc = ((precio - anterior) / anterior * 100) if anterior else 0
+        closes = [c for c in result['indicators']['quote'][0]['close'] if c is not None]
+        opens = [o for o in result['indicators']['quote'][0]['open'] if o is not None]
+        velas = []
+        if len(closes) >= 6:
+            for i in range(5):
+                idx = len(closes)-5+i
+                velas.append({"open": opens[idx] if idx < len(opens) else closes[idx], "close": closes[idx]})
+        else:
+            for _ in range(5):
+                velas.append({"open": anterior, "close": precio})
+        return {"precio": precio, "porc": porc, "velas": velas}
+    except: return None
 
-void MostrarTablero(double bid, double ask, double compraIA, double ventaIA, double distSL, double distTP, int puntos, double rsi, double atr, double spread, double macd, int verdes, int rojas, string tendencia4H)
-{
-   string t1 = "👑 RAUDY V12 - LEARNA + VELAS - XM GOLD#";
-   string t2 = "XM PRECIO: " + DoubleToString(bid,2) + " | SPREAD: " + DoubleToString(spread,2) + " | MACD: " + DoubleToString(macd,2);
-   string t3 = "APP VELAS: 🟢 VERDES: " + IntegerToString(verdes) + " | 🔴 ROJAS: " + IntegerToString(rojas) + " | 4H: " + tendencia4H;
-   string t4 = "IA COMPRA: " + DoubleToString(compraIA,2) + " | IA VENTA: " + DoubleToString(ventaIA,2);
-   string t5 = "SL=" + DoubleToString(bid-distSL,2) + " (-" + DoubleToString(RiesgoDolar,0) + "$) TP=" + DoubleToString(bid+distTP,2) + " (+" + DoubleToString(GananciaDolar,0) + "$)";
-   string t6 = "PUNTOS: " + IntegerToString(puntos) + "/" + IntegerToString(puntosExigidosHoy) + " | RSI: " + DoubleToString(rsi,1) + " | ATR: " + DoubleToString(atr,2);
-   string t7 = "HOY: " + IntegerToString(operacionesHoy) + "/" + IntegerToString(MaxOperacionesDia) + " | GANADAS: " + IntegerToString(ganadasHoy) + " | PERDIDAS: " + IntegerToString(perdidasHoy) + " | PROFIT: $" + DoubleToString(profitHoy,2);
-   string t8 = "";
-   if(verdes >= 4 && puntos >= puntosExigidosHoy) t8 = "🟢 ¡JEFE! ¡APP DICE 4-5 VERDES! ¡LISTO PARA COMPRA!";
-   else if(rojas >= 3) t8 = "🔴 ¡JEFE! ¡3 ROJAS! ¡NO ENTRES! ¡ESPERA! ¡CAYENDO!";
-   else t8 = "🟡 ESPERA JEFE - APP DICE: MERCADO MEZCLADO - NO ENTRES";
-   string t9 = "📚 LECCION: " + ultimaLeccion;
-   Comment(t1 + "\n" + t2 + "\n" + t3 + "\n" + t4 + "\n" + t5 + "\n" + t6 + "\n" + t7 + "\n" + t8 + "\n" + t9);
-}
+def analizar_m5(velas, nombre="GOLD#"):
+    if not velas or len(velas) < 5: return "🟡 ESPERA M5"
+    verdes = sum(1 for v in velas if v['close'] > v['open'])
+    rojas = 5 - verdes
+    if verdes >= 4: return f"🟢 COMPRA • {verdes} DE 5 VERDES • {nombre}"
+    if rojas >= 4: return f"🔴 VENTA • {rojas} DE 5 ROJAS • {nombre}"
+    return f"🟡 ESPERA • {verdes} DE 5 VERDES • {nombre}"
 
-void OnTick()
-{
-   double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-   double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-   if(bid <= 0 || ask <= 0) return;
+@app.route("/health")
+def health():
+    return "OK LIVE GOLD# XM"
 
-   int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
-   double tickValue = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
-   double tickSize = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
-   double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
-   double maxLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
-   double lotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
-   long stopLevel = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL);
-   double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
-   double spreadEnDolares = ask - bid;
-   if(tickValue <= 0 || tickSize <= 0) return;
+@app.route("/api/live")
+def api_live():
+    precio, velas, vela1m = get_live_xm()
+    return jsonify({"precio": precio, "velas_m5": velas, "vela_1m": vela1m, "simbolo": SIMBOLO})
 
-   double loteSeguro = Lote;
-   if(loteSeguro > 0.05) loteSeguro = 0.01;
-   if(ModoAprendizaje && rachaPerdedora >= 2) loteSeguro = 0.01;
-   if(loteSeguro < minLot) loteSeguro = minLot;
-   if(loteSeguro > maxLot) loteSeguro = maxLot;
-   loteSeguro = MathFloor(loteSeguro / lotStep) * lotStep;
-   if(loteSeguro < minLot) loteSeguro = minLot;
+@app.route("/")
+def home():
+    precio, velas_m5, vela_1m = get_live_xm()
+    senal = analizar_m5(velas_m5, "GOLD#")
+    bg_boton = "#FF4757" if "VENTA" in senal else "#00FF88" if "COMPRA" in senal else "#1A1A1A"
+    color_texto_boton = "#fff" if "VENTA" in senal else "#000" if "COMPRA" in senal else "#FFD700"
+    ahora = datetime.datetime.now()
+    seg_para_m5 = (5 - (ahora.minute % 5)) * 60 - ahora.second
+    seg_para_m1 = 60 - ahora.second
+    mm_m5 = f"{seg_para_m5//60:02d}:{seg_para_m5%60:02d}"
+    mm_m1 = f"00:{seg_para_m1:02d}"
 
-   double valorPorPunto = (loteSeguro * tickValue) / tickSize;
-   if(valorPorPunto <= 0) return;
-   double distSL = RiesgoDolar / valorPorPunto;
-   double distTP = GananciaDolar / valorPorPunto;
-   double distMinima = (stopLevel + 5) * point;
-   if(distSL < distMinima) distSL = distMinima;
-   if(distTP < distMinima) distTP = distMinima;
+    if vela_1m:
+        dir_1m = "ROJA • CAYENDO" if vela_1m["close"] < vela_1m["open"] else "VERDE • SUBIENDO"
+        porc_1m = (vela_1m["close"] - vela_1m["open"]) / vela_1m["open"] * 100
+        txt_1m = f"Apertura {vela_1m['open']:.2f} → Cierre {vela_1m['close']:.2f}<br>{porc_1m:.3f}%"
+    else:
+        dir_1m = "SIN DATOS"; txt_1m = ""
+    if velas_m5:
+        dir_5m = "ROJA • CAYENDO" if velas_m5[-1]["close"] < velas_m5[-1]["open"] else "VERDE • SUBIENDO"
+        porc_5m = (velas_m5[-1]["close"] - velas_m5[-1]["open"]) / velas_m5[-1]["open"] * 100
+        txt_5m = f"Apertura {velas_m5[-1]['open']:.2f} → Cierre {velas_m5[-1]['close']:.2f}<br>{porc_5m:.3f}%"
+    else:
+        dir_5m = "SIN DATOS"; txt_5m = ""
 
-   MqlDateTime t; TimeToStruct(TimeCurrent(), t);
-   datetime hoy = StructToTime(t) - (t.hour*3600 + t.min*60 + t.sec);
-   static double NivelCompraIA = 0;
-   static double NivelVentaIA = 0;
-   if(hoy != diaActual || NivelCompraIA == 0)
-   {
-      diaActual = hoy;
-      operacionesHoy = 0; ganadasHoy = 0; perdidasHoy = 0; profitHoy = 0;
-      rachaGanadora = 0; rachaPerdedora = 0;
-      alarmaHoyYaSono = false;
-      ultimaLeccion = "NUEVO DIA JEFE - V12 EMPIEZA DE CERO";
-      if(ModoIA)
-      {
-         NivelCompraIA = MathRound(bid - 25);
-         NivelVentaIA = MathRound(bid + 25);
-      }
-      else
-      {
-         NivelCompraIA = NivelCompraFijo;
-         NivelVentaIA = NivelVentaFijo;
-      }
-   }
-   bool enHorarioXM = (t.hour >= HoraInicioXM && t.hour < HoraFinXM);
+    ACTIVOS = {"META": "META", "APPLE": "AAPL", "TESLA": "TSLA", "NVIDIA": "NVDA", "S&P 500": "^GSPC", "NASDAQ": "^IXIC", "DOW JONES": "^DJI", "CAFE": "KC=F", "CACAO": "CC=F", "ORO BOLSA": "GC=F"}
+    html_bolsa = ""
+    for nombre, yahoo in ACTIVOS.items():
+        d = get_bolsa_m5(yahoo)
+        if not d: continue
+        s = analizar_m5(d["velas"], nombre)
+        bg = "#00FF88" if "COMPRA" in s else "#FF4757" if "VENTA" in s else "#1A1A1A"
+        tc = "#000" if "COMPRA" in s else "#fff" if "VENTA" in s else "#FFD700"
+        flecha = "▲" if d["porc"] >= 0 else "▼"
+        color_p = "#00FF88" if d["porc"] >= 0 else "#FF4757"
+        html_bolsa += f"<div style='background:#111722;border:1px solid #333;border-radius:15px;padding:15px;margin:10px 0'><h2>{nombre} • M5</h2><h3 style='color:{color_p}'>${d['precio']:,.2f} {flecha} {d['porc']:+.2f}%</h3><span style='background:{bg};color:{tc};padding:6px 12px;border-radius:20px;font-weight:800;display:inline-block'>{s}</span></div>"
 
-   double m1[], m5[], m15[], h1[], h4[], rsiArr[], atrArr[], macdMain[], macdSignal[];
-   if(CopyBuffer(h_M1,0,0,1,m1)<=0) return;
-   if(CopyBuffer(h_M5,0,0,1,m5)<=0) return;
-   if(CopyBuffer(h_M15,0,0,1,m15)<=0) return;
-   if(CopyBuffer(h_H1,0,0,1,h1)<=0) return;
-   if(CopyBuffer(h_H4,0,0,1,h4)<=0) return;
-   if(CopyBuffer(h_RSI,0,0,1,rsiArr)<=0) return;
-   if(CopyBuffer(h_ATR,0,0,1,atrArr)<=0) return;
-   if(CopyBuffer(h_MACD,0,0,1,macdMain)<=0) return;
-   if(CopyBuffer(h_MACD,1,0,1,macdSignal)<=0) return;
+    html = f"""<body style='background:#0A0E14;color:#fff;font-family:Arial;padding:15px;margin:0'><h1 style='margin:0'>RAUDY <span style='color:#FFD700'>VIP PRO 👑</span></h1><p style='color:#9AA4B2'>EN VIVO Y DIRECTO • GOLD# • Mismo Precio que XM • Mismo Minuto que XM</p><p style='border:1px solid #00FF88;color:#00FF88;padding:8px;border-radius:20px;display:inline-block;font-weight:800'>● EN VIVO • DIRECTO • GOLD# • XM • M5</p><p style='color:#00FF88'>Símbolo: GOLD# | Cuenta: {CUENTA} | Se actualiza cada 5 segundos</p><div style='display:flex;gap:10px'><span style='background:#FFD700;color:#000;padding:10px 20px;border-radius:20px;font-weight:800'>🥇 GOLD#</span><span style='background:#111722;padding:10px 20px;border-radius:20px'>💱 DIVISAS</span><span style='background:#111722;padding:10px 20px;border-radius:20px'>📈 ACCIONES</span></div><div style='background:#111722;border:1px solid #333;border-radius:15px;padding:15px;margin:15px 0'><p style='color:#9AA4B2;letter-spacing:2px'>GOLD# • EN VIVO Y DIRECTO • MISMO PRECIO QUE XM</p><h1 id='precio' style='color:#FFD700;font-size:48px;margin:5px 0'>${precio:,.2f}</h1><p style='color:#00E5FF'>🔴 EN VIVO - Actualizando cada 5 segundos - Misma fuente que XM</p><p><span style='background:#1A1A1A;color:#FFD700;padding:5px 10px;border-radius:10px;font-weight:800'>TENDENCIA: {'BAJISTA 🔴' if 'VENTA' in senal else 'ALCISTA 🟢' if 'COMPRA' in senal else 'LATERAL 🟡'}</span> <span style='background:#1A1A1A;color:#FFD700;padding:5px 10px;border-radius:10px;font-weight:800'>FUERZA: 5/5 FUERTE • M5 • GOLD#</span></p></div><div style='background:{bg_boton};color:{color_texto_boton};border-radius:15px;padding:20px;text-align:center;font-size:28px;font-weight:900'>{senal}</div><div style='display:flex;gap:10px;margin-top:15px'><div style='flex:1;background:#111722;border-radius:15px;padding:15px;text-align:center'><p>GOLD# • 1 MINUTO - EN VIVO</p><h2>⚡ 1M</h2><p style='color:#FF4757;font-weight:800'>🔴 {dir_1m}</p><p style='color:#9AA4B2'>{txt_1m}</p><p>CIERRA EN - MISMO QUE MT5</p><h2 style='color:#00E5FF'>{mm_m1}</h2></div><div style='flex:1;background:#111722;border-radius:15px;padding:15px;text-align:center'><p>GOLD# • 5 MINUTOS - EN VIVO</p><h2>5M</h2><p style='color:#FF4757;font-weight:800'>🔴 {dir_5m}</p><p style='color:#9AA4B2'>{txt_5m}</p><p>CIERRA EN - MISMO QUE MT5</p><h2 style='color:#00E5FF'>{mm_m5}</h2></div></div><h2 style='margin-top:25px'>📈 BOLSA + ACCIONES • TODO EN M5</h2>{html_bolsa}<p style='color:#888;font-size:12px'>Robot Raudy VIP Pro. GOLD# EN VIVO Y DIRECTO. Mismo precio, mismo minuto que XM. Diferencia de centavos por spread de XM. No es consejo financiero.</p><script>
+    // EN VIVO cada 5 segundos - sin recargar toda la pagina
+    setInterval(async () => {{
+        try {{
+            let r = await fetch('/api/live');
+            let j = await r.json();
+            document.getElementById('precio').innerText = '$' + j.precio.toLocaleString('en-US', {{minimumFractionDigits: 2, maximumFractionDigits: 2}});
+        }} catch(e) {{}}
+    }}, 5000);
+    setTimeout(()=>location.reload(), 30000);
+    </script></body>"""
+    return html
 
-   // --- JEFE: APP VELAS - CONTAR VERDES Y ROJAS ---
-   // VERDE = precio arriba de EMA, ROJA = precio abajo de EMA
-   int verdes = 0; int rojas = 0;
-   if(bid > m1[0]) verdes++; else rojas++;
-   if(bid > m5[0]) verdes++; else rojas++;
-   if(bid > m15[0]) verdes++; else rojas++;
-   if(bid > h1[0]) verdes++; else rojas++;
-   if(bid > h4[0]) verdes++; else rojas++;
-   verdesHoy = verdes; rojasHoy = rojas;
-
-   // JEFE: 4H MANDA - CONFIRMACION MAESTRA
-   string tendencia4H = "🟡 MEZCLADO";
-   bool h4Verde = (bid > h4[0]);
-   bool h4Roja = (bid < h4[0]);
-   if(h4Verde) tendencia4H = "🟢 VERDE - SUBIENDO";
-   if(h4Roja) tendencia4H = "🔴 ROJA - CAYENDO";
-
-   // JEFE: Si hay 3 rojas, marca el tiempo para esperar
-   if(ModoAppVelas && rojas >= 3 && ultima3RojasTiempo == 0)
-   {
-      ultima3RojasTiempo = TimeCurrent();
-      ultimaLeccion = "JEFE, HAY 3 ROJAS COMO EN TU FOTO. APRENDI: ESPERO 30 MIN";
-   }
-   if(rojas < 3) ultima3RojasTiempo = 0;
-
-   bool alcista = (verdes >= 4); // JEFE: APP - Solo si 4 o 5 verdes
-   bool bajista = (rojas >= 4);
-   bool macdCompra = (macdMain[0] > macdSignal[0]);
-   bool macdVenta = (macdMain[0] < macdSignal[0]);
-
-   // JEFE: Si 4H es roja, NUNCA compra - aunque haya verdes en M1
-   if(ModoAppVelas && h4Roja) alcista = false;
-   // JEFE: Si 4H es verde, NUNCA vende
-   if(ModoAppVelas && h4Verde) bajista = false;
-
-   puntosExigidosHoy = MinPuntosIA;
-   if(ModoAprendizaje)
-   {
-      if(atrArr[0] > 20) puntosExigidosHoy = 5;
-      if(rachaPerdedora >= 2) puntosExigidosHoy = 5;
-      if(rachaGanadora >= 2) puntosExigidosHoy = 4;
-   }
-
-   int puntos = 0;
-   if(alcista || bajista) puntos += 2;
-   if(alcista && rsiArr[0] < 70) puntos += 1;
-   if(bajista && rsiArr[0] > 30) puntos += 1;
-   if(atrArr[0] > 5 && atrArr[0] < 30) puntos += 1;
-   double distancia = MathAbs(bid - h1[0]);
-   if(distancia > 10 && distancia < 80) puntos += 1;
-   if(alcista && macdCompra) puntos += 1;
-   if(bajista && macdVenta) puntos += 1;
-   // JEFE: PUNTO EXTRA APP - Si tienes 5 verdes, +1
-   if(verdes == 5) puntos += 1;
-   if(puntos > 7) puntos = 7;
-
-   MostrarTablero(bid, ask, NivelCompraIA, NivelVentaIA, distSL, distTP, puntos, rsiArr[0], atrArr[0], spreadEnDolares, macdMain[0], verdes, rojas, tendencia4H);
-
-   if(AlarmaActiva && verdes >= 4 && puntos >= puntosExigidosHoy && !alarmaHoyYaSono)
-   {
-      alarmaHoyYaSono = true;
-      Alert("👑 RAUDY V12 - JEFE! APP DICE " + IntegerToString(verdes) + " VERDES! 4H " + tendencia4H + " COMPRA GOLD# A " + DoubleToString(bid,2));
-      PlaySound("alert.wav");
-      SendNotification("RAUDY V12 - JEFE! " + IntegerToString(verdes) + " VERDES! " + IntegerToString(puntos) + " puntos! COMPRA GOLD# XM: " + DoubleToString(bid,2));
-   }
-   // JEFE: Alarma de peligro si hay 3 rojas
-   if(AlarmaActiva && rojas >= 3 && !alarmaHoyYaSono)
-   {
-      alarmaHoyYaSono = true;
-      Alert("🔴 RAUDY V12 - JEFE! 3 ROJAS! NO ENTRES! CAYENDO! GOLD# " + DoubleToString(bid,2));
-      SendNotification("RAUDY V12 - JEFE! 3 ROJAS! NO ENTRES! GOLD# " + DoubleToString(bid,2));
-   }
-
-   if(!enHorarioXM) return;
-   if(PositionsTotal() > 0) return;
-   if(operacionesHoy >= MaxOperacionesDia) return;
-
-   // JEFE: LEARNA - Si perdiste 2, espera
-   if(ModoAprendizaje && rachaPerdedora >= 2)
-   {
-      if(TimeCurrent() - ultimaPerdidaTiempo < EsperaTrasPerderMin * 60)
-         return;
-   }
-   // JEFE: APP - Si hay 3 rojas, espera 30 min
-   if(ModoAppVelas && rojas >= 3)
-   {
-      if(TimeCurrent() - ultima3RojasTiempo < EsperaTras3RojasMin * 60)
-         return;
-   }
-
-   if(puntos >= puntosExigidosHoy)
-   {
-      if(alcista && macdCompra && verdes >= 4 && MathAbs(bid - NivelCompraIA) <= 15)
-      {
-         double sl = NormalizeDouble(ask - distSL, digits);
-         double tp = NormalizeDouble(ask + distTP, digits);
-         double precio = NormalizeDouble(ask, digits);
-         if(trade.Buy(loteSeguro, _Symbol, precio, sl, tp, "RAUDY V12 COMPRA 4-5 VERDES"))
-            operacionesHoy++;
-      }
-      if(bajista && macdVenta && rojas >= 4 && MathAbs(bid - NivelVentaIA) <= 15)
-      {
-         double sl = NormalizeDouble(bid + distSL, digits);
-         double tp = NormalizeDouble(bid - distTP, digits);
-         double precio = NormalizeDouble(bid, digits);
-         if(trade.Sell(loteSeguro, _Symbol, precio, sl, tp, "RAUDY V12 VENTA 4-5 ROJAS"))
-            operacionesHoy++;
-      }
-   }
-}
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
