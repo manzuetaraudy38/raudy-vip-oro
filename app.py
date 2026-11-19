@@ -1,4 +1,4 @@
-
+RAUDY BANK V12 - IA LEARNA + APP VELAS - SOLO XM MT5
 //+------------------------------------------------------------------+
 //|      RAUDY BANK V12 - IA LEARNA + APP VELAS - SOLO XM MT5       |
 //|  4H MANDA - SOLO COMPRA CON 4-5 VERDES - SI 3 ROJAS NO ENTRA    |
