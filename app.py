@@ -1,122 +1,297 @@
-from flask import Flask, render_template_string
-import random
+//+------------------------------------------------------------------+
+//|      RAUDY BANK V12 - IA LEARNA + APP VELAS - SOLO XM MT5       |
+//|  4H MANDA - SOLO COMPRA CON 4-5 VERDES - SI 3 ROJAS NO ENTRA    |
+//+------------------------------------------------------------------+
+#property copyright "RAUDY BANK V12 - LEARNA + VELAS XM"
+#property version   "12.00"
+#property strict
+#include <Trade\Trade.mqh>
+CTrade trade;
 
-app = Flask(__name__)
+input double Lote = 0.01; // JEFE: Nunca lo subas. 0.01 = seguro
+input double RiesgoDolar = 10.0;
+input double GananciaDolar = 30.0;
+input int MaxOperacionesDia = 1;
+input int MinPuntosIA = 4;
+input bool ModoIA = true;
+input bool AlarmaActiva = true;
+input bool ModoAprendizaje = true; // JEFE: LEARNA - true = aprende
+input bool ModoAppVelas = true; // JEFE: true = obedece tu APP de velas. NO lo apagues
+input bool SoloOperarSiEsGOLD = true;
+input int HoraInicioXM = 8;
+input int HoraFinXM = 20;
+input double NivelCompraFijo = 3700;
+input double NivelVentaFijo = 3760;
+input int EsperaTrasPerderMin = 60;
+input int EsperaTras3RojasMin = 30; // JEFE: APP - Si hay 3 rojas, espera 30 min
 
-@app.route('/')
-def inicio():
-    html = """
-    <body style="background:black; color:gold; text-align:center; font-family:Arial; padding:50px;">
-        <h1>RAUDY VIP ORO - NIVEL DIOS</h1>
-        <h2>3 Mercados VIP</h2>
-        <br><br>
-        <a href="/tc" style="background:gold; color:black; padding:20px 40px; text-decoration:none; font-weight:bold; border-radius:10px; font-size:22px;">
-            ENTRAR AL MERCADO VIP
-        </a>
-    </body>
-    """
-    return render_template_string(html)
+int h_M1, h_M5, h_M15, h_H1, h_H4;
+int h_RSI, h_ATR, h_MACD;
+datetime diaActual = 0;
+int operacionesHoy = 0;
+bool alarmaHoyYaSono = false;
 
-@app.route('/tc')
-def mercado():
-    # PRECIOS
-    oro = round(random.uniform(3865, 3895), 2)
-    eur = round(random.uniform(1.1150, 1.1190), 5)
-    gbp = round(random.uniform(1.3300, 1.3350), 5)
-    
-    # ANALISIS ORO
-    rsi_oro = random.randint(30, 75)
-    ma_r_oro = round(oro + random.uniform(-5, 5), 2)
-    ma_l_oro = round(oro + random.uniform(-8, 8), 2)
-    
-    if ma_r_oro > ma_l_oro and rsi_oro > 52:
-        s_oro = "COMPRA"; c_oro = "#00ff00"; conf_oro = random.randint(78, 92); txt_oro = "ALCISTA RSI %s" % rsi_oro
-    elif ma_r_oro < ma_l_oro and rsi_oro < 48:
-        s_oro = "VENTA"; c_oro = "#ff0000"; conf_oro = random.randint(75, 89); txt_oro = "BAJISTA RSI %s" % rsi_oro
-    else:
-        s_oro = "ESPERA"; c_oro = "gold"; conf_oro = random.randint(60, 75); txt_oro = "LATERAL RSI %s" % rsi_oro
+// JEFE: MEMORIA LEARNA
+int ganadasHoy = 0;
+int perdidasHoy = 0;
+int rachaGanadora = 0;
+int rachaPerdedora = 0;
+double profitHoy = 0;
+datetime ultimaPerdidaTiempo = 0;
+datetime ultima3RojasTiempo = 0;
+string ultimaLeccion = "SIN LECCION TODAVIA - EMPEZANDO V12";
+int puntosExigidosHoy = 4;
+int verdesHoy = 0;
+int rojasHoy = 0;
 
-    # ANALISIS EURUSD
-    rsi_eur = random.randint(30, 75)
-    if rsi_eur > 55:
-        s_eur = "COMPRA"; c_eur = "#00ff00"; conf_eur = random.randint(70, 85)
-    elif rsi_eur < 45:
-        s_eur = "VENTA"; c_eur = "#ff0000"; conf_eur = random.randint(70, 85)
-    else:
-        s_eur = "ESPERA"; c_eur = "gold"; conf_eur = random.randint(55, 70)
+int OnInit()
+{
+   string simbolo = _Symbol;
+   if(SoloOperarSiEsGOLD && simbolo != "GOLD#" && simbolo != "GOLD" && simbolo != "XAUUSD" && simbolo != "XAUUSD#")
+   {
+      Alert("JEFE! V12 ES SOLO PARA GOLD# DE XM! Tu estas en: " + simbolo);
+      return(INIT_FAILED);
+   }
+   SymbolSelect(_Symbol, true);
+   h_M1 = iMA(_Symbol, PERIOD_M1, 20, 0, MODE_EMA, PRICE_CLOSE);
+   h_M5 = iMA(_Symbol, PERIOD_M5, 20, 0, MODE_EMA, PRICE_CLOSE);
+   h_M15 = iMA(_Symbol, PERIOD_M15, 20, 0, MODE_EMA, PRICE_CLOSE);
+   h_H1 = iMA(_Symbol, PERIOD_H1, 50, 0, MODE_EMA, PRICE_CLOSE);
+   h_H4 = iMA(_Symbol, PERIOD_H4, 50, 0, MODE_EMA, PRICE_CLOSE);
+   h_RSI = iRSI(_Symbol, PERIOD_M15, 14, PRICE_CLOSE);
+   h_ATR = iATR(_Symbol, PERIOD_H1, 14);
+   h_MACD = iMACD(_Symbol, PERIOD_M15, 12, 26, 9, PRICE_CLOSE);
+   trade.SetExpertMagicNumber(20270112);
+   trade.SetDeviationInPoints(30);
+   Print("RAUDY V12 LEARNA + VELAS XM LISTO - 4H MANDA");
+   return(INIT_SUCCEEDED);
+}
 
-    # ANALISIS GBPUSD
-    rsi_gbp = random.randint(30, 75)
-    if rsi_gbp > 55:
-        s_gbp = "COMPRA"; c_gbp = "#00ff00"; conf_gbp = random.randint(70, 85)
-    elif rsi_gbp < 45:
-        s_gbp = "VENTA"; c_gbp = "#ff0000"; conf_gbp = random.randint(70, 85)
-    else:
-        s_gbp = "ESPERA"; c_gbp = "gold"; conf_gbp = random.randint(55, 70)
-
-    # Mensaje WhatsApp
-    msg_whatsapp = "RAUDY VIP SENAL: ORO %s (%s%%) - EURUSD %s - GBPUSD %s - Precio ORO $%s - %s" % (s_oro, conf_oro, s_eur, s_gbp, oro, "raudy-vip-oro.onrender.com/tc")
-    
-    # Sonido
-    sonido = "compra" if s_oro == "COMPRA" else "venta" if s_oro == "VENTA" else "espera"
-
-    html = """
-    <html>
-    <head><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-    <body style="background:#050505; margin:0; padding:10px; font-family:Arial;">
-        <h2 style="color:gold; text-align:center; margin:5px;">RAUDY VIP - NIVEL DIOS</h2>
-        
-        <div style="border:2px solid gold; background:#111; border-radius:12px; padding:10px; text-align:center; color:gold; margin-bottom:10px;">
-            <b>ORO:</b> $%s | <b>EUR:</b> %s | <b>GBP:</b> %s
-        </div>
-
-        <div style="border:3px solid %s; background:%s; color:black; border-radius:15px; padding:12px; text-align:center; margin-bottom:8px; font-weight:bold;">
-            <div style="font-size:20px;">ORO: SENAL VIP: %s - %s%%</div>
-            <div style="font-size:12px;">%s | MA R:%s MA L:%s</div>
-        </div>
-
-        <div style="display:flex; gap:8px; margin-bottom:10px;">
-            <div style="flex:1; border:2px solid %s; background:%s; color:black; border-radius:10px; padding:10px; text-align:center; font-weight:bold;">
-                <div style="font-size:12px;">EURUSD</div>
-                <div style="font-size:16px;">%s</div>
-                <div style="font-size:11px;">%s%%</div>
-            </div>
-            <div style="flex:1; border:2px solid %s; background:%s; color:black; border-radius:10px; padding:10px; text-align:center; font-weight:bold;">
-                <div style="font-size:12px;">GBPUSD</div>
-                <div style="font-size:16px;">%s</div>
-                <div style="font-size:11px;">%s%%</div>
-            </div>
-        </div>
-
-        <div style="text-align:center; margin-bottom:10px; display:flex; gap:10px; justify-content:center;">
-            <a href="/tc" style="background:gold; color:black; padding:12px 20px; text-decoration:none; font-weight:bold; border-radius:10px;">RECARGAR</a>
-            <a href="https://wa.me/?text=%s" target="_blank" style="background:#25D366; color:white; padding:12px 20px; text-decoration:none; font-weight:bold; border-radius:10px;">WHATSAPP SENAL</a>
-        </div>
-
-        <div style="height:500px; border:1px solid gold; border-radius:10px;">
-            <iframe src="https://s.tradingview.com/widgetembed/?frameElementId=tradingview_123&symbol=OANDA%%3AXAUUSD&interval=15&hidesidetoolbar=0&symboledit=1&saveimage=1&toolbarbg=000&studies=[]&theme=dark&style=1&timezone=Etc%%2FUTC&studies_overrides={}&overrides={}&enabled_features=[]&disabled_features=[]&locale=es&utm_source=widget&utm_medium=widget&utm_campaign=chart&utm_term=OANDA%%3AXAUUSD" style="width:100%%; height:100%%; border:0;"></iframe>
-        </div>
-
-        <audio id="alertSound" autoplay>
-            <source src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" type="audio/ogg">
-        </audio>
-        <script>
-            var senal = "%s";
-            if(senal == "COMPRA" || senal == "VENTA"){
-                try{
-                    var audio = document.getElementById("alertSound");
-                    audio.play();
-                    if(navigator.vibrate){ navigator.vibrate([500,200,500]); }
-                }catch(e){}
+void OnTradeTransaction(const MqlTradeTransaction& trans, const MqlTradeRequest& request, const MqlTradeResult& result)
+{
+   if(trans.type != TRADE_TRANSACTION_DEAL_ADD) return;
+   if(trans.symbol != _Symbol) return;
+   if(trans.deal_type != DEAL_TYPE_SELL && trans.deal_type != DEAL_TYPE_BUY) return;
+   if(HistoryDealSelect(trans.deal))
+   {
+      long entry = HistoryDealGetInteger(trans.deal, DEAL_ENTRY);
+      if(entry == DEAL_ENTRY_OUT || entry == DEAL_ENTRY_INOUT)
+      {
+         double prof = HistoryDealGetDouble(trans.deal, DEAL_PROFIT) + HistoryDealGetDouble(trans.deal, DEAL_SWAP) + HistoryDealGetDouble(trans.deal, DEAL_COMMISSION);
+         if(ModoAprendizaje)
+         {
+            profitHoy += prof;
+            if(prof >= 0)
+            {
+               ganadasHoy++; rachaGanadora++; rachaPerdedora = 0;
+               ultimaLeccion = "MUY BIEN JEFE! GANASTE! SIGUE ASI - LEARNA";
             }
-            setTimeout(function(){ location.reload(); }, 30000);
-        </script>
-        <p style="color:#666; text-align:center; font-size:10px;">Sonido + Vibracion si es COMPRA/VENTA | Auto-recarga 30s | RAUDY VIP NIVEL DIOS</p>
-    </body>
-    </html>
-    """ % (oro, eur, gbp, c_oro, c_oro, s_oro, conf_oro, txt_oro, ma_r_oro, ma_l_oro, c_eur, c_eur, s_eur, conf_eur, c_gbp, c_gbp, s_gbp, conf_gbp, msg_whatsapp, s_oro)
-    
-    return render_template_string(html)
+            else
+            {
+               perdidasHoy++; rachaPerdedora++; rachaGanadora = 0;
+               ultimaPerdidaTiempo = TimeCurrent();
+               if(rachaPerdedora >= 2)
+                  ultimaLeccion = "JEFE, PERDISTE 2 SEGUIDAS. APRENDI: ESPERO 60 MIN Y PIDO 5 PUNTOS";
+               else
+                  ultimaLeccion = "JEFE, PERDISTE 1. APRENDI: MAS CUIDADO";
+            }
+         }
+      }
+   }
+}
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+void MostrarTablero(double bid, double ask, double compraIA, double ventaIA, double distSL, double distTP, int puntos, double rsi, double atr, double spread, double macd, int verdes, int rojas, string tendencia4H)
+{
+   string t1 = "👑 RAUDY V12 - LEARNA + VELAS - XM GOLD#";
+   string t2 = "XM PRECIO: " + DoubleToString(bid,2) + " | SPREAD: " + DoubleToString(spread,2) + " | MACD: " + DoubleToString(macd,2);
+   string t3 = "APP VELAS: 🟢 VERDES: " + IntegerToString(verdes) + " | 🔴 ROJAS: " + IntegerToString(rojas) + " | 4H: " + tendencia4H;
+   string t4 = "IA COMPRA: " + DoubleToString(compraIA,2) + " | IA VENTA: " + DoubleToString(ventaIA,2);
+   string t5 = "SL=" + DoubleToString(bid-distSL,2) + " (-" + DoubleToString(RiesgoDolar,0) + "$) TP=" + DoubleToString(bid+distTP,2) + " (+" + DoubleToString(GananciaDolar,0) + "$)";
+   string t6 = "PUNTOS: " + IntegerToString(puntos) + "/" + IntegerToString(puntosExigidosHoy) + " | RSI: " + DoubleToString(rsi,1) + " | ATR: " + DoubleToString(atr,2);
+   string t7 = "HOY: " + IntegerToString(operacionesHoy) + "/" + IntegerToString(MaxOperacionesDia) + " | GANADAS: " + IntegerToString(ganadasHoy) + " | PERDIDAS: " + IntegerToString(perdidasHoy) + " | PROFIT: $" + DoubleToString(profitHoy,2);
+   string t8 = "";
+   if(verdes >= 4 && puntos >= puntosExigidosHoy) t8 = "🟢 ¡JEFE! ¡APP DICE 4-5 VERDES! ¡LISTO PARA COMPRA!";
+   else if(rojas >= 3) t8 = "🔴 ¡JEFE! ¡3 ROJAS! ¡NO ENTRES! ¡ESPERA! ¡CAYENDO!";
+   else t8 = "🟡 ESPERA JEFE - APP DICE: MERCADO MEZCLADO - NO ENTRES";
+   string t9 = "📚 LECCION: " + ultimaLeccion;
+   Comment(t1 + "\n" + t2 + "\n" + t3 + "\n" + t4 + "\n" + t5 + "\n" + t6 + "\n" + t7 + "\n" + t8 + "\n" + t9);
+}
+
+void OnTick()
+{
+   double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+   if(bid <= 0 || ask <= 0) return;
+
+   int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+   double tickValue = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
+   double tickSize = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
+   double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+   double maxLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+   double lotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+   long stopLevel = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL);
+   double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
+   double spreadEnDolares = ask - bid;
+   if(tickValue <= 0 || tickSize <= 0) return;
+
+   double loteSeguro = Lote;
+   if(loteSeguro > 0.05) loteSeguro = 0.01;
+   if(ModoAprendizaje && rachaPerdedora >= 2) loteSeguro = 0.01;
+   if(loteSeguro < minLot) loteSeguro = minLot;
+   if(loteSeguro > maxLot) loteSeguro = maxLot;
+   loteSeguro = MathFloor(loteSeguro / lotStep) * lotStep;
+   if(loteSeguro < minLot) loteSeguro = minLot;
+
+   double valorPorPunto = (loteSeguro * tickValue) / tickSize;
+   if(valorPorPunto <= 0) return;
+   double distSL = RiesgoDolar / valorPorPunto;
+   double distTP = GananciaDolar / valorPorPunto;
+   double distMinima = (stopLevel + 5) * point;
+   if(distSL < distMinima) distSL = distMinima;
+   if(distTP < distMinima) distTP = distMinima;
+
+   MqlDateTime t; TimeToStruct(TimeCurrent(), t);
+   datetime hoy = StructToTime(t) - (t.hour*3600 + t.min*60 + t.sec);
+   static double NivelCompraIA = 0;
+   static double NivelVentaIA = 0;
+   if(hoy != diaActual || NivelCompraIA == 0)
+   {
+      diaActual = hoy;
+      operacionesHoy = 0; ganadasHoy = 0; perdidasHoy = 0; profitHoy = 0;
+      rachaGanadora = 0; rachaPerdedora = 0;
+      alarmaHoyYaSono = false;
+      ultimaLeccion = "NUEVO DIA JEFE - V12 EMPIEZA DE CERO";
+      if(ModoIA)
+      {
+         NivelCompraIA = MathRound(bid - 25);
+         NivelVentaIA = MathRound(bid + 25);
+      }
+      else
+      {
+         NivelCompraIA = NivelCompraFijo;
+         NivelVentaIA = NivelVentaFijo;
+      }
+   }
+   bool enHorarioXM = (t.hour >= HoraInicioXM && t.hour < HoraFinXM);
+
+   double m1[], m5[], m15[], h1[], h4[], rsiArr[], atrArr[], macdMain[], macdSignal[];
+   if(CopyBuffer(h_M1,0,0,1,m1)<=0) return;
+   if(CopyBuffer(h_M5,0,0,1,m5)<=0) return;
+   if(CopyBuffer(h_M15,0,0,1,m15)<=0) return;
+   if(CopyBuffer(h_H1,0,0,1,h1)<=0) return;
+   if(CopyBuffer(h_H4,0,0,1,h4)<=0) return;
+   if(CopyBuffer(h_RSI,0,0,1,rsiArr)<=0) return;
+   if(CopyBuffer(h_ATR,0,0,1,atrArr)<=0) return;
+   if(CopyBuffer(h_MACD,0,0,1,macdMain)<=0) return;
+   if(CopyBuffer(h_MACD,1,0,1,macdSignal)<=0) return;
+
+   // --- JEFE: APP VELAS - CONTAR VERDES Y ROJAS ---
+   // VERDE = precio arriba de EMA, ROJA = precio abajo de EMA
+   int verdes = 0; int rojas = 0;
+   if(bid > m1[0]) verdes++; else rojas++;
+   if(bid > m5[0]) verdes++; else rojas++;
+   if(bid > m15[0]) verdes++; else rojas++;
+   if(bid > h1[0]) verdes++; else rojas++;
+   if(bid > h4[0]) verdes++; else rojas++;
+   verdesHoy = verdes; rojasHoy = rojas;
+
+   // JEFE: 4H MANDA - CONFIRMACION MAESTRA
+   string tendencia4H = "🟡 MEZCLADO";
+   bool h4Verde = (bid > h4[0]);
+   bool h4Roja = (bid < h4[0]);
+   if(h4Verde) tendencia4H = "🟢 VERDE - SUBIENDO";
+   if(h4Roja) tendencia4H = "🔴 ROJA - CAYENDO";
+
+   // JEFE: Si hay 3 rojas, marca el tiempo para esperar
+   if(ModoAppVelas && rojas >= 3 && ultima3RojasTiempo == 0)
+   {
+      ultima3RojasTiempo = TimeCurrent();
+      ultimaLeccion = "JEFE, HAY 3 ROJAS COMO EN TU FOTO. APRENDI: ESPERO 30 MIN";
+   }
+   if(rojas < 3) ultima3RojasTiempo = 0;
+
+   bool alcista = (verdes >= 4); // JEFE: APP - Solo si 4 o 5 verdes
+   bool bajista = (rojas >= 4);
+   bool macdCompra = (macdMain[0] > macdSignal[0]);
+   bool macdVenta = (macdMain[0] < macdSignal[0]);
+
+   // JEFE: Si 4H es roja, NUNCA compra - aunque haya verdes en M1
+   if(ModoAppVelas && h4Roja) alcista = false;
+   // JEFE: Si 4H es verde, NUNCA vende
+   if(ModoAppVelas && h4Verde) bajista = false;
+
+   puntosExigidosHoy = MinPuntosIA;
+   if(ModoAprendizaje)
+   {
+      if(atrArr[0] > 20) puntosExigidosHoy = 5;
+      if(rachaPerdedora >= 2) puntosExigidosHoy = 5;
+      if(rachaGanadora >= 2) puntosExigidosHoy = 4;
+   }
+
+   int puntos = 0;
+   if(alcista || bajista) puntos += 2;
+   if(alcista && rsiArr[0] < 70) puntos += 1;
+   if(bajista && rsiArr[0] > 30) puntos += 1;
+   if(atrArr[0] > 5 && atrArr[0] < 30) puntos += 1;
+   double distancia = MathAbs(bid - h1[0]);
+   if(distancia > 10 && distancia < 80) puntos += 1;
+   if(alcista && macdCompra) puntos += 1;
+   if(bajista && macdVenta) puntos += 1;
+   // JEFE: PUNTO EXTRA APP - Si tienes 5 verdes, +1
+   if(verdes == 5) puntos += 1;
+   if(puntos > 7) puntos = 7;
+
+   MostrarTablero(bid, ask, NivelCompraIA, NivelVentaIA, distSL, distTP, puntos, rsiArr[0], atrArr[0], spreadEnDolares, macdMain[0], verdes, rojas, tendencia4H);
+
+   if(AlarmaActiva && verdes >= 4 && puntos >= puntosExigidosHoy && !alarmaHoyYaSono)
+   {
+      alarmaHoyYaSono = true;
+      Alert("👑 RAUDY V12 - JEFE! APP DICE " + IntegerToString(verdes) + " VERDES! 4H " + tendencia4H + " COMPRA GOLD# A " + DoubleToString(bid,2));
+      PlaySound("alert.wav");
+      SendNotification("RAUDY V12 - JEFE! " + IntegerToString(verdes) + " VERDES! " + IntegerToString(puntos) + " puntos! COMPRA GOLD# XM: " + DoubleToString(bid,2));
+   }
+   // JEFE: Alarma de peligro si hay 3 rojas
+   if(AlarmaActiva && rojas >= 3 && !alarmaHoyYaSono)
+   {
+      alarmaHoyYaSono = true;
+      Alert("🔴 RAUDY V12 - JEFE! 3 ROJAS! NO ENTRES! CAYENDO! GOLD# " + DoubleToString(bid,2));
+      SendNotification("RAUDY V12 - JEFE! 3 ROJAS! NO ENTRES! GOLD# " + DoubleToString(bid,2));
+   }
+
+   if(!enHorarioXM) return;
+   if(PositionsTotal() > 0) return;
+   if(operacionesHoy >= MaxOperacionesDia) return;
+
+   // JEFE: LEARNA - Si perdiste 2, espera
+   if(ModoAprendizaje && rachaPerdedora >= 2)
+   {
+      if(TimeCurrent() - ultimaPerdidaTiempo < EsperaTrasPerderMin * 60)
+         return;
+   }
+   // JEFE: APP - Si hay 3 rojas, espera 30 min
+   if(ModoAppVelas && rojas >= 3)
+   {
+      if(TimeCurrent() - ultima3RojasTiempo < EsperaTras3RojasMin * 60)
+         return;
+   }
+
+   if(puntos >= puntosExigidosHoy)
+   {
+      if(alcista && macdCompra && verdes >= 4 && MathAbs(bid - NivelCompraIA) <= 15)
+      {
+         double sl = NormalizeDouble(ask - distSL, digits);
+         double tp = NormalizeDouble(ask + distTP, digits);
+         double precio = NormalizeDouble(ask, digits);
+         if(trade.Buy(loteSeguro, _Symbol, precio, sl, tp, "RAUDY V12 COMPRA 4-5 VERDES"))
+            operacionesHoy++;
+      }
+      if(bajista && macdVenta && rojas >= 4 && MathAbs(bid - NivelVentaIA) <= 15)
+      {
+         double sl = NormalizeDouble(bid + distSL, digits);
+         double tp = NormalizeDouble(bid - distTP, digits);
+         double precio = NormalizeDouble(bid, digits);
+         if(trade.Sell(loteSeguro, _Symbol, precio, sl, tp, "RAUDY V12 VENTA 4-5 ROJAS"))
+            operacionesHoy++;
+      }
+   }
+}
