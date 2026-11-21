@@ -1,50 +1,44 @@
-# CORAZON DEL ROBOT SHINOBI - ORO / XAUUSD - JEFE
-# Este es el cerebro, jefe. Lo demás es adorno.
+# CEREBRO - GOLD SCALPING BOT - MT5 XAUUSD - JEFE
+# Entra rápido, sale rápido, jefe.
 
-import time
-
-class CorazonShinobi:
+class CerebroGoldScalping:
     def __init__(self):
-        self.capital = 1000  # Empieza en DEMO, jefe. No real.
         self.posicion = None
-        self.stop_loss = 15  # Si pierde 15$, se sale, jefe
-        self.take_profit = 30 # Si gana 30$, se sale, jefe
+        self.take_profit = 5  # Gana 5$ y sale, jefe. Poquito pero rápido.
+        self.stop_loss = 3    # Pierde 3$ y sale, jefe.
 
-    def analizar(self, precio, ema_rapida, ema_lenta, rsi):
-        # EMA = media. Si rápida cruza arriba = SUBE
-        # RSI = fuerza. Si RSI < 30 = barato, si > 70 = caro
-        print(f"SHINOBI JEFE: Precio {precio} | RSI {rsi}")
+    def operar(self, precio, banda_arriba, banda_abajo, ema):
+        print(f"ORO: {precio}$ | Arriba: {banda_arriba} | Abajo: {banda_abajo}")
 
-        # SEÑAL DE COMPRA, JEFE
-        if ema_rapida > ema_lenta and rsi < 35 and self.posicion is None:
-            print("SHINOBI: ¡KATANA ARRIBA, JEFE! ¡COMPRO ORO!")
+        # SI TOCA ABAJO = BARATO, JEFE. ¡COMPRA!
+        if precio <= banda_abajo and self.posicion is None:
+            print("GOLD BOT: ¡PRECIO ABAJO, JEFE! ¡COMPRO!")
             self.posicion = ("COMPRA", precio)
             return "COMPRAR"
 
-        # SEÑAL DE VENTA, JEFE
-        if ema_rapida < ema_lenta and rsi > 65 and self.posicion is None:
-            print("SHINOBI: ¡KATANA ABAJO, JEFE! ¡VENDO ORO!")
+        # SI TOCA ARRIBA = CARO, JEFE. ¡VENDE!
+        if precio >= banda_arriba and self.posicion is None:
+            print("GOLD BOT: ¡PRECIO ARRIBA, JEFE! ¡VENDO!")
             self.posicion = ("VENTA", precio)
             return "VENDER"
 
-        # PROTECCION - CORAZON, JEFE
+        # SALIDA RAPIDA, JEFE. SCALPING, JEFE.
         if self.posicion:
             tipo, entrada = self.posicion
             ganancia = precio - entrada if tipo == "COMPRA" else entrada - precio
-
             if ganancia >= self.take_profit:
-                print(f"SHINOBI: ¡GANAMOS {ganancia}$, JEFE! ¡SALIMOS!")
+                print(f"¡GANAMOS {ganancia}$, JEFE! ¡SALIMOS RAPIDO!")
                 self.posicion = None
-                return "CERRAR GANANCIA"
+                return "CERRAR"
             if ganancia <= -self.stop_loss:
-                print(f"SHINOBI: ¡PERDIMOS {ganancia}$, JEFE! ¡SALIMOS PA' NO PERDER MÁS!")
+                print(f"Perdimos {ganancia}$, jefe. Salimos.")
                 self.posicion = None
-                return "CERRAR PERDIDA"
+                return "CERRAR"
 
-        print("SHINOBI: Esperando, jefe. Como ninja, jefe.")
+        print("Esperando, jefe. Buscando toque de banda...")
         return "ESPERAR"
 
-# PRUEBA DEL CORAZON, JEFE
-shinobi = CorazonShinobi()
-shinobi.analizar(precio=2650, ema_rapida=2655, ema_lenta=2640, rsi=28)
-shinobi.analizar(precio=2680, ema_rapida=2660, ema_lenta=2650, rsi=72)
+# PRUEBA, JEFE
+bot = CerebroGoldScalping()
+bot.operar(precio=2648, banda_arriba=2660, banda_abajo=2650, ema=2655)
+bot.operar(precio=2653, banda_arriba=2660, banda_abajo=2650, ema=2655)
