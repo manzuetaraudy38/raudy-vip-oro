@@ -1,112 +1,148 @@
-# JEFE BOT - CUADRITOS TODO JUNTO - JEFE ORO
-import os
-from flask import Flask, request, jsonify
-app = Flask(__name__)
-ultima = {"accion": "ESPERANDO", "precio": "", "hora": ""}
+# ROBOT JEFE - TE AVISA Y TE HABLA
+# EMA 50 + EMA 200 + RSI + Multi-Timeframe
+# 1m - 5m - 15m - 1h - 4h
 
-HTML = """
-<html><head><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>JEFE ORO - CUADRITOS</title>
-<style>
-body{background:#0a0a0a;color:white;text-align:center;font-family:Arial;padding:5px;margin:0}
-h1{font-size:26px;margin:3px} h2{color:#FFD700;margin:3px;font-size:18px}
-.voz{background:#FFD700;color:black;padding:14px;border-radius:15px;font-size:18px;font-weight:bold;border:none;width:98%}
-#senal{font-size:22px;font-weight:bold;padding:12px;border-radius:15px;margin:8px;background:#333}
-.regla{background:#1a1a1a;padding:8px;border-radius:12px;margin:8px;font-size:15px}
-.cuadricula{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:2px}
-.cajaGrafico{background:#111;border-radius:12px;overflow:hidden;border:2px solid #333}
-.cajaGrafico.grande{grid-column:span 2;border-color:#FFD700}
-.titulo{font-size:15px;font-weight:bold;padding:6px;background:#222}
-.grafico{height:230px}
-.graficoGrande{height:260px}
-</style></head>
-<body>
-<h1>👑 JEFE ORO 👑</h1>
-<h2>TODO JUNTO - 5 CUADRITOS</h2>
+import time
+import pandas as pd
+import ccxt
+import pyttsx3
+import requests
+import matplotlib.pyplot as plt
 
-<button class="voz" onclick="activar()">🔊 ACTIVAR VOZ JEFE 🔊</button>
-<div id="senal">⏳ ESPERANDO... MIRA LOS CUADRITOS, JEFE</div>
+# --- CONFIGURACION JEFE ---
+SYMBOL = 'BTC/USDT'  # Cambia: EUR/USD, XAU/USD, BTC/USDT
+TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h']
 
-<div class="regla">
-🟢🟢🟢🟢🟢 TODO VERDE = COMPRA JEFE<br>
-🔴🔴🔴🔴🔴 TODO ROJO = VENTA JEFE<br>
-🟢🔴 MEZCLADO = ESPERA JEFE
-</div>
+# TU TELEGRAM JEFE - Pon tus datos aqui
+TELEGRAM_TOKEN = 'TU_TOKEN_DE_TELEGRAM'
+TELEGRAM_CHAT_ID = 'TU_CHAT_ID'
 
-<div class="cuadricula">
+# Voz
+voz = pyttsx3.init()
+voz.setProperty('rate', 160)  # Velocidad
+voz.setProperty('volume', 1.0)
 
-  <div class="cajaGrafico">
-    <div class="titulo">1️⃣ 1 MINUTO 🟢🔴</div>
-    <div class="grafico"><div id="tv1"></div></div>
-  </div>
+def hablar(texto):
+    """El robot te habla, jefe"""
+    print(f"🔊 HABLANDO: {texto}")
+    voz.say(texto)
+    voz.runAndWait()
 
-  <div class="cajaGrafico">
-    <div class="titulo">2️⃣ 5 MINUTOS 🟢🔴</div>
-    <div class="grafico"><div id="tv5"></div></div>
-  </div>
-
-  <div class="cajaGrafico">
-    <div class="titulo">3️⃣ 15 MINUTOS 🟢🔴</div>
-    <div class="grafico"><div id="tv15"></div></div>
-  </div>
-
-  <div class="cajaGrafico">
-    <div class="titulo">4️⃣ 1 HORA 🟢🔴</div>
-    <div class="grafico"><div id="tv60"></div></div>
-  </div>
-
-  <div class="cajaGrafico grande">
-    <div class="titulo">5️⃣ 4 HORAS - JEFE GRANDE 👑</div>
-    <div class="graficoGrande"><div id="tv240"></div></div>
-  </div>
-
-</div>
-
-<p>JEFE OK - ORO REAL</p>
-
-<script src="https://s3.tradingview.com/tv.js"></script>
-<script>
-function crear(id, intervalo, alto){
-  new TradingView.widget({"width":"100%","height":alto,"symbol":"OANDA:XAUUSD","interval":intervalo,"timezone":"America/Santo_Domingo","theme":"dark","style":"1","locale":"es","container_id":id});
-}
-crear("tv1","1",230); crear("tv5","5",230); crear("tv15","15",230); crear("tv60","60",230); crear("tv240","240",260);
-var vozOn=false; var ultimaHablada="";
-function hablar(t){ var v=new SpeechSynthesisUtterance(t); v.lang='es-ES'; speechSynthesis.cancel(); speechSynthesis.speak(v); }
-function activar(){ vozOn=true; hablar('Jefe Oro listo. Cinco cuadritos, jefe. Todo junto, jefe. Cuando todo este verde, compra, jefe. Cuando todo este rojo, venta, jefe.'); }
-async function revisar(){
-  try{
-    var r=await fetch('/senal'); var d=await r.json();
-    var caja=document.getElementById('senal');
-    if(d.accion=='COMPRA'){ caja.innerHTML='🟢 COMPRA JEFE 🟢<br>Precio: '+d.precio; caja.style.background='#00C853'; }
-    if(d.accion=='VENTA'){ caja.innerHTML='🔴 VENTA JEFE 🔴<br>Precio: '+d.precio; caja.style.background='#D50000'; }
-    if(d.accion!='ESPERANDO' && vozOn && d.hora!=ultimaHablada){
-      ultimaHablada=d.hora;
-      if(d.accion=='COMPRA') hablar('COMPRA JEFE, COMPRA. Todo verde, jefe.');
-      if(d.accion=='VENTA') hablar('VENTA JEFE, VENTA. Todo rojo, jefe.');
-    }
-  }catch(e){}
-}
-setInterval(revisar, 5000); revisar();
-</script>
-</body></html>
-"""
-
-@app.route("/")
-def home(): return HTML
-@app.route("/senal")
-def senal(): return jsonify(ultima)
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    global ultima
+def enviar_telegram(mensaje, foto=None):
+    """Te avisa por Telegram"""
     try:
-        datos = request.get_json(force=True)
-        accion = str(datos.get("accion","")).upper()
-        if accion in ["COMPRA","VENTA"]:
-            ultima = {"accion": accion, "precio": str(datos.get("precio","")), "hora": str(datos.get("hora",""))}
-            return jsonify({"ok": True, "jefe": ultima})
-    except Exception as e: print(e)
-    return jsonify({"ok": False})
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+        requests.post(url, data={'chat_id': TELEGRAM_CHAT_ID, 'text': mensaje})
+        if foto:
+            url_foto = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto"
+            with open(foto, 'rb') as f:
+                requests.post(url_foto, data={'chat_id': TELEGRAM_CHAT_ID}, files={'photo': f})
+    except Exception as e:
+        print(f"Error Telegram jefe: {e}")
+
+def get_velas(symbol, timeframe, limit=250):
+    exchange = ccxt.binance({'enableRateLimit': True})
+    ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+    df = pd.DataFrame(ohlcv, columns=['time', 'open', 'high', 'low', 'close', 'volume'])
+    df['time'] = pd.to_datetime(df['time'], unit='ms')
+    return df
+
+def calcular(df):
+    # EMA 50 y EMA 200 JEFE
+    df['EMA50'] = df['close'].ewm(span=50, adjust=False).mean()
+    df['EMA200'] = df['close'].ewm(span=200, adjust=False).mean()
+    
+    # RSI 14
+    delta = df['close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = gain / loss
+    df['RSI'] = 100 - (100 / (1 + rs))
+    return df
+
+def hacer_grafico(df, timeframe, señal):
+    """Hace el grafico con EMA50, EMA200, RSI"""
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 6), gridspec_kw={'height_ratios': [3, 1]})
+    
+    ax1.plot(df['time'], df['close'], label='Precio', color='black', linewidth=1)
+    ax1.plot(df['time'], df['EMA50'], label='EMA 50', color='blue', linewidth=1.5)
+    ax1.plot(df['time'], df['EMA200'], label='EMA 200', color='red', linewidth=1.5)
+    ax1.set_title(f"{SYMBOL} - {timeframe} - {señal} - JEFE")
+    ax1.legend()
+    ax1.grid(True)
+    
+    ax2.plot(df['time'], df['RSI'], label='RSI', color='purple')
+    ax2.axhline(70, color='red', linestyle='--')
+    ax2.axhline(30, color='green', linestyle='--')
+    ax2.set_ylim(0, 100)
+    ax2.legend()
+    ax2.grid(True)
+    
+    nombre = f"grafico_{timeframe}.png"
+    plt.tight_layout()
+    plt.savefig(nombre)
+    plt.close()
+    return nombre
+
+def analizar():
+    print("\n--- ANALIZANDO JEFE ---")
+    señales = {}
+    for tf in TIMEFRAMES:
+        df = get_velas(SYMBOL, tf)
+        df = calcular(df)
+        ultima = df.iloc[-1]
+        
+        # LOGICA JEFE
+        # SUBE: Precio > EMA50 > EMA200 y RSI entre 50-70
+        # BAJA: Precio < EMA50 < EMA200 y RSI entre 30-50
+        señal = "NEUTRO"
+        if ultima['close'] > ultima['EMA50'] > ultima['EMA200'] and 50 < ultima['RSI'] < 70:
+            señal = "SUBE"
+        elif ultima['close'] < ultima['EMA50'] < ultima['EMA200'] and 30 < ultima['RSI'] < 50:
+            señal = "BAJA"
+        
+        señales[tf] = señal
+        print(f"{tf}: {señal} | Precio: {ultima['close']:.2f} | EMA50: {ultima['EMA50']:.2f} | EMA200: {ultima['EMA200']:.2f} | RSI: {ultima['RSI']:.1f}")
+        
+        # Guardar ultimo df para grafico
+        if tf == '15m':
+            df_15m = df
+    return señales, df_15m
+
+def robot_que_habla():
+    hablar("Jefe, robot encendido. Te aviso cuando vaya a subir.")
+    ultima_señal = ""
+    
+    while True:
+        try:
+            señales, df_15m = analizar()
+            
+            # Si 4H + 1H + 15m dicen SUBE = AVISO FUERTE
+            if señales['4h'] == "SUBE" and señales['1h'] == "SUBE" and señales['15m'] == "SUBE":
+                if ultima_señal != "SUBE":
+                    mensaje = f"🚀 JEFE VA A SUBIR! {SYMBOL}\n4H: SUBE\n1H: SUBE\n15m: SUBE\nEMA50 > EMA200\nRSI Confirmado"
+                    print(mensaje)
+                    hablar("Jefe, jefe, va a subir. Va a subir, jefe. Entra ahora, jefe.")
+                    grafico = hacer_grafico(df_15m, '15m', 'VA A SUBIR')
+                    enviar_telegram(mensaje, grafico)
+                    ultima_señal = "SUBE"
+            
+            elif señales['4h'] == "BAJA" and señales['1h'] == "BAJA" and señales['15m'] == "BAJA":
+                if ultima_señal != "BAJA":
+                    mensaje = f"📉 JEFE VA A BAJAR! {SYMBOL}\n4H: BAJA\n1H: BAJA\n15m: BAJA\nEMA50 < EMA200"
+                    print(mensaje)
+                    hablar("Jefe, cuidado, va a bajar. Va a bajar, jefe. No entres, jefe.")
+                    grafico = hacer_grafico(df_15m, '15m', 'VA A BAJAR')
+                    enviar_telegram(mensaje, grafico)
+                    ultima_señal = "BAJA"
+            else:
+                print("⏳ Esperando jefe... No hay acuerdo")
+            
+            time.sleep(60)  # Revisa cada 1 minuto
+            
+        except Exception as e:
+            print(f"Error jefe: {e}")
+            time.sleep(10)
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    robot_que_habla()
