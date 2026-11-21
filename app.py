@@ -1,71 +1,62 @@
-# JEFE BOT - COMPLETO - TODO JUNTO - JEFE ORO
-# 12 ROBOTS - 6 COMPRA - 6 VENTA - H4 MANDA
-# GRAFICO REAL 1 MINUTO - VOZ - AVISA SOLO - TRADINGVIEW
+# JEFE BOT - 5 GRAFICOS - TODO VERDE = COMPRA - JEFE ORO
 import os
 from flask import Flask, request, jsonify
 app = Flask(__name__)
-
-# Aqui guardamos la ultima señal que manda TradingView
 ultima = {"accion": "ESPERANDO", "precio": "", "hora": ""}
 
 HTML = """
 <html><head><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>JEFE ORO</title>
+<title>JEFE ORO - 5 GRAFICOS</title>
 <style>
-body{background:#0a0a0a;color:white;text-align:center;font-family:Arial;padding:10px;margin:0}
-h1{font-size:32px;margin:5px} h2{color:#FFD700;margin:5px}
-.boton{display:block;padding:20px;margin:10px;border-radius:20px;font-size:26px;font-weight:bold;color:white;text-decoration:none}
-.verde{background:#00C853} .rojo{background:#D50000}
-.caja{background:#1a1a1a;padding:12px;border-radius:15px;margin:10px}
-.voz{background:#FFD700;color:black;padding:20px;border-radius:20px;font-size:22px;font-weight:bold;border:none;width:95%}
-.grafico{height:450px;margin:10px;border-radius:15px;overflow:hidden}
-#senal{font-size:32px;font-weight:bold;padding:20px;border-radius:20px;margin:10px;background:#333}
-.robot{background:#222;padding:10px;margin:4px;border-radius:10px;display:inline-block;width:40%}
+body{background:#0a0a0a;color:white;text-align:center;font-family:Arial;padding:8px;margin:0}
+h1{font-size:30px;margin:5px} h2{color:#FFD700;margin:5px}
+.voz{background:#FFD700;color:black;padding:18px;border-radius:20px;font-size:20px;font-weight:bold;border:none;width:95%}
+#senal{font-size:28px;font-weight:bold;padding:18px;border-radius:20px;margin:10px;background:#333}
+.caja{background:#1a1a1a;padding:10px;border-radius:15px;margin:10px}
+.grafico{height:300px;margin:10px;border-radius:15px;overflow:hidden;background:#111}
+.titulo{font-size:22px;font-weight:bold;padding:10px}
+.verde{color:#00FF00} .rojo{color:#FF5252}
 </style></head>
 <body>
 <h1>👑 JEFE ORO 👑</h1>
-<h2>H4 MANDA - JEFE</h2>
+<h2>5 GRAFICOS - TODO VERDE = COMPRA</h2>
 
-<button class="voz" onclick="activar()">🔊 ACTIVAR VOZ JEFE 🔊<br>dale 1 vez para que te avise solo</button>
-
-<div id="senal">⏳ ESPERANDO SEÑAL DE TRADINGVIEW...</div>
+<button class="voz" onclick="activar()">🔊 ACTIVAR VOZ JEFE 🔊</button>
+<div id="senal">⏳ ESPERANDO... MIRA LOS 5 GRAFICOS, JEFE</div>
 
 <div class="caja">
-<h2>🤖 12 ROBOTS ACTIVOS 🤖</h2>
-<p>6 COMPRA - 6 VENTA - CADA VELA 1 MINUTO - PRECIO REAL</p>
+<h2>REGLA JEFE 👑</h2>
+<p>🟢🟢🟢🟢🟢 TODO VERDE = COMPRA JEFE</p>
+<p>🔴🔴🔴🔴🔴 TODO ROJO = VENTA JEFE</p>
+<p>🟢🔴 MEZCLADO = ESPERA JEFE, NO TOQUES NADA</p>
 </div>
 
-<!-- GRAFICO REAL ORO - TRADINGVIEW - 1 MINUTO -->
-<div class="grafico">
-<div class="tradingview-widget-container"><div id="tv"></div>
+<div class="titulo">1️⃣ GRAFICO 1 MINUTO - JEFE</div>
+<div class="grafico"><div id="tv1"></div></div>
+
+<div class="titulo">2️⃣ GRAFICO 5 MINUTOS - JEFE</div>
+<div class="grafico"><div id="tv5"></div></div>
+
+<div class="titulo">3️⃣ GRAFICO 15 MINUTOS - JEFE</div>
+<div class="grafico"><div id="tv15"></div></div>
+
+<div class="titulo">4️⃣ GRAFICO 1 HORA - JEFE</div>
+<div class="grafico"><div id="tv60"></div></div>
+
+<div class="titulo">5️⃣ GRAFICO 4 HORAS - JEFE GRANDE 👑</div>
+<div class="grafico"><div id="tv240"></div></div>
+
+<p>JEFE OK - ORO REAL - 5 TIEMPOS</p>
+
 <script src="https://s3.tradingview.com/tv.js"></script>
 <script>
-new TradingView.widget({"width":"100%","height":450,"symbol":"OANDA:XAUUSD","interval":"1","timezone":"America/Santo_Domingo","theme":"dark","style":"1","locale":"es","container_id":"tv"});
-</script>
-</div>
-</div>
-
-<a class="boton verde" href="#" onclick="probar('COMPRA');return false;">🟢 COMPRA - 6 ROBOTS</a>
-<a class="boton rojo" href="#" onclick="probar('VENTA');return false;">🔴 VENTA - 6 ROBOTS</a>
-
-<div class="caja">
-<h3>ROBOTS COMPRA</h3>
-<div class="robot">🤖 COMPRA 1</div><div class="robot">🤖 COMPRA 2</div>
-<div class="robot">🤖 COMPRA 3</div><div class="robot">🤖 COMPRA 4</div>
-<div class="robot">🤖 COMPRA 5</div><div class="robot">🤖 COMPRA 6</div>
-<h3>ROBOTS VENTA</h3>
-<div class="robot">🤖 VENTA 1</div><div class="robot">🤖 VENTA 2</div>
-<div class="robot">🤖 VENTA 3</div><div class="robot">🤖 VENTA 4</div>
-<div class="robot">🤖 VENTA 5</div><div class="robot">🤖 VENTA 6</div>
-</div>
-
-<p>JEFE OK - LIVE - ORO REAL - H4 MANDA</p>
-
-<script>
+function crear(id, intervalo){
+  new TradingView.widget({"width":"100%","height":300,"symbol":"OANDA:XAUUSD","interval":intervalo,"timezone":"America/Santo_Domingo","theme":"dark","style":"1","locale":"es","container_id":id});
+}
+crear("tv1","1"); crear("tv5","5"); crear("tv15","15"); crear("tv60","60"); crear("tv240","240");
 var vozOn=false; var ultimaHablada="";
 function hablar(t){ var v=new SpeechSynthesisUtterance(t); v.lang='es-ES'; speechSynthesis.cancel(); speechSynthesis.speak(v); }
-function activar(){ vozOn=true; hablar('Jefe Oro listo. Doce robots activos. Seis compra, seis venta. H4 manda. Ahora te aviso solo, jefe. Cuando TradingView diga compra o venta, yo te lo digo, jefe.'); }
-function probar(a){ hablar(a+' JEFE, '+a+'. Prueba, jefe.'); }
+function activar(){ vozOn=true; hablar('Jefe Oro listo. Cinco graficos, jefe. Uno, cinco, quince, una hora, cuatro horas. Cuando todo este verde, compra, jefe. Cuando todo este rojo, venta, jefe.'); }
 async function revisar(){
   try{
     var r=await fetch('/senal'); var d=await r.json();
@@ -74,8 +65,8 @@ async function revisar(){
     if(d.accion=='VENTA'){ caja.innerHTML='🔴 VENTA JEFE 🔴<br>Precio: '+d.precio; caja.style.background='#D50000'; }
     if(d.accion!='ESPERANDO' && vozOn && d.hora!=ultimaHablada){
       ultimaHablada=d.hora;
-      if(d.accion=='COMPRA') hablar('COMPRA JEFE, COMPRA. Oro para arriba, jefe. Compra ahora, jefe.');
-      if(d.accion=='VENTA') hablar('VENTA JEFE, VENTA. Oro para abajo, jefe. Venta ahora, jefe.');
+      if(d.accion=='COMPRA') hablar('COMPRA JEFE, COMPRA. Todo verde, jefe.');
+      if(d.accion=='VENTA') hablar('VENTA JEFE, VENTA. Todo rojo, jefe.');
     }
   }catch(e){}
 }
@@ -85,13 +76,9 @@ setInterval(revisar, 5000); revisar();
 """
 
 @app.route("/")
-def home():
-    return HTML
-
+def home(): return HTML
 @app.route("/senal")
-def senal():
-    return jsonify(ultima)
-
+def senal(): return jsonify(ultima)
 @app.route("/webhook", methods=["POST"])
 def webhook():
     global ultima
@@ -100,19 +87,9 @@ def webhook():
         accion = str(datos.get("accion","")).upper()
         if accion in ["COMPRA","VENTA"]:
             ultima = {"accion": accion, "precio": str(datos.get("precio","")), "hora": str(datos.get("hora",""))}
-            print("JEFE SEÑAL:", ultima)
             return jsonify({"ok": True, "jefe": ultima})
-    except Exception as e:
-        print(e)
+    except Exception as e: print(e)
     return jsonify({"ok": False})
-
-@app.route("/compra")
-def compra():
-    return "<h1 style='text-align:center'>🟢 COMPRA JEFE 🟢<br><a href='/'>VOLVER</a></h1>"
-
-@app.route("/venta")
-def venta():
-    return "<h1 style='text-align:center'>🔴 VENTA JEFE 🔴<br><a href='/'>VOLVER</a></h1>"
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
