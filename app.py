@@ -1,44 +1,50 @@
-# ROBOT DOBLE EN 1 - TRADING CON IA - JEFE
-# 1 = Robot Comprador, 2 = Robot Vendedor, Chip IA decide
+# CORAZON DEL ROBOT SHINOBI - ORO / XAUUSD - JEFE
+# Este es el cerebro, jefe. Lo demás es adorno.
 
-class RobotTradingJefe:
+import time
+
+class CorazonShinobi:
     def __init__(self):
-        self.dinero = 1000
-        self.cripto = 0
-        self.chip_ia = "ACTIVO"
+        self.capital = 1000  # Empieza en DEMO, jefe. No real.
+        self.posicion = None
+        self.stop_loss = 15  # Si pierde 15$, se sale, jefe
+        self.take_profit = 30 # Si gana 30$, se sale, jefe
 
-    def robot_1_comprador(self, precio, tendencia):
-        # Si baja el precio y la IA dice COMPRA
-        if tendencia == "BAJA" and precio < 90:
-            print("ROBOT 1 JEFE: ¡COMPRO, JEFE!")
+    def analizar(self, precio, ema_rapida, ema_lenta, rsi):
+        # EMA = media. Si rápida cruza arriba = SUBE
+        # RSI = fuerza. Si RSI < 30 = barato, si > 70 = caro
+        print(f"SHINOBI JEFE: Precio {precio} | RSI {rsi}")
+
+        # SEÑAL DE COMPRA, JEFE
+        if ema_rapida > ema_lenta and rsi < 35 and self.posicion is None:
+            print("SHINOBI: ¡KATANA ARRIBA, JEFE! ¡COMPRO ORO!")
+            self.posicion = ("COMPRA", precio)
             return "COMPRAR"
-        return "ESPERAR"
 
-    def robot_2_vendedor(self, precio, tendencia):
-        # Si sube el precio y la IA dice VENDE
-        if tendencia == "SUBE" and precio > 110:
-            print("ROBOT 2 JEFE: ¡VENDO, JEFE!")
+        # SEÑAL DE VENTA, JEFE
+        if ema_rapida < ema_lenta and rsi > 65 and self.posicion is None:
+            print("SHINOBI: ¡KATANA ABAJO, JEFE! ¡VENDO ORO!")
+            self.posicion = ("VENTA", precio)
             return "VENDER"
+
+        # PROTECCION - CORAZON, JEFE
+        if self.posicion:
+            tipo, entrada = self.posicion
+            ganancia = precio - entrada if tipo == "COMPRA" else entrada - precio
+
+            if ganancia >= self.take_profit:
+                print(f"SHINOBI: ¡GANAMOS {ganancia}$, JEFE! ¡SALIMOS!")
+                self.posicion = None
+                return "CERRAR GANANCIA"
+            if ganancia <= -self.stop_loss:
+                print(f"SHINOBI: ¡PERDIMOS {ganancia}$, JEFE! ¡SALIMOS PA' NO PERDER MÁS!")
+                self.posicion = None
+                return "CERRAR PERDIDA"
+
+        print("SHINOBI: Esperando, jefe. Como ninja, jefe.")
         return "ESPERAR"
 
-    def chip_ia_decide(self, precio, tendencia):
-        print(f"CHIP IA JEFE: Precio {precio} - Tendencia {tendencia}")
-        accion1 = self.robot_1_comprador(precio, tendencia)
-        accion2 = self.robot_2_vendedor(precio, tendencia)
-
-        if accion1 == "COMPRAR":
-            self.cripto += 1
-            self.dinero -= precio
-            print(f"¡COMPRADO, JEFE! Dinero: {self.dinero}")
-        elif accion2 == "VENDER":
-            self.cripto -= 1
-            self.dinero += precio
-            print(f"¡VENDIDO, JEFE! Dinero: {self.dinero}")
-        else:
-            print("CHIP IA: ESPERAMOS, JEFE. No hay jugada.")
-
-# PRUEBA, JEFE
-robot = RobotTradingJefe()
-robot.chip_ia_decide(85, "BAJA")
-robot.chip_ia_decide(115, "SUBE")
-robot.chip_ia_decide(100, "LATERAL")
+# PRUEBA DEL CORAZON, JEFE
+shinobi = CorazonShinobi()
+shinobi.analizar(precio=2650, ema_rapida=2655, ema_lenta=2640, rsi=28)
+shinobi.analizar(precio=2680, ema_rapida=2660, ema_lenta=2650, rsi=72)
