@@ -1,44 +1,39 @@
-# CEREBRO - GOLD SCALPING BOT - MT5 XAUUSD - JEFE
-# Entra rápido, sale rápido, jefe.
+# CEREBRO - ROOK TRADE EXECUTOR - JEFE
+# No adivina. PROTEGE, jefe.
 
-class CerebroGoldScalping:
+class CerebroRook:
     def __init__(self):
-        self.posicion = None
-        self.take_profit = 5  # Gana 5$ y sale, jefe. Poquito pero rápido.
-        self.stop_loss = 3    # Pierde 3$ y sale, jefe.
+        self.perdida_dia = 0
+        self.limite_diario = -100  # Si pierdes 100$ en el día, STOP, jefe
+        self.capital = 1000
 
-    def operar(self, precio, banda_arriba, banda_abajo, ema):
-        print(f"ORO: {precio}$ | Arriba: {banda_arriba} | Abajo: {banda_abajo}")
+    def calcular_lote(self, riesgo_por_operacion=10, stop_en_dolares=10):
+        # Cuánto arriesgas, jefe. Ejemplo: 10$ por operación
+        lote = riesgo_por_operacion / stop_en_dolares
+        print(f"ROOK: Lote calculado: {lote}, jefe. No te pases.")
+        return lote
 
-        # SI TOCA ABAJO = BARATO, JEFE. ¡COMPRA!
-        if precio <= banda_abajo and self.posicion is None:
-            print("GOLD BOT: ¡PRECIO ABAJO, JEFE! ¡COMPRO!")
-            self.posicion = ("COMPRA", precio)
-            return "COMPRAR"
+    def ejecutar(self, accion, precio):
+        # 1. ¿YA PERDISTE MUCHO HOY, JEFE?
+        if self.perdida_dia <= self.limite_diario:
+            print("ROOK: ¡DAILY LOSS LIMIT HIT, JEFE!")
+            print("¡BLOQUEADO, JEFE! Vuelve mañana. No venganza, jefe.")
+            return "BLOQUEADO"
 
-        # SI TOCA ARRIBA = CARO, JEFE. ¡VENDE!
-        if precio >= banda_arriba and self.posicion is None:
-            print("GOLD BOT: ¡PRECIO ARRIBA, JEFE! ¡VENDO!")
-            self.posicion = ("VENTA", precio)
-            return "VENDER"
+        # 2. Si todo bien, ejecuta, jefe
+        lote = self.calcular_lote()
+        print(f"ROOK: Ejecutando {accion} a {precio} con lote {lote}, jefe.")
+        print("ROOK: Stop Loss y Take Profit puestos solos, jefe.")
+        return "EJECUTADO"
 
-        # SALIDA RAPIDA, JEFE. SCALPING, JEFE.
-        if self.posicion:
-            tipo, entrada = self.posicion
-            ganancia = precio - entrada if tipo == "COMPRA" else entrada - precio
-            if ganancia >= self.take_profit:
-                print(f"¡GANAMOS {ganancia}$, JEFE! ¡SALIMOS RAPIDO!")
-                self.posicion = None
-                return "CERRAR"
-            if ganancia <= -self.stop_loss:
-                print(f"Perdimos {ganancia}$, jefe. Salimos.")
-                self.posicion = None
-                return "CERRAR"
-
-        print("Esperando, jefe. Buscando toque de banda...")
-        return "ESPERAR"
+    def actualizar_perdida(self, resultado):
+        self.perdida_dia += resultado
+        print(f"ROOK: Pérdida hoy: {self.perdida_dia}$, jefe.")
+        if self.perdida_dia <= self.limite_diario:
+            print("ROOK: ¡TE BLOQUEO, JEFE! Pa' que no pierdas más.")
 
 # PRUEBA, JEFE
-bot = CerebroGoldScalping()
-bot.operar(precio=2648, banda_arriba=2660, banda_abajo=2650, ema=2655)
-bot.operar(precio=2653, banda_arriba=2660, banda_abajo=2650, ema=2655)
+rook = CerebroRook()
+rook.ejecutar("COMPRAR ORO", 2650)
+rook.actualizar_perdida(-110)  # Perdiste 110$, jefe
+rook.ejecutar("COMPRAR ORO", 2652)  # Ya no te deja, jefe
