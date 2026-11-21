@@ -75,4 +75,38 @@ function hablar(t){ var v=new SpeechSynthesisUtterance(t); v.lang='es-ES'; speec
 function activar(){ vozOn=true; hablar('Jefe Oro listo. Cinco cuadritos, jefe. Todo junto, jefe. Cuando todo este verde, compra, jefe. Cuando todo este rojo, venta, jefe.'); }
 async function revisar(){
   try{
-    var r=await fetch('/
+    var r=await fetch('/senal'); var d=await r.json();
+    var caja=document.getElementById('senal');
+    if(d.accion=='COMPRA'){ caja.innerHTML='🟢 COMPRA JEFE 🟢<br>Precio: '+d.precio; caja.style.background='#00C853'; }
+    if(d.accion=='VENTA'){ caja.innerHTML='🔴 VENTA JEFE 🔴<br>Precio: '+d.precio; caja.style.background='#D50000'; }
+    if(d.accion!='ESPERANDO' && vozOn && d.hora!=ultimaHablada){
+      ultimaHablada=d.hora;
+      if(d.accion=='COMPRA') hablar('COMPRA JEFE, COMPRA. Todo verde, jefe.');
+      if(d.accion=='VENTA') hablar('VENTA JEFE, VENTA. Todo rojo, jefe.');
+    }
+  }catch(e){}
+}
+setInterval(revisar, 5000); revisar();
+</script>
+</body></html>
+"""
+
+@app.route("/")
+def home(): return HTML
+@app.route("/senal")
+def senal(): return jsonify(ultima)
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    global ultima
+    try:
+        datos = request.get_json(force=True)
+        accion = str(datos.get("accion","")).upper()
+        if accion in ["COMPRA","VENTA"]:
+            ultima = {"accion": accion, "precio": str(datos.get("precio","")), "hora": str(datos.get("hora",""))}
+            return jsonify({"ok": True, "jefe": ultima})
+    except Exception as e: print(e)
+    return jsonify({"ok": False})
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
