@@ -1,50 +1,39 @@
-# CORAZON DEL ROBOT SHINOBI - ORO / XAUUSD - JEFE
-# Este es el cerebro, jefe. Lo demás es adorno.
+# CEREBRO - ROOK TRADE EXECUTOR - JEFE
+# No adivina. PROTEGE, jefe.
 
-import time
-
-class CorazonShinobi:
+class CerebroRook:
     def __init__(self):
-        self.capital = 1000  # Empieza en DEMO, jefe. No real.
-        self.posicion = None
-        self.stop_loss = 15  # Si pierde 15$, se sale, jefe
-        self.take_profit = 30 # Si gana 30$, se sale, jefe
+        self.perdida_dia = 0
+        self.limite_diario = -100  # Si pierdes 100$ en el día, STOP, jefe
+        self.capital = 1000
 
-    def analizar(self, precio, ema_rapida, ema_lenta, rsi):
-        # EMA = media. Si rápida cruza arriba = SUBE
-        # RSI = fuerza. Si RSI < 30 = barato, si > 70 = caro
-        print(f"SHINOBI JEFE: Precio {precio} | RSI {rsi}")
+    def calcular_lote(self, riesgo_por_operacion=10, stop_en_dolares=10):
+        # Cuánto arriesgas, jefe. Ejemplo: 10$ por operación
+        lote = riesgo_por_operacion / stop_en_dolares
+        print(f"ROOK: Lote calculado: {lote}, jefe. No te pases.")
+        return lote
 
-        # SEÑAL DE COMPRA, JEFE
-        if ema_rapida > ema_lenta and rsi < 35 and self.posicion is None:
-            print("SHINOBI: ¡KATANA ARRIBA, JEFE! ¡COMPRO ORO!")
-            self.posicion = ("COMPRA", precio)
-            return "COMPRAR"
+    def ejecutar(self, accion, precio):
+        # 1. ¿YA PERDISTE MUCHO HOY, JEFE?
+        if self.perdida_dia <= self.limite_diario:
+            print("ROOK: ¡DAILY LOSS LIMIT HIT, JEFE!")
+            print("¡BLOQUEADO, JEFE! Vuelve mañana. No venganza, jefe.")
+            return "BLOQUEADO"
 
-        # SEÑAL DE VENTA, JEFE
-        if ema_rapida < ema_lenta and rsi > 65 and self.posicion is None:
-            print("SHINOBI: ¡KATANA ABAJO, JEFE! ¡VENDO ORO!")
-            self.posicion = ("VENTA", precio)
-            return "VENDER"
+        # 2. Si todo bien, ejecuta, jefe
+        lote = self.calcular_lote()
+        print(f"ROOK: Ejecutando {accion} a {precio} con lote {lote}, jefe.")
+        print("ROOK: Stop Loss y Take Profit puestos solos, jefe.")
+        return "EJECUTADO"
 
-        # PROTECCION - CORAZON, JEFE
-        if self.posicion:
-            tipo, entrada = self.posicion
-            ganancia = precio - entrada if tipo == "COMPRA" else entrada - precio
+    def actualizar_perdida(self, resultado):
+        self.perdida_dia += resultado
+        print(f"ROOK: Pérdida hoy: {self.perdida_dia}$, jefe.")
+        if self.perdida_dia <= self.limite_diario:
+            print("ROOK: ¡TE BLOQUEO, JEFE! Pa' que no pierdas más.")
 
-            if ganancia >= self.take_profit:
-                print(f"SHINOBI: ¡GANAMOS {ganancia}$, JEFE! ¡SALIMOS!")
-                self.posicion = None
-                return "CERRAR GANANCIA"
-            if ganancia <= -self.stop_loss:
-                print(f"SHINOBI: ¡PERDIMOS {ganancia}$, JEFE! ¡SALIMOS PA' NO PERDER MÁS!")
-                self.posicion = None
-                return "CERRAR PERDIDA"
-
-        print("SHINOBI: Esperando, jefe. Como ninja, jefe.")
-        return "ESPERAR"
-
-# PRUEBA DEL CORAZON, JEFE
-shinobi = CorazonShinobi()
-shinobi.analizar(precio=2650, ema_rapida=2655, ema_lenta=2640, rsi=28)
-shinobi.analizar(precio=2680, ema_rapida=2660, ema_lenta=2650, rsi=72)
+# PRUEBA, JEFE
+rook = CerebroRook()
+rook.ejecutar("COMPRAR ORO", 2650)
+rook.actualizar_perdida(-110)  # Perdiste 110$, jefe
+rook.ejecutar("COMPRAR ORO", 2652)  # Ya no te deja, jefe
