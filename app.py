@@ -1,4 +1,4 @@
-# ROBOT JEFE - TE AVISA Y TE HABLA - ORO
+# ROBOT JEFE - TE AVISA Y TE HABLA
 # EMA 50 + EMA 200 + RSI + Multi-Timeframe
 # 1m - 5m - 15m - 1h - 4h
 
@@ -9,8 +9,8 @@ import pyttsx3
 import requests
 import matplotlib.pyplot as plt
 
-# --- CONFIGURACION JEFE - ORO ---
-SYMBOL = 'PAXG/USDT'  # JEFE, ESTE ES ORO. 1 PAXG = 1 ONZA DE ORO
+# --- CONFIGURACION JEFE ---
+SYMBOL = 'BTC/USDT'  # Cambia: EUR/USD, XAU/USD, BTC/USDT
 TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h']
 
 # TU TELEGRAM JEFE - Pon tus datos aqui
@@ -19,15 +19,17 @@ TELEGRAM_CHAT_ID = 'TU_CHAT_ID'
 
 # Voz
 voz = pyttsx3.init()
-voz.setProperty('rate', 160)
+voz.setProperty('rate', 160)  # Velocidad
 voz.setProperty('volume', 1.0)
 
 def hablar(texto):
+    """El robot te habla, jefe"""
     print(f"🔊 HABLANDO: {texto}")
     voz.say(texto)
     voz.runAndWait()
 
 def enviar_telegram(mensaje, foto=None):
+    """Te avisa por Telegram"""
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         requests.post(url, data={'chat_id': TELEGRAM_CHAT_ID, 'text': mensaje})
@@ -46,8 +48,11 @@ def get_velas(symbol, timeframe, limit=250):
     return df
 
 def calcular(df):
+    # EMA 50 y EMA 200 JEFE
     df['EMA50'] = df['close'].ewm(span=50, adjust=False).mean()
     df['EMA200'] = df['close'].ewm(span=200, adjust=False).mean()
+    
+    # RSI 14
     delta = df['close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
@@ -56,19 +61,23 @@ def calcular(df):
     return df
 
 def hacer_grafico(df, timeframe, señal):
+    """Hace el grafico con EMA50, EMA200, RSI"""
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 6), gridspec_kw={'height_ratios': [3, 1]})
+    
     ax1.plot(df['time'], df['close'], label='Precio', color='black', linewidth=1)
     ax1.plot(df['time'], df['EMA50'], label='EMA 50', color='blue', linewidth=1.5)
     ax1.plot(df['time'], df['EMA200'], label='EMA 200', color='red', linewidth=1.5)
-    ax1.set_title(f"{SYMBOL} - {timeframe} - {señal} - JEFE ORO")
+    ax1.set_title(f"{SYMBOL} - {timeframe} - {señal} - JEFE")
     ax1.legend()
     ax1.grid(True)
+    
     ax2.plot(df['time'], df['RSI'], label='RSI', color='purple')
     ax2.axhline(70, color='red', linestyle='--')
     ax2.axhline(30, color='green', linestyle='--')
     ax2.set_ylim(0, 100)
     ax2.legend()
     ax2.grid(True)
+    
     nombre = f"grafico_{timeframe}.png"
     plt.tight_layout()
     plt.savefig(nombre)
@@ -76,48 +85,61 @@ def hacer_grafico(df, timeframe, señal):
     return nombre
 
 def analizar():
-    print("\n--- ANALIZANDO ORO JEFE ---")
+    print("\n--- ANALIZANDO JEFE ---")
     señales = {}
     for tf in TIMEFRAMES:
         df = get_velas(SYMBOL, tf)
         df = calcular(df)
         ultima = df.iloc[-1]
+        
+        # LOGICA JEFE
+        # SUBE: Precio > EMA50 > EMA200 y RSI entre 50-70
+        # BAJA: Precio < EMA50 < EMA200 y RSI entre 30-50
         señal = "NEUTRO"
         if ultima['close'] > ultima['EMA50'] > ultima['EMA200'] and 50 < ultima['RSI'] < 70:
             señal = "SUBE"
         elif ultima['close'] < ultima['EMA50'] < ultima['EMA200'] and 30 < ultima['RSI'] < 50:
             señal = "BAJA"
+        
         señales[tf] = señal
         print(f"{tf}: {señal} | Precio: {ultima['close']:.2f} | EMA50: {ultima['EMA50']:.2f} | EMA200: {ultima['EMA200']:.2f} | RSI: {ultima['RSI']:.1f}")
+        
+        # Guardar ultimo df para grafico
         if tf == '15m':
             df_15m = df
     return señales, df_15m
 
 def robot_que_habla():
-    hablar("Jefe, robot de oro encendido. Te aviso cuando el oro vaya a subir.")
+    hablar("Jefe, robot encendido. Te aviso cuando vaya a subir.")
     ultima_señal = ""
+    
     while True:
         try:
             señales, df_15m = analizar()
+            
+            # Si 4H + 1H + 15m dicen SUBE = AVISO FUERTE
             if señales['4h'] == "SUBE" and señales['1h'] == "SUBE" and señales['15m'] == "SUBE":
                 if ultima_señal != "SUBE":
-                    mensaje = f"🚀 JEFE ORO VA A SUBIR! {SYMBOL}\n4H: SUBE\n1H: SUBE\n15m: SUBE\nEMA50 > EMA200\nRSI Confirmado"
+                    mensaje = f"🚀 JEFE VA A SUBIR! {SYMBOL}\n4H: SUBE\n1H: SUBE\n15m: SUBE\nEMA50 > EMA200\nRSI Confirmado"
                     print(mensaje)
-                    hablar("Jefe, jefe, el oro va a subir. Va a subir, jefe. Entra ahora, jefe.")
-                    grafico = hacer_grafico(df_15m, '15m', 'ORO VA A SUBIR')
+                    hablar("Jefe, jefe, va a subir. Va a subir, jefe. Entra ahora, jefe.")
+                    grafico = hacer_grafico(df_15m, '15m', 'VA A SUBIR')
                     enviar_telegram(mensaje, grafico)
                     ultima_señal = "SUBE"
+            
             elif señales['4h'] == "BAJA" and señales['1h'] == "BAJA" and señales['15m'] == "BAJA":
                 if ultima_señal != "BAJA":
-                    mensaje = f"📉 JEFE ORO VA A BAJAR! {SYMBOL}\n4H: BAJA\n1H: BAJA\n15m: BAJA\nEMA50 < EMA200"
+                    mensaje = f"📉 JEFE VA A BAJAR! {SYMBOL}\n4H: BAJA\n1H: BAJA\n15m: BAJA\nEMA50 < EMA200"
                     print(mensaje)
-                    hablar("Jefe, cuidado, el oro va a bajar. Va a bajar, jefe. No entres, jefe.")
-                    grafico = hacer_grafico(df_15m, '15m', 'ORO VA A BAJAR')
+                    hablar("Jefe, cuidado, va a bajar. Va a bajar, jefe. No entres, jefe.")
+                    grafico = hacer_grafico(df_15m, '15m', 'VA A BAJAR')
                     enviar_telegram(mensaje, grafico)
                     ultima_señal = "BAJA"
             else:
-                print("⏳ Esperando jefe... Oro sin acuerdo")
-            time.sleep(60)
+                print("⏳ Esperando jefe... No hay acuerdo")
+            
+            time.sleep(60)  # Revisa cada 1 minuto
+            
         except Exception as e:
             print(f"Error jefe: {e}")
             time.sleep(10)
