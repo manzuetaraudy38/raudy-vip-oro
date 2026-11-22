@@ -1,148 +1,58 @@
-# ROBOT JEFE - TE AVISA Y TE HABLA
-# EMA 50 + EMA 200 + RSI + Multi-Timeframe
-# 1m - 5m - 15m - 1h - 4h
-
 import time
 import pandas as pd
 import ccxt
-import pyttsx3
 import requests
 import matplotlib.pyplot as plt
+from flask import Flask
 
-# --- CONFIGURACION JEFE ---
-SYMBOL = 'BTC/USDT'  # Cambia: EUR/USD, XAU/USD, BTC/USDT
-TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h']
+app = Flask(__name__)
 
-# TU TELEGRAM JEFE - Pon tus datos aqui
-TELEGRAM_TOKEN = 'TU_TOKEN_DE_TELEGRAM'
-TELEGRAM_CHAT_ID = 'TU_CHAT_ID'
+# ==============================
+# CONFIGURACIÓN
+# ==============================
+MONEDA = 'BTC/USDT'
+TIMEFRAME = '1m'
+CANTIDAD_USDT = 20
+TP = 0.002
+SL = 0.0015
+INTERVALO = 5
 
-# Voz
-voz = pyttsx3.init()
-voz.setProperty('rate', 160)  # Velocidad
-voz.setProperty('volume', 1.0)
+# ==============================
+# EXCHANGE
+# ==============================
+exchange = ccxt.binance({
+    'enableRateLimit': True,
+})
 
-def hablar(texto):
-    """El robot te habla, jefe"""
-    print(f"🔊 HABLANDO: {texto}")
-    voz.say(texto)
-    voz.runAndWait()
+def decir(mensaje):
+    # Antes era voz, ahora es print porque Render no tiene bocina
+    print(mensaje, flush=True)
 
-def enviar_telegram(mensaje, foto=None):
-    """Te avisa por Telegram"""
+def obtener_datos():
     try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        requests.post(url, data={'chat_id': TELEGRAM_CHAT_ID, 'text': mensaje})
-        if foto:
-            url_foto = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto"
-            with open(foto, 'rb') as f:
-                requests.post(url_foto, data={'chat_id': TELEGRAM_CHAT_ID}, files={'photo': f})
+        ohlcv = exchange.fetch_ohlcv(MONEDA, timeframe=TIMEFRAME, limit=100)
+        df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        return df
     except Exception as e:
-        print(f"Error Telegram jefe: {e}")
+        print(f"Error obteniendo datos: {e}", flush=True)
+        return None
 
-def get_velas(symbol, timeframe, limit=250):
-    exchange = ccxt.binance({'enableRateLimit': True})
-    ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
-    df = pd.DataFrame(ohlcv, columns=['time', 'open', 'high', 'low', 'close', 'volume'])
-    df['time'] = pd.to_datetime(df['time'], unit='ms')
-    return df
+def calcular_ema(df, periodo=20):
+    return df['close'].ewm(span=periodo, adjust=False).mean()
 
-def calcular(df):
-    # EMA 50 y EMA 200 JEFE
-    df['EMA50'] = df['close'].ewm(span=50, adjust=False).mean()
-    df['EMA200'] = df['close'].ewm(span=200, adjust=False).mean()
-    
-    # RSI 14
-    delta = df['close'].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-    rs = gain / loss
-    df['RSI'] = 100 - (100 / (1 + rs))
-    return df
+@app.route('/')
+def inicio():
+    return "Bot activo - Jefe, ya esta Live!"
 
-def hacer_grafico(df, timeframe, señal):
-    """Hace el grafico con EMA50, EMA200, RSI"""
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 6), gridspec_kw={'height_ratios': [3, 1]})
-    
-    ax1.plot(df['time'], df['close'], label='Precio', color='black', linewidth=1)
-    ax1.plot(df['time'], df['EMA50'], label='EMA 50', color='blue', linewidth=1.5)
-    ax1.plot(df['time'], df['EMA200'], label='EMA 200', color='red', linewidth=1.5)
-    ax1.set_title(f"{SYMBOL} - {timeframe} - {señal} - JEFE")
-    ax1.legend()
-    ax1.grid(True)
-    
-    ax2.plot(df['time'], df['RSI'], label='RSI', color='purple')
-    ax2.axhline(70, color='red', linestyle='--')
-    ax2.axhline(30, color='green', linestyle='--')
-    ax2.set_ylim(0, 100)
-    ax2.legend()
-    ax2.grid(True)
-    
-    nombre = f"grafico_{timeframe}.png"
-    plt.tight_layout()
-    plt.savefig(nombre)
-    plt.close()
-    return nombre
+@app.route('/status')
+def status():
+    df = obtener_datos()
+    if df is None:
+        return "Sin datos"
+    ema = calcular_ema(df).iloc[-1]
+    precio = df['close'].iloc[-1]
+    return f"Precio: {precio} - EMA20: {ema}"
 
-def analizar():
-    print("\n--- ANALIZANDO JEFE ---")
-    señales = {}
-    for tf in TIMEFRAMES:
-        df = get_velas(SYMBOL, tf)
-        df = calcular(df)
-        ultima = df.iloc[-1]
-        
-        # LOGICA JEFE
-        # SUBE: Precio > EMA50 > EMA200 y RSI entre 50-70
-        # BAJA: Precio < EMA50 < EMA200 y RSI entre 30-50
-        señal = "NEUTRO"
-        if ultima['close'] > ultima['EMA50'] > ultima['EMA200'] and 50 < ultima['RSI'] < 70:
-            señal = "SUBE"
-        elif ultima['close'] < ultima['EMA50'] < ultima['EMA200'] and 30 < ultima['RSI'] < 50:
-            señal = "BAJA"
-        
-        señales[tf] = señal
-        print(f"{tf}: {señal} | Precio: {ultima['close']:.2f} | EMA50: {ultima['EMA50']:.2f} | EMA200: {ultima['EMA200']:.2f} | RSI: {ultima['RSI']:.1f}")
-        
-        # Guardar ultimo df para grafico
-        if tf == '15m':
-            df_15m = df
-    return señales, df_15m
-
-def robot_que_habla():
-    hablar("Jefe, robot encendido. Te aviso cuando vaya a subir.")
-    ultima_señal = ""
-    
-    while True:
-        try:
-            señales, df_15m = analizar()
-            
-            # Si 4H + 1H + 15m dicen SUBE = AVISO FUERTE
-            if señales['4h'] == "SUBE" and señales['1h'] == "SUBE" and señales['15m'] == "SUBE":
-                if ultima_señal != "SUBE":
-                    mensaje = f"🚀 JEFE VA A SUBIR! {SYMBOL}\n4H: SUBE\n1H: SUBE\n15m: SUBE\nEMA50 > EMA200\nRSI Confirmado"
-                    print(mensaje)
-                    hablar("Jefe, jefe, va a subir. Va a subir, jefe. Entra ahora, jefe.")
-                    grafico = hacer_grafico(df_15m, '15m', 'VA A SUBIR')
-                    enviar_telegram(mensaje, grafico)
-                    ultima_señal = "SUBE"
-            
-            elif señales['4h'] == "BAJA" and señales['1h'] == "BAJA" and señales['15m'] == "BAJA":
-                if ultima_señal != "BAJA":
-                    mensaje = f"📉 JEFE VA A BAJAR! {SYMBOL}\n4H: BAJA\n1H: BAJA\n15m: BAJA\nEMA50 < EMA200"
-                    print(mensaje)
-                    hablar("Jefe, cuidado, va a bajar. Va a bajar, jefe. No entres, jefe.")
-                    grafico = hacer_grafico(df_15m, '15m', 'VA A BAJAR')
-                    enviar_telegram(mensaje, grafico)
-                    ultima_señal = "BAJA"
-            else:
-                print("⏳ Esperando jefe... No hay acuerdo")
-            
-            time.sleep(60)  # Revisa cada 1 minuto
-            
-        except Exception as e:
-            print(f"Error jefe: {e}")
-            time.sleep(10)
-
-if __name__ == "__main__":
-    robot_que_habla()
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=10000)
