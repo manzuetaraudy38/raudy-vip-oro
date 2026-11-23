@@ -1,21 +1,35 @@
 from flask import Flask, jsonify, render_template_string
-import ccxt
+import requests
 import threading
 import time
 
 app = Flask(__name__)
-
-# Binance - Oro real PAXG
-exchange = ccxt.binance({'enableRateLimit': True})
-SYMBOL = 'PAXG/USDT'
-
 cache = {'price': 0, 'candles': {}, 'signal': 'ESPERA', 'color': 'yellow', 'msg': 'Cargando...'}
 
-def get_candles(tf, limit=30):
+def get_yahoo(tf):
+    # Yahoo Oro Futuro GC=F - Oro real en vivo
+    interval_map = {'1m':'1m','5m':'5m','15m':'15m','1h':'60m','4h':'60m'}
+    interval = interval_map.get(tf, '5m')
     try:
-        ohlcv = exchange.fetch_ohlcv(SYMBOL, timeframe=tf, limit=limit)
-        # [tiempo, open, high, low, close, volume]
-        return [{'t': c[0], 'o': c[1], 'h': c[2], 'l': c[3], 'c': c[4]} for c in ohlcv]
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval={interval}&range=5d"
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        r = requests.get(url, headers=headers, timeout=10)
+        j = r.json()
+        result = j['chart']['result'][0]
+        ts = result['timestamp']
+        q = result['indicators']['quote'][0]
+        candles = []
+        for i in range(len(ts)):
+            if q['open'][i] is None: continue
+            candles.append({'t': ts[i]*1000, 'o': q['open'][i], 'h': q['high'][i], 'l': q['low'][i], 'c': q['close'][i]})
+        # Para 4h agrupar cada 4 velas de 1h
+        if tf == '4h':
+            grouped = []
+            for i in range(0, len(candles)-3, 4):
+                chunk = candles[i:i+4]
+                grouped.append({'t': chunk[0]['t'], 'o': chunk[0]['o'], 'h': max(x['h'] for x in chunk), 'l': min(x['l'] for x in chunk), 'c': chunk[-1]['c']})
+            return grouped
+        return candles[-30:]
     except Exception as e:
         print(f"Error {tf}: {e}")
         return []
@@ -23,42 +37,30 @@ def get_candles(tf, limit=30):
 def update_loop():
     while True:
         try:
-            tfs = ['1m', '5m', '15m', '1h', '4h']
-            all_candles = {}
-            for tf in tfs:
-                all_candles[tf] = get_candles(tf)
-                time.sleep(0.3)
-            
-            if all_candles['5m']:
-                last_5m = all_candles['5m'][-1]
-                last_1m = all_candles['1m'][-1] if all_candles['1m'] else last_5m
-                last_15m = all_candles['15m'][-1] if all_candles['15m'] else last_5m
-                
+            all_c = {}
+            for tf in ['1m','5m','15m','1h','4h']:
+                all_c[tf] = get_yahoo(tf)
+                time.sleep(0.2)
+            if all_c['5m']:
+                last_5m = all_c['5m'][-1]
+                last_1m = all_c['1m'][-1] if all_c['1m'] else last_5m
                 price = last_5m['c']
-                # Vela verde = close > open
-                is_5m_green = last_5m['c'] > last_5m['o']
-                is_1m_green = last_1m['c'] > last_1m['o']
-                is_15m_green = last_15m['c'] > last_15m['o']
-                
-                cache['candles'] = all_candles
+                g5 = last_5m['c'] > last_5m['o']
+                g1 = last_1m['c'] > last_1m['o']
+                cache['candles'] = all_c
                 cache['price'] = price
-                
-                if is_5m_green and is_1m_green:
-                    cache['signal'] = 'COMPRA'
-                    cache['color'] = 'green'
-                    cache['msg'] = f"COMPRA ORO a {price:.2f} - Vela 5m VERDE"
-                elif not is_5m_green and not is_1m_green:
-                    cache['signal'] = 'VENTA'
-                    cache['color'] = 'red'
-                    cache['msg'] = f"VENTA ORO a {price:.2f} - Vela 5m ROJA"
+                if g5 and g1:
+                    cache['signal']='COMPRA'; cache['color']='green'
+                    cache['msg']=f"COMPRA ORO a {price:.2f} - Vela 5m VERDE"
+                elif not g5 and not g1:
+                    cache['signal']='VENTA'; cache['color']='red'
+                    cache['msg']=f"VENTA ORO a {price:.2f} - Vela 5m ROJA"
                 else:
-                    cache['signal'] = 'ESPERA'
-                    cache['color'] = 'yellow'
-                    cache['msg'] = f"ESPERA - 5m {'VERDE' if is_5m_green else 'ROJA'} - Precio {price:.2f}"
+                    cache['signal']='ESPERA'; cache['color']='yellow'
+                    cache['msg']=f"ESPERA - 5m {'VERDE' if g5 else 'ROJA'} - Precio {price:.2f}"
             time.sleep(15)
         except Exception as e:
-            print(e)
-            time.sleep(10)
+            print(e); time.sleep(10)
 
 threading.Thread(target=update_loop, daemon=True).start()
 
@@ -131,13 +133,12 @@ function draw(){
 async function load(){
  try{
   let r=await fetch('/api/signal'); data=await r.json();
-  document.getElementById('price').innerText='$ '+data.price.toFixed(2);
+  if(data.price>0) document.getElementById('price').innerText='$ '+data.price.toFixed(2);
   let sig=document.getElementById('signal'); sig.innerText=data.signal; sig.className='signal '+data.signal;
   document.getElementById('msg').innerText=data.msg;
   document.getElementById('greenLight').className='light '+(data.color=='green'?'green-on':'');
   document.getElementById('redLight').className='light '+(data.color=='red'?'red-on':'');
   document.getElementById('yellowLight').className='light '+(data.color=='yellow'?'yellow-on':'');
-  // Tabla velas
   let html=''; ['1m','5m','15m','1h','4h'].forEach(tf=>{
     let cs=data.candles[tf]; if(!cs||!cs.length) return; let last=cs[cs.length-1];
     let green=last.c>last.o; let emoji=green?'🟢 VERDE':'🔴 ROJA';
