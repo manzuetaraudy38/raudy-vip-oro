@@ -6,11 +6,11 @@ from datetime import datetime
 from collections import deque
 
 app = Flask(__name__)
-cache = {'price': 0, 'avg_price': 0, 'prices': {}, 'candles': {}, 'signal': 'ESPERA', 'color': 'yellow', 'msg': 'Conectando...', 'status': {}, 'last_update': 'nunca', 'live': False, 'consensus': '...', 'entry': '...', 'spread': 0}
+cache = {'price': 0, 'avg_price': 0, 'prices': {}, 'candles': {}, 'signal': 'ESPERA', 'color': 'yellow', 'msg': 'Conectando...', 'status': {}, 'last_update': 'nunca', 'live': False, 'consensus': '...', 'entry': '...', 'spread': 0, 'entry_price': 0, 'stop': 0, 'tp1': 0, 'tp2': 0}
 
 BASE = "https://data-api.binance.vision"
 SYMBOL = "PAXGUSDT"
-history = deque(maxlen=60)  # guarda ultimos 5 min de precios (cada 5 seg = 60)
+history = deque(maxlen=60)
 
 def get_binance_ticker(sym):
     try:
@@ -67,7 +67,7 @@ def check():
 
         cache['prices'] = prices
         cache['avg_price'] = avg_price
-        cache['price'] = avg_price  # AHORA EL PRECIO GRANDE ES EL PROMEDIO DE LOS 3 MERCADOS
+        cache['price'] = avg_price
         cache['spread'] = spread
         cache['candles'] = all_c
         cache['status'] = status
@@ -77,46 +77,56 @@ def check():
         verdes = sum(1 for v in status.values() if v['green'])
         rojas = 5 - verdes
 
-        # --- MOMENTO PRECISO: Pullback ---
-        # Miramos si el precio bajo y volvio a subir en los ultimos 5 min
         entry = "ESPERANDO"
         pullback_ok = False
         if len(history) >= 20:
-            reciente = list(history)[-20:]  # ultimos 100 seg
+            reciente = list(history)[-20:]
             minimo = min(reciente)
-            # Si el minimo fue hace un rato y ahora el precio esta $3 por encima del minimo = hizo pullback y subio
             if avg_price > minimo + 2.0:
                 pullback_ok = True
                 entry = f"✅ PULLBACK LISTO - Bajo a ${minimo:.2f} y volvio a subir a ${avg_price:.2f}"
             else:
-                entry = f"⏳ Esperando que baje un poco y suba - Minimo reciente ${minimo:.2f}"
+                entry = f"⏳ Esperando que baje un poco y suba - Minimo ${minimo:.2f}"
         else:
             entry = "⏳ Calentando motor... recogiendo precios (1 min)"
         cache['entry'] = entry
 
-        # --- CONSENSO DE MERCADOS ---
-        # Los 3 mercados tienen que estar cerca (spread < $20) = todos de acuerdo
         mercados_de_acuerdo = spread < 20 and len(prices) >= 2
         if mercados_de_acuerdo:
             consensus = f"✅ LOS {len(prices)} MERCADOS DE ACUERDO - Diferencia solo ${spread:.2f}"
         else:
-            consensus = f"⚠️ MERCADOS EN DESACUERDO - Diferencia ${spread:.2f} - Cuidado"
+            consensus = f"⚠️ MERCADOS EN DESACUERDO - Diferencia ${spread:.2f}"
         cache['consensus'] = consensus
 
-        # --- SEÑAL FINAL: TODO JUNTO ---
+        # --- NUMEROS AUTOMATICOS: -20 y +40 ---
+        # COMPRA: STOP = precio -20, TP1 = +20, TP2 = +40
+        # VENTA: STOP = precio +20, TP1 = -20, TP2 = -40
         if verdes == 5 and mercados_de_acuerdo and pullback_ok:
             cache['signal'] = 'COMPRA'; cache['color'] = 'green'
-            cache['msg'] = f"🟢🟢🟢 MOMENTO PRECISO - COMPRA ORO a ${avg_price:.2f} - 5 velas verdes + 3 mercados de acuerdo + pullback listo"
+            cache['entry_price'] = avg_price
+            cache['stop'] = avg_price - 20
+            cache['tp1'] = avg_price + 20
+            cache['tp2'] = avg_price + 40
+            cache['msg'] = f"🟢 MOMENTO PRECISO - COMPRA ORO a ${avg_price:.2f} - STOP ${avg_price-20:.2f} - GANA ${avg_price+40:.2f}"
         elif rojas == 5 and mercados_de_acuerdo and len(history) >= 20 and avg_price < max(list(history)[-20:]) - 2.0:
             cache['signal'] = 'VENTA'; cache['color'] = 'red'
-            cache['msg'] = f"🔴🔴🔴 MOMENTO PRECISO - VENTA ORO a ${avg_price:.2f}"
+            cache['entry_price'] = avg_price
+            cache['stop'] = avg_price + 20
+            cache['tp1'] = avg_price - 20
+            cache['tp2'] = avg_price - 40
+            cache['msg'] = f"🔴 MOMENTO PRECISO - VENTA ORO a ${avg_price:.2f} - STOP ${avg_price+20:.2f} - GANA ${avg_price-40:.2f}"
         else:
             cache['signal'] = 'ESPERA'; cache['color'] = 'yellow'
+            # Aunque este en ESPERA, te muestra cuales SERIAN los numeros si compraras ahora, para que practiques
+            cache['entry_price'] = avg_price
+            cache['stop'] = avg_price - 20
+            cache['tp1'] = avg_price + 20
+            cache['tp2'] = avg_price + 40
             faltan = []
             if verdes < 5: faltan.append(f"Faltan {5-verdes} velas verdes")
             if not mercados_de_acuerdo: faltan.append("Mercados no de acuerdo")
-            if not pullback_ok: faltan.append("Esperando pullback preciso")
-            cache['msg'] = f"ESPERA - {verdes}/5 VERDES - {' | '.join(faltan)} - Precio promedio ${avg_price:.2f}"
+            if not pullback_ok: faltan.append("Esperando pullback")
+            cache['msg'] = f"ESPERA - {verdes}/5 VERDES - {' | '.join(faltan)} - Precio ${avg_price:.2f}"
         return True
     except Exception as e:
         print(e)
@@ -167,10 +177,16 @@ canvas{background:#111;border:1px solid #333;width:100%;height:220px;border-radi
 .pcard b{font-size:12px;color:#FFD700}
 .pcard div{font-size:18px;font-weight:bold}
 .info{font-size:14px;padding:8px;border-radius:8px;background:#222;margin:5px 0}
+.num-box{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:10px 0}
+.num{flex:1;min-width:100px;padding:12px;border-radius:12px;border:3px solid #FFD700;background:#222}
+.num b{font-size:12px;color:#FFD700;display:block}
+.num span{font-size:22px;font-weight:bold}
+.num.stop{border-color:#ff0000}
+.num.tp{border-color:#00ff00}
 </style></head>
 <body>
 <h1>💰 RAUDY ORO - TODO EL MERCADO</h1>
-<div class="sub">PRECIO PROMEDIO DE LOS 3 MERCADOS - El precio de verdad</div>
+<div class="sub">PRECIO PROMEDIO DE LOS 3 MERCADOS</div>
 <div class="price" id="price">Conectando...</div>
 <div id="liveTag" class="live">● EN VIVO</div>
 <div style="font-size:12px;color:#aaa">Actualizado: <span id="upd">--:--:--</span> | Cada 5 seg</div>
@@ -180,6 +196,17 @@ canvas{background:#111;border:1px solid #333;width:100%;height:220px;border-radi
 <div class="price-box" id="pricesBox"></div>
 <div class="info" id="consensus">...</div>
 <div class="info" id="entryInfo">...</div>
+</div>
+
+<div class="box" style="border-color:#FFD700">
+<h2 style="margin:0;color:#FFD700">🎯 TUS NUMEROS - SOLO COPIAR EN TU BROKER</h2>
+<div class="num-box">
+<div class="num"><b>🟢 COMPRA / ENTRADA</b><span id="entryNum">--</span></div>
+<div class="num stop"><b>🔴 STOP - FRENO</b><span id="stopNum">--</span></div>
+<div class="num tp"><b>💰 GANA 1</b><span id="tp1Num">--</span></div>
+<div class="num tp"><b>💰💰 GANA 2</b><span id="tp2Num">--</span></div>
+</div>
+<p style="font-size:13px;color:#aaa;margin:0">Formula: STOP = Entrada - 20 | GANA = Entrada + 20 / +40<br>Si es VENTA, es al reves: STOP = Entrada + 20 | GANA = Entrada - 20 / -40</p>
 </div>
 
 <div class="box">
@@ -212,7 +239,7 @@ canvas{background:#111;border:1px solid #333;width:100%;height:220px;border-radi
 
 <script>
 let curTF='1m'; let voiceOn=false; let lastSignal='';
-function toggleVoice(){ voiceOn=true; document.getElementById('voiceBtn').innerText='✅ VOZ ACTIVADA'; speak('Voz activada, estoy vigilando todo el mercado, te avisaré en el momento preciso'); }
+function toggleVoice(){ voiceOn=true; document.getElementById('voiceBtn').innerText='✅ VOZ ACTIVADA'; speak('Voz activada, te dire tus numeros cuando sea el momento preciso'); }
 function speak(t){ if(!voiceOn) return; let u=new SpeechSynthesisUtterance(t); u.lang='es-ES'; u.rate=1.1; speechSynthesis.cancel(); speechSynthesis.speak(u); }
 function setTF(tf,btn){ curTF=tf; document.querySelectorAll('.tf-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); draw(); }
 let data=null;
@@ -236,6 +263,10 @@ async function load(){
   document.getElementById('upd').innerText=data.last_update||'--:--:--';
   document.getElementById('consensus').innerText=data.consensus||'';
   document.getElementById('entryInfo').innerText=data.entry||'';
+  document.getElementById('entryNum').innerText='$'+(data.entry_price||0).toFixed(2);
+  document.getElementById('stopNum').innerText='$'+(data.stop||0).toFixed(2);
+  document.getElementById('tp1Num').innerText='$'+(data.tp1||0).toFixed(2);
+  document.getElementById('tp2Num').innerText='$'+(data.tp2||0).toFixed(2);
   let lt=document.getElementById('liveTag');
   if(data.live){ lt.innerText='● EN VIVO - Vigilando todo el mercado'; lt.className='live'; } else { lt.innerText='● DESCONECTADO'; lt.className='live off'; }
   let sig=document.getElementById('signal'); sig.innerText=data.signal; sig.className='signal '+data.signal;
@@ -259,8 +290,8 @@ async function load(){
   draw();
   if(data.signal!=lastSignal && data.signal!='ESPERA'){
     lastSignal=data.signal;
-    if(data.signal=='COMPRA') speak('Atención, momento preciso, los tres mercados están de acuerdo, compra oro ahora');
-    if(data.signal=='VENTA') speak('Atención, momento preciso, venta oro');
+    if(data.signal=='COMPRA') speak('Momento preciso, compra oro en '+data.entry_price.toFixed(0)+', pon tu freno en '+data.stop.toFixed(0)+', y tu ganancia en '+data.tp2.toFixed(0));
+    if(data.signal=='VENTA') speak('Momento preciso, venta oro en '+data.entry_price.toFixed(0)+', freno en '+data.stop.toFixed(0));
   } else if(data.signal=='ESPERA'){ lastSignal='ESPERA'; }
  }catch(e){}
 }
