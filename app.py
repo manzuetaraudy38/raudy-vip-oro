@@ -2,12 +2,21 @@ from flask import Flask, jsonify, render_template_string
 import requests
 import threading
 import time
+from datetime import datetime
 
 app = Flask(__name__)
-cache = {'price': 0, 'candles': {}, 'signal': 'ESPERA', 'color': 'yellow', 'msg': 'Conectando...', 'status': {}}
+cache = {'price': 0, 'candles': {}, 'signal': 'ESPERA', 'color': 'yellow', 'msg': 'Conectando...', 'status': {}, 'last_update': 'nunca', 'live': False}
 
 BASE = "https://data-api.binance.vision"
 SYMBOL = "PAXGUSDT"
+
+def get_live_price():
+    # Precio VIVO segundo a segundo, no vela vieja
+    try:
+        r = requests.get(f"{BASE}/api/v3/ticker/price?symbol={SYMBOL}", timeout=8)
+        return float(r.json()['price'])
+    except:
+        return 0
 
 def get_candles(tf):
     try:
@@ -24,6 +33,7 @@ def get_candles(tf):
 
 def check():
     try:
+        live_price = get_live_price()
         all_c = {}
         status = {}
         for tf in ['1m','5m','15m','1h','4h']:
@@ -32,12 +42,14 @@ def check():
                 last = all_c[tf][-1]
                 is_green = last['c'] > last['o']
                 status[tf] = {'green': is_green, 'price': last['c'], 'open': last['o'], 'close': last['c']}
-        if all_c['5m']:
-            price = all_c['5m'][-1]['c']
+        # Si tenemos precio vivo, usalo para el precio grande
+        price = live_price if live_price > 0 else (all_c['5m'][-1]['c'] if all_c.get('5m') else 0)
+        if price > 0:
             cache['candles'] = all_c
             cache['price'] = price
             cache['status'] = status
-            # CONTAR VERDES
+            cache['last_update'] = datetime.now().strftime("%H:%M:%S")
+            cache['live'] = True
             verdes = sum(1 for v in status.values() if v['green'])
             rojas = 5 - verdes
             if verdes == 5:
@@ -52,12 +64,13 @@ def check():
         return True
     except Exception as e:
         print(e)
+        cache['live'] = False
         return False
 
 def update_loop():
     while True:
         check()
-        time.sleep(10)
+        time.sleep(5)
 
 check()
 threading.Thread(target=update_loop, daemon=True).start()
@@ -65,10 +78,12 @@ threading.Thread(target=update_loop, daemon=True).start()
 HTML = """
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>RAUDY ORO - TODAS JUNTAS</title>
+<title>RAUDY ORO - VIVO</title>
 <style>
 body{background:#000;color:#fff;font-family:Arial;text-align:center;margin:0;padding:10px}
 .price{font-size:44px;color:#FFD700;font-weight:bold}
+.live{font-size:14px;color:#00ff00}
+.live.off{color:#ff0000}
 .box{border:3px solid #333;border-radius:15px;padding:15px;margin:10px;background:#111}
 .lights{display:flex;justify-content:center;gap:30px;margin:15px}
 .light{width:90px;height:90px;border-radius:50%;background:#333;border:3px solid #555}
@@ -82,7 +97,6 @@ body{background:#000;color:#fff;font-family:Arial;text-align:center;margin:0;pad
 canvas{background:#111;border:1px solid #333;width:100%;height:220px;border-radius:10px}
 .tf-btn{padding:8px 12px;margin:3px;background:#222;color:#fff;border:1px solid #444;border-radius:8px}
 .tf-btn.active{background:#FFD700;color:#000}
-/* CUADRO TODAS JUNTAS */
 .all-box{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:10px 0}
 .mini{flex:1;min-width:60px;padding:12px 5px;border-radius:12px;border:3px solid #555}
 .mini.green{background:#00aa00;color:#fff;border-color:#00ff00}
@@ -95,6 +109,8 @@ canvas{background:#111;border:1px solid #333;width:100%;height:220px;border-radi
 <body>
 <h1>💰 RAUDY ORO EN VIVO</h1>
 <div class="price" id="price">Conectando...</div>
+<div id="liveTag" class="live">● EN VIVO</div>
+<div style="font-size:12px;color:#aaa">Actualizado: <span id="upd">--:--:--</span> | Se actualiza cada 5 seg</div>
 
 <div class="box">
 <h2 style="margin:0">👀 TODAS JUNTAS EN UN SOLO CUADRO</h2>
@@ -146,15 +162,16 @@ function draw(){
 }
 async function load(){
  try{
-  let r=await fetch('/api/signal'); data=await r.json();
+  let r=await fetch('/api/signal?t='+Date.now()); data=await r.json();
   if(data.price>0) document.getElementById('price').innerText='$ '+data.price.toFixed(2);
+  document.getElementById('upd').innerText=data.last_update||'--:--:--';
+  let lt=document.getElementById('liveTag');
+  if(data.live){ lt.innerText='● EN VIVO - Conectado'; lt.className='live'; } else { lt.innerText='● DESCONECTADO - Pegado'; lt.className='live off'; }
   let sig=document.getElementById('signal'); sig.innerText=data.signal; sig.className='signal '+data.signal;
   document.getElementById('msg').innerText=data.msg;
   document.getElementById('greenLight').className='light '+(data.color=='green'?'green-on':'');
   document.getElementById('redLight').className='light '+(data.color=='red'?'red-on':'');
   document.getElementById('yellowLight').className='light '+(data.color=='yellow'?'yellow-on':'');
-
-  // TODAS JUNTAS
   let order=['1m','5m','15m','1h','4h'];
   let html=''; let verdes=0;
   order.forEach(tf=>{
@@ -168,7 +185,6 @@ async function load(){
   });
   document.getElementById('allBox').innerHTML=html;
   document.getElementById('count').innerText = verdes==5 ? '✅ 5 de 5 VERDES - ¡COMPRA!' : verdes==0 ? '🔴 0 de 5 VERDES - TODO ROJO' : `⏳ ${verdes} de 5 VERDES - Faltan ${5-verdes} para compra`;
-
   draw();
   if(data.signal!=lastSignal && data.signal!='ESPERA'){
     lastSignal=data.signal;
@@ -177,7 +193,7 @@ async function load(){
   } else if(data.signal=='ESPERA'){ lastSignal='ESPERA'; }
  }catch(e){}
 }
-load(); setInterval(load,10000);
+load(); setInterval(load,5000);
 </script></body></html>
 """
 
