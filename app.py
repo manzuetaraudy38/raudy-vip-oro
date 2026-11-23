@@ -4,32 +4,21 @@ import threading
 import time
 
 app = Flask(__name__)
-cache = {'price': 0, 'candles': {}, 'signal': 'ESPERA', 'color': 'yellow', 'msg': 'Cargando...'}
+cache = {'price': 0, 'candles': {}, 'signal': 'ESPERA', 'color': 'yellow', 'msg': 'Conectando a Oro en vivo...'}
 
-def get_yahoo(tf):
-    # Yahoo Oro Futuro GC=F - Oro real en vivo
-    interval_map = {'1m':'1m','5m':'5m','15m':'15m','1h':'60m','4h':'60m'}
-    interval = interval_map.get(tf, '5m')
+# Binance Vision = datos publicos, no bloquea
+BASE = "https://data-api.binance.vision"
+SYMBOL = "PAXGUSDT"  # Oro real
+
+def get_candles(tf):
     try:
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval={interval}&range=5d"
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        r = requests.get(url, headers=headers, timeout=10)
-        j = r.json()
-        result = j['chart']['result'][0]
-        ts = result['timestamp']
-        q = result['indicators']['quote'][0]
-        candles = []
-        for i in range(len(ts)):
-            if q['open'][i] is None: continue
-            candles.append({'t': ts[i]*1000, 'o': q['open'][i], 'h': q['high'][i], 'l': q['low'][i], 'c': q['close'][i]})
-        # Para 4h agrupar cada 4 velas de 1h
-        if tf == '4h':
-            grouped = []
-            for i in range(0, len(candles)-3, 4):
-                chunk = candles[i:i+4]
-                grouped.append({'t': chunk[0]['t'], 'o': chunk[0]['o'], 'h': max(x['h'] for x in chunk), 'l': min(x['l'] for x in chunk), 'c': chunk[-1]['c']})
-            return grouped
-        return candles[-30:]
+        url = f"{BASE}/api/v3/klines?symbol={SYMBOL}&interval={tf}&limit=30"
+        r = requests.get(url, timeout=10)
+        data = r.json()
+        out = []
+        for c in data:
+            out.append({'t': c[0], 'o': float(c[1]), 'h': float(c[2]), 'l': float(c[3]), 'c': float(c[4])})
+        return out
     except Exception as e:
         print(f"Error {tf}: {e}")
         return []
@@ -39,8 +28,7 @@ def update_loop():
         try:
             all_c = {}
             for tf in ['1m','5m','15m','1h','4h']:
-                all_c[tf] = get_yahoo(tf)
-                time.sleep(0.2)
+                all_c[tf] = get_candles(tf)
             if all_c['5m']:
                 last_5m = all_c['5m'][-1]
                 last_1m = all_c['1m'][-1] if all_c['1m'] else last_5m
@@ -58,9 +46,21 @@ def update_loop():
                 else:
                     cache['signal']='ESPERA'; cache['color']='yellow'
                     cache['msg']=f"ESPERA - 5m {'VERDE' if g5 else 'ROJA'} - Precio {price:.2f}"
-            time.sleep(15)
+            time.sleep(10)
         except Exception as e:
-            print(e); time.sleep(10)
+            print(e); time.sleep(5)
+
+# Cargar una vez al prender
+try:
+    all_c = {}
+    for tf in ['1m','5m','15m','1h','4h']:
+        all_c[tf] = get_candles(tf)
+    if all_c['5m']:
+        cache['candles']=all_c
+        cache['price']=all_c['5m'][-1]['c']
+        cache['msg']=f"Precio {cache['price']:.2f}"
+except Exception as e:
+    print(e)
 
 threading.Thread(target=update_loop, daemon=True).start()
 
@@ -89,7 +89,7 @@ td{padding:8px;border-bottom:1px solid #222}
 </style></head>
 <body>
 <h1>💰 RAUDY ORO EN VIVO</h1>
-<div class="price" id="price">Cargando...</div>
+<div class="price" id="price">Conectando...</div>
 <div class="box">
 <div class="lights">
 <div><div id="greenLight" class="light"></div><b>COMPRA</b></div>
@@ -97,7 +97,7 @@ td{padding:8px;border-bottom:1px solid #222}
 <div><div id="redLight" class="light"></div><b>VENTA</b></div>
 </div>
 <div id="signal" class="signal ESPERA">ESPERA</div>
-<p id="msg">Cargando...</p>
+<p id="msg">Conectando...</p>
 <button onclick="toggleVoice()" id="voiceBtn" style="padding:12px;background:#FFD700;border:none;border-radius:10px;font-weight:bold">🔊 ACTIVAR VOZ</button>
 </div>
 <div class="box">
@@ -110,7 +110,7 @@ td{padding:8px;border-bottom:1px solid #222}
 </div>
 <canvas id="chart" width="800" height="220"></canvas>
 </div>
-<div class="box"><h3>Velas Actuales</h3><table id="tfTable"></table></div>
+<div class="box"><h3>Velas Actuales - ORO PAXG</h3><table id="tfTable"></table></div>
 <script>
 let curTF='1m'; let voiceOn=false; let lastSignal='';
 function toggleVoice(){ voiceOn=true; document.getElementById('voiceBtn').innerText='✅ VOZ ACTIVADA'; speak('Voz activada, te avisaré cuando sea compra'); }
@@ -153,7 +153,7 @@ async function load(){
   } else if(data.signal=='ESPERA'){ lastSignal='ESPERA'; }
  }catch(e){}
 }
-load(); setInterval(load,15000);
+load(); setInterval(load,10000);
 </script></body></html>
 """
 
