@@ -1,94 +1,91 @@
-from flask import Flask, jsonify, render_template_string
-import requests
-import threading
-import time
+# RAUDY ORO - ROBOT IMPRIMIDOR DE RECIBO - GINEBRA
+# Instalar antes: pip install python-escpos
+
+from escpos.printer import Usb
 from datetime import datetime
+import os
 
-app = Flask(__name__)
+def imprimir_recibo():
+    print("=== RAUDY ORO - GINEBRA ===")
+    print("Llena los datos, jefe:\n")
 
-# TU PRECIO DE LA FOTO - JEFE
-PRECIO_FOTO = 3603.67
-TU_ENTRADA = 3603.67
-TU_STOP = 3598.67   # 3603.67 - 5 = pierdes 5
-TU_GANA = 3613.67   # 3603.67 + 10 = ganas 10
-LOTE = 0.01
-ESPERAR_HASTA = 3610.00  # No comprar hasta que suba a 3610
+    # Datos del vendedor
+    nombre = input("Nombre del vendedor: ")
+    id_doc = input("No. Pasaporte / Permiso / ID: ")
+    direccion = input("Direccion: ")
+    descripcion = input("Que es? Anillo / Cadena / Pulsera: ")
+    peso = float(input("Peso en gramos: "))
+    quilates = input("Quilates (24K / 22K / 18K / 14K / 10K): ")
+    precio_gramo = float(input("Precio por gramo CHF: "))
 
-cache = {'price': 0, 'signal': 'ESPERA', 'msg': 'Conectando...', 'entry': TU_ENTRADA, 'sl': TU_STOP, 'tp': TU_GANA, 'last_update': 'nunca', 'live': False}
+    total = peso * precio_gramo
+    fecha = datetime.now().strftime("%d/%m/%Y %H:%M")
 
-BASE = "https://data-api.binance.vision"
-
-def get_price():
+    # Intentar imprimir en impresora termica
     try:
-        r = requests.get(f"{BASE}/api/v3/ticker/price?symbol=PAXGUSDT", timeout=8)
-        return float(r.json()['price'])
-    except:
-        return 0
+        # Cambia estos numeros por los de tu impresora
+        # Para saberlos: en Windows ve a Administrador de dispositivos
+        p = Usb(0x0416, 0x5011, 0, 0x81, 0x03)
+        
+        p.set(align='center', bold=True, double_height=True, double_width=True)
+        p.text("RAUDY ORO\n")
+        p.set(align='center', bold=False, double_height=False, double_width=False)
+        p.text("GINEBRA - COMPRA DE ORO\n")
+        p.text("--------------------------------\n")
+        p.set(align='left')
+        p.text(f"Fecha: {fecha}\n")
+        p.text(f"Vendedor: {nombre}\n")
+        p.text(f"ID / Permiso: {id_doc}\n")
+        p.text(f"Direccion: {direccion}\n")
+        p.text("--------------------------------\n")
+        p.text(f"Articulo: {descripcion}\n")
+        p.text(f"Peso: {peso} g\n")
+        p.text(f"Quilates: {quilates}\n")
+        p.text(f"Precio/g: {precio_gramo:.2f} CHF\n")
+        p.set(align='center', bold=True, double_height=True)
+        p.text(f"TOTAL: {total:.2f} CHF\n")
+        p.set(align='center', bold=False, double_height=False)
+        p.text("--------------------------------\n")
+        p.set(align='left')
+        p.text("Declaro que este oro es mio\n")
+        p.text("y no es robado.\n")
+        p.text("Je declare que cet or\n")
+        p.text("m'appartient et n'est pas vole.\n")
+        p.text("\n\n")
+        p.text("Firma Vendedor: ___________\n")
+        p.text("\n")
+        p.text("Firma Comprador: ___________\n")
+        p.text("\n\n")
+        p.text("Guardar 10 anos - Conserver 10 ans\n")
+        p.text("Gracias - Merci!\n")
+        p.cut()
+        print(f"\n¡LISTO JEFE! Impreso. Total: {total:.2f} CHF")
 
-def check():
-    price = get_price()
-    if price <= 0:
-        cache['live'] = False
-        return
-    cache['price'] = price
-    cache['last_update'] = datetime.now().strftime("%H:%M:%S")
-    cache['live'] = True
+    except Exception as e:
+        print("\n--- NO HAY IMPRESORA, JEFE. GUARDO EN TXT ---")
+        print(f"Error: {e}")
+        # Si no hay impresora, guarda en archivo txt
+        with open("recibo_oro.txt", "w", encoding="utf-8") as f:
+            f.write("RAUDY ORO - GINEBRA\n")
+            f.write(f"Fecha: {fecha}\n")
+            f.write(f"Vendedor: {nombre}\n")
+            f.write(f"ID: {id_doc}\n")
+            f.write(f"Direccion: {direccion}\n")
+            f.write(f"Articulo: {descripcion}\n")
+            f.write(f"Peso: {peso} g - Quilates: {quilates}\n")
+            f.write(f"Precio/g: {precio_gramo:.2f} CHF\n")
+            f.write(f"TOTAL: {total:.2f} CHF\n")
+            f.write("Declaro que este oro es mio y no es robado.\n")
+        print("Guardado como recibo_oro.txt - lo puedes imprimir normal")
 
-    # LOGICA CON TU PRECIO DE LA FOTO
-    if price < ESPERAR_HASTA:
-        cache['signal'] = 'ESPERA'
-        cache['msg'] = f"ESPERA JEFE - Precio ahora ${price:.2f} - Tu precio de la foto era ${PRECIO_FOTO:.2f} - Esperando que suba a ${ESPERAR_HASTA:.2f} para comprar"
-    elif price >= ESPERAR_HASTA and price < TU_GANA:
-        cache['signal'] = 'COMPRA'
-        cache['msg'] = f"🟢 COMPRA JEFE - Precio ${price:.2f} ya subio a ${ESPERAR_HASTA:.2f} - ENTRADA ${TU_ENTRADA:.2f} - STOP ${TU_STOP:.2f} (-5) - GANA ${TU_GANA:.2f} (+10) - Lote {LOTE}"
-    else:
-        cache['signal'] = 'ESPERA'
-        cache['msg'] = f"Ya paso tu GANA de ${TU_GANA:.2f} - No entres tarde, jefe"
+    # Guardar copia en historial
+    with open("historial_oro.csv", "a", encoding="utf-8") as f:
+        f.write(f"{fecha};{nombre};{id_doc};{descripcion};{peso};{quilates};{precio_gramo};{total}\n")
 
-def loop():
+if __name__ == "__main__":
     while True:
-        check()
-        time.sleep(5)
-
-check()
-threading.Thread(target=loop, daemon=True).start()
-
-HTML = """
-<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ROBOT JEFE - PRECIO FOTO 3603.67</title>
-<style>body{background:#000;color:#fff;font-family:Arial;text-align:center;padding:10px}
-.price{font-size:42px;color:#FFD700;font-weight:bold}
-.box{border:3px solid #333;border-radius:15px;padding:15px;margin:10px;background:#111}
-.signal{font-size:32px;font-weight:bold;padding:14px;border-radius:12px}
-.COMPRA{background:#00ff00;color:#000}.ESPERA{background:#ffff00;color:#000}
-.big{font-size:22px;font-weight:bold}
-</style></head><body>
-<h1>💰 ROBOT JEFE - TU PRECIO</h1>
-<div class="price" id="price">...</div>
-<div id="upd">...</div>
-<div class="box"><div class="big">TU PRECIO DE LA FOTO: $3603.67</div>
-<div>ENTRADA: $3603.67 | STOP: $3598.67 (-5) | GANA: $3613.67 (+10)</div>
-<div>Lote: 0.01 | Esperar hasta: $3610.00</div></div>
-<div class="box"><div id="signal" class="signal ESPERA">ESPERA</div><p id="msg">...</p></div>
-<script>
-async function load(){
- let r=await fetch('/api/signal?t='+Date.now()); let d=await r.json();
- document.getElementById('price').innerText='$ '+d.price.toFixed(2);
- document.getElementById('upd').innerText='Actualizado: '+d.last_update;
- let s=document.getElementById('signal'); s.innerText=d.signal; s.className='signal '+(d.signal=='COMPRA'?'COMPRA':'ESPERA');
- document.getElementById('msg').innerText=d.msg;
-}
-load(); setInterval(load,5000);
-</script></body></html>
-"""
-
-@app.route('/')
-def index():
-    return render_template_string(HTML)
-
-@app.route('/api/signal')
-def signal():
-    return jsonify(cache)
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+        imprimir_recibo()
+        otra = input("\n¿Otro recibo, jefe? (s/n): ")
+        if otra.lower() != "s":
+            print("¡Nos vemos, jefe! ¡A vender caro!")
+            break
