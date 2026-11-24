@@ -1,37 +1,69 @@
-# ROBOT SEÑAL DE ORO - RAUDY ORO - GRATIS
-# Instalar: pip install requests
-
+import streamlit as st
 import requests
-import time
+from datetime import datetime
 
-# TU PRECIO, JEFE - CAMBIALO AQUI
-PRECIO_PARA_COMPRAR = 93.0  # Si baja a 93, te avisa COMPRA
-PRECIO_PARA_VENDER = 97.0   # Si sube a 97, te avisa VENDE
+st.set_page_config(page_title="RAUDY ORO - Robot", page_icon="💰")
+st.title("💰 RAUDY ORO - GINEBRA")
+st.subheader("🤖 Robot Señal + Recibo")
 
-def precio_oro_ahora():
-    try:
-        # Precio real de la bolsa
-        url = "https://api.metals.dev/v1/latest?api_key=GRATIS&currency=CHF&unit=g"
-        # Si esa no funciona, usamos esta de respaldo
-        r = requests.get("https://data-asg.goldprice.org/dbXRates/USD", timeout=10)
-        data = r.json()
-        precio_usd = data['items'][0]['curr']  # Precio onza USD
-        # Convertimos a CHF por gramo aprox
-        precio_chf_gramo = (precio_usd * 0.835) / 31.1035
-        return precio_chf_gramo
-    except:
-        return 95.68  # Precio de hoy si falla internet
+# --- PRECIO REAL EN VIVO ---
+st.header("📈 PRECIO ORO EN VIVO")
+try:
+    r = requests.get("https://data-asg.goldprice.org/dbXRates/USD", timeout=10)
+    precio_usd_onza = r.json()['items'][0]['curr']
+    precio_chf_gramo = (precio_usd_onza * 0.835) / 31.1035
+    st.success(f"Precio ahora: {precio_chf_gramo:.2f} CHF / gramo 24K")
+except:
+    precio_chf_gramo = 95.68
+    st.warning(f"Sin internet, uso precio de hoy: {precio_chf_gramo} CHF")
 
-print("🤖 ROBOT ENCENDIDO, JEFE... Vigilando el oro")
-while True:
-    precio = precio_oro_ahora()
-    print(f"Precio ahora: {precio:.2f} CHF / gramo 24K")
+# --- SEÑALES ---
+col1, col2 = st.columns(2)
+with col1:
+    compra = st.number_input("Avisame si BAJA a:", value=93.0)
+with col2:
+    venta = st.number_input("Avisame si SUBE a:", value=97.0)
 
-    if precio <= PRECIO_PARA_COMPRAR:
-        print(f"🟢 ¡JEFE, COMPRA AHORA! Bajo a {precio:.2f} CHF")
-    elif precio >= PRECIO_PARA_VENDER:
-        print(f"🔴 ¡JEFE, VENDE AHORA! Subio a {precio:.2f} CHF")
-    else:
-        print("🟡 Espera, jefe, todavia no.")
+if precio_chf_gramo <= compra:
+    st.error(f"🟢 ¡JEFE, COMPRA AHORA! Esta a {precio_chf_gramo:.2f}")
+elif precio_chf_gramo >= venta:
+    st.error(f"🔴 ¡JEFE, VENDE AHORA! Esta a {precio_chf_gramo:.2f}")
+else:
+    st.info("🟡 Espera jefe, todavia no. No compres caro.")
 
-    time.sleep(60)  # Revisa cada 1 minuto
+# --- TABLA PRECIOS ---
+st.header("💎 Precio por Quilates - HOY")
+st.write(f"24K: {precio_chf_gramo:.2f} CHF | 22K: {precio_chf_gramo*0.916:.2f} | 18K: {precio_chf_gramo*0.75:.2f} | 14K: {precio_chf_gramo*0.585:.2f}")
+
+# --- CALCULADORA Y RECIBO ---
+st.header("🧾 Hacer Recibo")
+nombre = st.text_input("Nombre vendedor")
+id_doc = st.text_input("Pasaporte / ID")
+descripcion = st.selectbox("Que es?", ["Anillo", "Cadena", "Pulsera", "Arete", "Otro"])
+peso = st.number_input("Peso gramos", min_value=0.0, step=0.1)
+quilates = st.selectbox("Quilates", ["24K", "22K", "18K", "14K", "10K"])
+
+# Tu precio de COMPRA - para ganar, jefe
+precios_compra = {"24K": 75, "22K": 68, "18K": 55, "14K": 42, "10K": 30}
+precio_gramo = st.number_input("Precio que TU pagas por gramo", value=precios_compra[quilates])
+
+if st.button("🧾 HACER RECIBO", use_container_width=True):
+    total = peso * precio_gramo
+    fecha = datetime.now().strftime("%d/%m/%Y %H:%M")
+    st.success(f"TOTAL A PAGAR: {total:.2f} CHF")
+    recibo = f"""
+RAUDY ORO - GINEBRA
+Fecha: {fecha}
+Vendedor: {nombre}
+ID: {id_doc}
+Articulo: {descripcion} {quilates}
+Peso: {peso} g - Precio/g: {precio_gramo} CHF
+TOTAL: {total:.2f} CHF
+Declaro que este oro es mio y no es robado.
+Firma Vendedor: ____ Firma Comprador: ____
+"""
+    st.code(recibo)
+    st.download_button("📥 DESCARGAR RECIBO", recibo, file_name="recibo.txt")
+
+if st.button("🔄 Actualizar Precio"):
+    st.rerun()
