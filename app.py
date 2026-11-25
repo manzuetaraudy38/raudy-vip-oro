@@ -1,43 +1,50 @@
-from flask import Flask, render_template_string
-app = Flask(__name__)
+import streamlit as st
+import yfinance as yf
+import pandas as pd
 
-@app.route('/')
-def home():
-    return render_template_string("""
-    <html><head><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>body{background:#0a0a0a;color:gold;text-align:center;font-family:Arial;padding:20px}
-    .box{border:2px solid gold;border-radius:20px;padding:20px;margin:15px 0;background:#111}
-    .btn{background:gold;color:black;padding:15px 30px;border-radius:15px;font-weight:bold;text-decoration:none;display:inline-block;margin-top:20px}
-    </style></head><body>
-    <h1>👑 RAUDY VIP ORO 👑</h1><p style="color:#0f0">● LIVE ✅</p>
-    <div class="box"><h2>ORO: $3876.40</h2><p>Nivel compra VIP: 3890</p></div>
-    <div class="box"><p>EURUSD: 1.11658 | GBPUSD: 1.33853</p></div>
-    <div class="box"><p>BOT ACTIVO 24/7</p></div>
-    <a class="btn" href="/tc">VER MERCADO COMPLETO</a>
-    </body></html>
-    """)
+st.set_page_config(page_title="RAUDY SEÑAL ORO", page_icon="🟡")
+st.title("🟡 RAUDY - SEÑAL DE ORO")
+st.write("Te digo CUÁNDO comprar, jefe. No antes.")
 
-@app.route('/tc')
-def mercado():
-    return render_template_string("""
-    <html><head><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>body{background:#000;color:gold;font-family:Arial;margin:0;padding:10px}
-    h2{text-align:center}
-    .info{background:#111;border:2px solid gold;border-radius:15px;padding:15px;margin:10px 0;text-align:center}
-    .btn{background:gold;color:black;padding:12px 25px;border-radius:10px;font-weight:bold;text-decoration:none;display:inline-block;text-align:center}
-    </style></head><body>
-    <h2>🔥 RAUDY VIP MERCADO 🔥</h2>
-    <div class="info">💰 ORO: $3876.40<br>EURUSD: 1.11658<br>GBPUSD: 1.33853</div>
-    <div class="tradingview-widget-container" style="height:600px">
-      <div id="tradingview_chart" style="height:600px"></div>
-      <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-      <script type="text/javascript">
-      new TradingView.widget({"autosize": true,"symbol": "OANDA:XAUUSD","interval": "15","timezone": "Etc/UTC","theme": "dark","style": "1","locale": "es","toolbar_bg": "#f1f3f6","enable_publishing": false,"allow_symbol_change": true,"container_id": "tradingview_chart"});
-      </script>
-    </div>
-    <div style="text-align:center;margin-top:20px"><a class="btn" href="/">⬅ VOLVER AL INICIO</a></div>
-    </body></html>
-    """)
+# 1. Buscar precio del oro
+oro = yf.download("GC=F", period="5d", interval="15m", progress=False)
+precio = float(oro['Close'].iloc[-1])
+precio_antes = float(oro['Close'].iloc[-20])
+media = float(oro['Close'].tail(20).mean())
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+# 2. Calcular si está subiendo o bajando
+cambio = ((precio - precio_antes) / precio_antes) * 100
+minimo = float(oro['Close'].tail(20).min())
+
+st.metric("PRECIO ORO AHORA", f"${precio:.2f}", f"{cambio:.2f}%")
+
+# 3. LA SEÑAL - 3 reglas, jefe
+st.subheader("🚦 TU SEÑAL, JEFE:")
+
+cond1 = precio > minimo + 5  # Ya se paró la caída
+cond2 = precio > media  # Ya está subiendo por encima del promedio
+cond3 = cambio > -0.5  # No está cayendo fuerte
+
+if cond1 and cond2:
+    st.success("🟢 ¡COMPRA AHORA, JEFE! El oro se paró y empezó a subir.")
+    st.write("**¿Qué hacer?** Compra un poquito, no todo tu dinero, jefe.")
+elif cambio < -1:
+    st.error("🔴 NO COMPRES, JEFE. El oro está cayendo fuerte.")
+    st.write("**¿Qué hacer?** Quédate quieto, guarda tu plata, jefe.")
+else:
+    st.warning("🟡 ESPERA, JEFE. Todavía no está claro.")
+    st.write("**¿Qué hacer?** No hagas nada. Espera la luz verde, jefe.")
+
+st.divider()
+st.write(f"Precio mínimo reciente: ${minimo:.2f}")
+st.write(f"Promedio: ${media:.2f}")
+st.write("Si el precio está por encima del promedio = bueno para comprar, jefe.")
+
+# 4. Para tu negocio en la calle, jefe
+st.divider()
+st.subheader("💰 PARA TU NEGOCIO EN CHF, JEFE")
+gramo_24k = (precio / 31.1035) * 0.88
+st.write(f"**24K:** {gramo_24k:.2f} CHF / gramo - Tú compra a {gramo_24k*0.75:.2f} CHF")
+st.write(f"**18K:** {gramo_24k*0.75:.2f} CHF / gramo")
+st.write(f"**14K:** {gramo_24k*0.583:.2f} CHF / gramo")
+st.caption("Así sabes cuánto pagarle al cliente, jefe, sin que te engañen.")
