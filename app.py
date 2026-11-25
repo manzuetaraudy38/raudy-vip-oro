@@ -7,15 +7,20 @@ st.title("🤖 ROBOT RAUDY - ANALISTA DE ORO")
 st.write("Yo analizo como el Jefe me enseñó. 5 pasos, jefe.")
 
 # --- 1. BUSCAR DATOS ---
-oro = yf.download("GC=F", period="5d", interval="1h", progress=False)
-# Aplanar si viene con columnas raras
-if isinstance(oro.columns, pd.MultiIndex):
-    oro.columns = oro.columns.get_level_values(0)
+try:
+    oro = yf.download("GC=F", period="5d", interval="1h", progress=False, auto_adjust=True)
+    if isinstance(oro.columns, pd.MultiIndex):
+        oro.columns = oro.columns.get_level_values(0)
+    oro = oro.dropna()
+except Exception as e:
+    st.error("Jefe, no pude bajar el precio ahora. Dale a Refresh.")
+    st.stop()
+
+if len(oro) < 10:
+    st.error("Jefe, todavía no baja el precio. Espera 1 minuto y dale a Refresh.")
+    st.stop()
 
 precio = float(oro['Close'].iloc[-1])
-apertura = float(oro['Open'].iloc[-1])
-maximo = float(oro['High'].iloc[-1])
-minimo_ultima = float(oro['Low'].iloc[-1])
 
 # Media para la tendencia
 media_20 = float(oro['Close'].tail(20).mean())
@@ -37,8 +42,6 @@ st.info(f"**Tendencia: {tendencia}** - {tendencia_texto}")
 
 # --- PASO 2: PISO Y TECHO ---
 st.subheader("2️⃣ PASO 2 - PISO Y TECHO, JEFE")
-# Piso = el precio más bajo de las últimas 50 velas
-# Techo = el precio más alto de las últimas 50 velas
 piso = float(oro['Low'].tail(50).min())
 techo = float(oro['High'].tail(50).max())
 
@@ -77,7 +80,7 @@ st.write(velas_texto)
 st.divider()
 st.subheader("🚦 PASO 4 y 5 - MI DECISIÓN FINAL, JEFE:")
 
-cerca_piso = precio < (piso + (techo-piso)*0.2)  # Está cerca del piso
+cerca_piso = precio < (piso + (techo-piso)*0.2)
 dos_verdes = v1 == "VERDE 🟢" and v2 == "VERDE 🟢"
 tendencia_buena = precio > media_20
 
